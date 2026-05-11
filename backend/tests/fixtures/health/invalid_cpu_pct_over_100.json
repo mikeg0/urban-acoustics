@@ -1,0 +1,15 @@
+{
+  "ts": 1745673660.0,
+  "uptime_s": 86412.5,
+  "cpu_pct": 250.0,
+  "cpu_temp_c": 58.4,
+  "mem_used_mb": 168.2,
+  "disk_free_mb": 14820.1,
+  "wifi_rssi_dbm": -62.0,
+  "queue_depth": 0,
+  "queue_bytes": 0,
+  "mic_gain_db": 0.0,
+  "ntp_offset_ms": 7.4,
+  "fw_version": "0.1.0",
+  "config_version": "f3a9c2b1"
+}

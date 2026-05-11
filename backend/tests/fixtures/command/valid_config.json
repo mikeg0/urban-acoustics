@@ -1,0 +1,11 @@
+{
+  "cmd_id": "9c1c8a5b-3d4e-4f5a-8b6c-7d8e9f0a1b2d",
+  "cmd": "config",
+  "issued_at": 1745673600.0,
+  "args": {
+    "trigger_db": 76.0,
+    "reset_db": 71.0,
+    "preroll_s": 5.0,
+    "postroll_s": 8.0
+  }
+}

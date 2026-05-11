@@ -1,0 +1,7 @@
+{
+  "device_id": "1234abcd-aaaa-bbbb-cccc-1234567890ab",
+  "cert_fingerprint": "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9",
+  "cert_subject_cn": "1234abcd-aaaa-bbbb-cccc-1234567890ab",
+  "cert_not_before": 1777209600.0,
+  "cert_not_after": 1745673600.0
+}

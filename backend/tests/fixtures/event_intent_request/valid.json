@@ -1,0 +1,10 @@
+{
+  "event_id": "5b8e9b1c-1c8a-4c3d-9e0a-72c1d2e3f4a5",
+  "ts": 1745673612.45,
+  "duration_s": 15.0,
+  "peak_db": 92.1,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "size": 1572864,
+  "content_type": "audio/flac",
+  "nonce": "f3a9c2b1e4d5a6b7"
+}
