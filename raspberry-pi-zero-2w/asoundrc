@@ -1,0 +1,34 @@
+# ~/.asoundrc — ALSA config for INMP441 I2S microphone
+#
+# This creates two virtual devices:
+#   dmic_hw  — raw hardware access to the I2S mic
+#   dmic_sv  — software volume control on top of dmic_hw
+#
+# Usage:
+#   arecord -D dmic_sv -c1 -r 48000 -f S32_LE -t wav -V mono -v output.wav
+#
+# After first use of dmic_sv, run alsamixer → F6 (select I2S card) → F4 (Capture)
+# to adjust the "Boost Capture Volume" level.
+
+# Raw I2S hardware device
+# The card name should match what `arecord -l` shows in brackets after "card X:"
+# Common names: sndrpigooglevoi, sndrpii2scard
+# Run `arecord -l` and adjust if needed.
+pcm.dmic_hw {
+    type hw
+    card sndrpigooglevoi
+    channels 2
+    format S32_LE
+}
+
+# Software volume control wrapping the hardware device
+pcm.dmic_sv {
+    type softvol
+    slave.pcm dmic_hw
+    control {
+        name "Boost Capture Volume"
+        card sndrpigooglevoi
+    }
+    min_dB -3.0
+    max_dB 30.0
+}

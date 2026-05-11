@@ -1,0 +1,17 @@
+.legacy/
+.DS_Store
+
+# Backend
+backend/__pycache__/
+backend/.venv/
+backend/.pytest_cache/
+backend/data/days/
+backend/data/*.json
+**/*.pyc
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+*.log

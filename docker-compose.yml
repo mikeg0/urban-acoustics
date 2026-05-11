@@ -1,0 +1,44 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      # Use host networking during image build — pip's DNS resolution can fail
+      # inside Docker's default bridge on some hosts.
+      network: host
+    container_name: urban-acoustics-backend
+    volumes:
+      # Mount source for uvicorn --reload. The data directory is persisted on
+      # the host so seed output survives `docker compose down`.
+      - ./backend/app:/app/app
+      - ./backend/data:/app/data
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - traefik
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      network: host
+    container_name: urban-acoustics-frontend
+    volumes:
+      # Bind-mount source for Vite HMR. Anonymous volume keeps node_modules
+      # populated by the image (host doesn't have it installed).
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_HOST: "http://backend:8000"
+      VITE_WS_HOST: "ws://backend:8000"
+      CHOKIDAR_USEPOLLING: "true"
+    networks:
+      - traefik
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  traefik:
+    name: dev_conexed_com_default
+    external: true
+

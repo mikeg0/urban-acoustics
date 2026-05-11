@@ -1,0 +1,81 @@
+:root {
+  /* Warm-neutral dark base */
+  --bg-0: oklch(14% 0.008 60);
+  --bg-1: oklch(17% 0.008 60);
+  --bg-2: oklch(20% 0.008 60);
+  --bg-3: oklch(24% 0.008 60);
+  --line: oklch(27% 0.008 60);
+  --line-strong: oklch(34% 0.008 60);
+
+  --ink-0: oklch(97% 0.006 85);
+  --ink-1: oklch(82% 0.006 85);
+  --ink-2: oklch(62% 0.006 85);
+  --ink-3: oklch(46% 0.006 85);
+
+  /* Data accents (neon, reserved for data) */
+  --neon-hot: oklch(78% 0.18 35);
+  --neon-warn: oklch(82% 0.16 70);
+  --neon-ok: oklch(82% 0.14 160);
+  --neon-cool: oklch(75% 0.14 230);
+  --neon-focus: oklch(82% 0.18 310);
+
+  --sans: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --rad-sm: 4px;
+  --rad-md: 6px;
+  --rad-lg: 10px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg-0);
+  color: var(--ink-0);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button { font-family: inherit; color: inherit; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--line-strong); }
+
+input[type=range] {
+  appearance: none; -webkit-appearance: none;
+  background: transparent; width: 100%; height: 18px;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 3px; background: var(--bg-3); border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--neon-cool);
+  border: 2px solid var(--bg-0);
+  margin-top: -5px;
+  cursor: pointer;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(82% 0.14 160 / 0.8); }
+  50% { box-shadow: 0 0 0 4px oklch(82% 0.14 160 / 0); }
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+@keyframes settings-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes settings-pop {
+  from { transform: translateY(-12px) scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes zoom-in {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

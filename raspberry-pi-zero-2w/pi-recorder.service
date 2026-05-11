@@ -1,0 +1,22 @@
+[Unit]
+Description=I2S Microphone Recorder (1-minute WAV chunks)
+After=sound.target alsa-state.service
+Wants=sound.target
+
+[Service]
+Type=simple
+User=pi
+Environment=HOME=/home/pi
+ExecStart=/usr/local/bin/pi-recorder.sh
+Restart=on-failure
+RestartSec=10
+
+# Give ALSA time to initialize on boot
+ExecStartPre=/bin/sleep 5
+
+# Graceful shutdown — let current arecord finish or be killed cleanly
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
