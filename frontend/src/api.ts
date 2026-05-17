@@ -7,6 +7,7 @@ import type {
   HealthResolution,
   LabelSubmission,
   PlaybackUrl,
+  SpectrogramHistoryResponse,
   SpectrogramReadResponse,
   TelemetryReadResponse,
   TelemetryResolution,
@@ -64,6 +65,20 @@ export const fetchSpectrogramHistory = (
     `/api/v1/devices/${deviceId}/spectrogram?from=${fromTs}&to=${toTs}`,
   );
 
+export const fetchSpectrogramHistory24h = (
+  deviceId: string,
+): Promise<SpectrogramHistoryResponse> =>
+  getJson<SpectrogramHistoryResponse>(
+    `/api/v1/devices/${deviceId}/spectrogram/history`,
+  );
+
+export const fetchSpectrogramTile = async (url: string): Promise<ImageBitmap> => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  const blob = await r.blob();
+  return createImageBitmap(blob);
+};
+
 export const fetchHealth = (
   deviceId: string,
   fromTs: number,
@@ -76,6 +91,17 @@ export const fetchHealth = (
 
 export const fetchEvents = (deviceId: string, limit = 50): Promise<DeviceEvent[]> =>
   getJson<DeviceEvent[]>(`/api/v1/events?device_id=${deviceId}&limit=${limit}`);
+
+export const fetchEventsInRange = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+  limit = 500,
+): Promise<DeviceEvent[]> =>
+  getJson<DeviceEvent[]>(
+    `/api/v1/events?device_id=${deviceId}&limit=${limit}` +
+      `&from=${fromTs}&to=${toTs}`,
+  );
 
 export const fetchEventPlaybackUrl = (eventId: string): Promise<PlaybackUrl> =>
   getJson<PlaybackUrl>(`/api/v1/events/${eventId}/playback-url`);

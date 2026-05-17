@@ -277,6 +277,31 @@ class SpectrogramReadResponse(BaseModel):
     frames: list[SpectrogramFrameOut]
 
 
+# --- REST: spectrogram historical tiles --------------------------------------
+
+
+class SpectrogramTileRef(BaseModel):
+    hour: UnixTs  # UTC hour boundary, unix seconds
+    tile_url: str  # same-origin path; frontend fetches as PNG
+
+
+class SpectrogramHistoryResponse(BaseModel):
+    """Manifest for the rolling-24h ribbon. The client fetches the 24 tile
+    URLs in parallel and colour-maps them using ``tile_db_min``/``tile_db_max``.
+
+    These quantisation constants are part of the wire contract — see
+    ``app/spectrogram_tiles.py``. Surfacing them here prevents silent drift.
+    """
+
+    device_id: UUID
+    generated_at: UnixTs
+    tile_db_min: float
+    tile_db_max: float
+    tile_rows: int
+    tile_cols: int
+    hours: list[SpectrogramTileRef]  # ascending; final entry is current hour
+
+
 # --- REST: labels ------------------------------------------------------------
 
 

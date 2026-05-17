@@ -1,25 +1,40 @@
-"""/api/v1/devices/{id}/spectrogram — historical band frames.
+"""/api/v1/devices/{id}/spectrogram — historical band frames + hour-tiles.
 
-Backs the "1-hour ribbon" beneath the live scrolling spectrogram on the
-dashboard. Frames are persisted by the ingest worker into
-``spectrogram_frames`` (Timescale hypertable); this route just serves them
-in a bounded window. No bucketing yet — at the ~10 Hz wire rate, a 1 h
-window is ~36 k rows / device, ~14 MB on the wire. If we later raise the
-window cap the right move is to add ``time_bucket`` MAX aggregation here.
+Two access paths into ``spectrogram_frames`` (Timescale hypertable):
+
+* ``GET .../spectrogram``        — raw 1h JSON window for the 1h live ribbon.
+* ``GET .../spectrogram/history``+ ``.../spectrogram/tile`` — 24h ribbon via
+  precomputed 8-bit grayscale PNG tiles (one per device-hour). Closed-hour
+  tiles are cached in S3; the current in-progress hour is regenerated each
+  request. See ``app/spectrogram_tiles.py``.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...contracts import SpectrogramFrameOut, SpectrogramReadResponse
+from ...contracts import (
+    SpectrogramFrameOut,
+    SpectrogramHistoryResponse,
+    SpectrogramReadResponse,
+    SpectrogramTileRef,
+)
 from ...db import get_session
 from ...models import Device
+from ...spectrogram_tiles import (
+    TILE_COLS,
+    TILE_DB_MAX,
+    TILE_DB_MIN,
+    TILE_ROWS,
+    floor_hour_utc,
+    get_or_generate_tile,
+)
+from ...storage import Storage, get_storage
 
 router = APIRouter()
 
@@ -72,4 +87,94 @@ async def get_device_spectrogram(
         from_ts=from_,
         to_ts=to,
         frames=frames,
+    )
+
+
+# How far back the tile endpoint will accept an `hour` query. Generous enough
+# to cover any 24h window plus clock skew; tight enough to reject probing.
+_TILE_MAX_AGE = timedelta(hours=26)
+
+
+def _tile_url(device_id: UUID, hour_epoch: int) -> str:
+    return f"/api/v1/devices/{device_id}/spectrogram/tile?hour={hour_epoch}"
+
+
+@router.get(
+    "/devices/{device_id}/spectrogram/history",
+    response_model=SpectrogramHistoryResponse,
+)
+async def get_device_spectrogram_history(
+    device_id: UUID,
+    session: AsyncSession = Depends(get_session),
+) -> SpectrogramHistoryResponse:
+    """Return a manifest of 24 hour-tile URLs covering the rolling last 24h."""
+    if await session.get(Device, device_id) is None:
+        raise HTTPException(status_code=404, detail="device not found")
+
+    now = datetime.now(timezone.utc)
+    current_hour = floor_hour_utc(now)
+    # Ascending: 23 closed hours then the current (in-progress) hour.
+    hours = [current_hour - timedelta(hours=23 - i) for i in range(24)]
+    refs = [
+        SpectrogramTileRef(
+            hour=h.timestamp(),
+            tile_url=_tile_url(device_id, int(h.timestamp())),
+        )
+        for h in hours
+    ]
+    return SpectrogramHistoryResponse(
+        device_id=device_id,
+        generated_at=now.timestamp(),
+        tile_db_min=TILE_DB_MIN,
+        tile_db_max=TILE_DB_MAX,
+        tile_rows=TILE_ROWS,
+        tile_cols=TILE_COLS,
+        hours=refs,
+    )
+
+
+@router.get("/devices/{device_id}/spectrogram/tile")
+async def get_device_spectrogram_tile(
+    device_id: UUID,
+    hour: int = Query(..., description="UTC hour boundary, unix seconds"),
+    session: AsyncSession = Depends(get_session),
+    storage: Storage = Depends(get_storage),
+) -> Response:
+    """Return a single device-hour spectrogram tile as PNG.
+
+    Closed hours are served from S3 with an immutable 1-year cache; the
+    current in-progress hour is regenerated each request with a 30s cache.
+    """
+    if hour % 3600 != 0:
+        raise HTTPException(status_code=400, detail="`hour` must be on an hour boundary")
+
+    hour_dt = datetime.fromtimestamp(hour, tz=timezone.utc)
+    now = datetime.now(timezone.utc)
+    current_hour = floor_hour_utc(now)
+
+    if hour_dt > current_hour:
+        raise HTTPException(status_code=400, detail="`hour` is in the future")
+    if (current_hour - hour_dt) > _TILE_MAX_AGE:
+        raise HTTPException(status_code=400, detail="`hour` is too far in the past")
+
+    if await session.get(Device, device_id) is None:
+        raise HTTPException(status_code=404, detail="device not found")
+
+    is_current_hour = hour_dt == current_hour
+    png = await get_or_generate_tile(
+        session,
+        storage,
+        device_id,
+        hour_dt,
+        is_current_hour=is_current_hour,
+    )
+    cache_control = (
+        "public, max-age=30"
+        if is_current_hour
+        else "public, max-age=31536000, immutable"
+    )
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": cache_control},
     )

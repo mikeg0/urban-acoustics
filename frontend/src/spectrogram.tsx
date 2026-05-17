@@ -3,7 +3,8 @@ import FFT from 'fft.js';
 import { mulberry32, normDb } from './utils';
 import { PALETTES, type PaletteKey } from './palettes';
 import { BAND_CENTERS_HZ, SPECTROGRAM_N_BANDS } from './types';
-import type { Day } from './types';
+import type { Day, SpectrogramHistoryResponse } from './types';
+import { fetchSpectrogramHistory24h, fetchSpectrogramTile } from './api';
 
 /** Build a fake spectrogram matrix [freqBins][timeSlices], values 0..1. */
 export function buildSpectrogram(seed: number, intensity = 1): number[][] {
@@ -587,6 +588,218 @@ export function HistorySpectrogram({
         }}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 24-hour historical ribbon — composed of 24 server-rendered PNG tiles (one
+// per device-hour). Closed tiles are immutable + browser-cached; only the
+// current (in-progress) hour refreshes. The palette is applied client-side
+// so it stays in lockstep with the live spectrogram under any palette swap.
+// ---------------------------------------------------------------------------
+
+const HISTORY_24H_MANIFEST_REFRESH_MS = 5 * 60 * 1000;
+const HISTORY_24H_CURRENT_HOUR_REFRESH_MS = 30 * 1000;
+
+interface HistoryRibbon24hProps {
+  deviceId: string;
+  palette?: PaletteKey;
+  height?: number;
+  selectedHourTs?: number | null;
+  onHourClick?: (hourTs: number) => void;
+}
+
+export function HistoryRibbon24h({
+  deviceId,
+  palette = 'heat',
+  height = 64,
+  selectedHourTs = null,
+  onHourClick,
+}: HistoryRibbon24hProps) {
+  const [manifest, setManifest] = useState<SpectrogramHistoryResponse | null>(null);
+  const [currentTick, setCurrentTick] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const m = await fetchSpectrogramHistory24h(deviceId);
+        if (alive) setManifest(m);
+      } catch {
+        // Backend may be unreachable or the device may have no tiles yet;
+        // silently leave the placeholder up. The live ribbon still works.
+      }
+    };
+    load();
+    const manifestId = window.setInterval(load, HISTORY_24H_MANIFEST_REFRESH_MS);
+    const currentId = window.setInterval(
+      () => setCurrentTick((t) => t + 1),
+      HISTORY_24H_CURRENT_HOUR_REFRESH_MS,
+    );
+    return () => {
+      alive = false;
+      window.clearInterval(manifestId);
+      window.clearInterval(currentId);
+    };
+  }, [deviceId]);
+
+  const placeholder = (
+    <div
+      style={{
+        width: '100%',
+        height,
+        borderRadius: 4,
+        background: 'var(--bg-2)',
+      }}
+    />
+  );
+  if (!manifest) return placeholder;
+
+  const lastIdx = manifest.hours.length - 1;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        width: '100%',
+        height,
+        gap: 1,
+        background: 'var(--bg-2)',
+        borderRadius: 4,
+        overflow: 'hidden',
+      }}
+    >
+      {manifest.hours.map((ref, i) => {
+        const isSelected = selectedHourTs === ref.hour;
+        const hourLabel = new Date(ref.hour * 1000).toLocaleString('en-US', {
+          hour: '2-digit', minute: '2-digit', hour12: false,
+        });
+        return (
+          <button
+            key={ref.hour}
+            type="button"
+            className={`history-tile-button${isSelected ? ' selected' : ''}`}
+            title={`${hourLabel} — click to open hour playback`}
+            onClick={() => onHourClick?.(ref.hour)}
+          >
+            <HistoryTile
+              url={ref.tile_url}
+              palette={palette}
+              minDb={manifest.tile_db_min}
+              maxDb={manifest.tile_db_max}
+              rows={manifest.tile_rows}
+              cols={manifest.tile_cols}
+              // Bump the cache-buster only for the current (in-progress) hour.
+              // Closed-hour tiles are immutable so their key never changes and
+              // their `useEffect` doesn't re-run — they stay rendered.
+              refreshKey={i === lastIdx ? currentTick : 0}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface HistoryTileProps {
+  url: string;
+  palette: PaletteKey;
+  minDb: number;
+  maxDb: number;
+  rows: number;
+  cols: number;
+  refreshKey: number;
+}
+
+function HistoryTile({
+  url,
+  palette,
+  minDb,
+  maxDb,
+  rows,
+  cols,
+  refreshKey,
+}: HistoryTileProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lut = useMemo(() => paletteLut(palette), [palette]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let cancelled = false;
+
+    const draw = async () => {
+      // Cache-buster only fires for the current-hour tile (refreshKey > 0);
+      // closed hours hit browser cache.
+      const fetchUrl = refreshKey > 0 ? `${url}&t=${refreshKey}` : url;
+      let bitmap: ImageBitmap;
+      try {
+        bitmap = await fetchSpectrogramTile(fetchUrl);
+      } catch {
+        return;
+      }
+      if (cancelled) {
+        bitmap.close();
+        return;
+      }
+
+      canvas.width = cols;
+      canvas.height = rows;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        bitmap.close();
+        return;
+      }
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+
+      const img = ctx.getImageData(0, 0, cols, rows);
+      const data = img.data;
+      const range = Math.max(1, maxDb - minDb);
+      const invRange = (LUT_SIZE - 1) / range;
+      let floorClamp = (SPECTROGRAM_FLOOR_DB - minDb) * invRange;
+      if (floorClamp < 0) floorClamp = 0;
+      else if (floorClamp > LUT_SIZE - 1) floorClamp = LUT_SIZE - 1;
+      const floorLutBase = (floorClamp | 0) * 3;
+
+      // PNG is grayscale so R=G=B=pixel value. Value 0 means "no data" —
+      // render at the palette floor color (matches the live ribbon's NaN
+      // handling). Values 1..255 are the quantised dB level; pixel-1 maps
+      // to LUT index 0..254 so the bottom of the range lines up exactly
+      // with what LiveSpectrogram/HistorySpectrogram show at minDb.
+      for (let p = 0; p < data.length; p += 4) {
+        const v = data[p];
+        if (v === 0) {
+          data[p] = lut[floorLutBase];
+          data[p + 1] = lut[floorLutBase + 1];
+          data[p + 2] = lut[floorLutBase + 2];
+        } else {
+          const lutBase = (v - 1) * 3;
+          data[p] = lut[lutBase];
+          data[p + 1] = lut[lutBase + 1];
+          data[p + 2] = lut[lutBase + 2];
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    draw();
+    return () => {
+      cancelled = true;
+    };
+  }, [url, lut, minDb, maxDb, rows, cols, refreshKey]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        flex: '1 1 0',
+        minWidth: 0,
+        height: '100%',
+        display: 'block',
+        imageRendering: 'auto',
+      }}
+    />
   );
 }
 

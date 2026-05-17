@@ -9,8 +9,10 @@ import {
 } from './api';
 import { EventsList } from './events/EventsList';
 import { EventPlayer } from './events/EventPlayer';
+import { HourPlaybackViewer } from './events/HourPlayback';
 import { LabelPicker } from './events/LabelPicker';
 import {
+  HistoryRibbon24h,
   HistorySpectrogram,
   LiveSpectrogram,
   SPECTROGRAM_COLUMN_MS,
@@ -861,6 +863,7 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
       </div>
 
       <RealLiveSpectrogramPanel
+        deviceId={deviceId}
         ring={spectRing}
         ribbon={historyRibbon}
         palette={spectroColor}
@@ -992,14 +995,16 @@ function DeviceBanner({
 }
 
 function RealLiveSpectrogramPanel({
-  ring, ribbon, palette, threshold, points,
+  deviceId, ring, ribbon, palette, threshold, points,
 }: {
+  deviceId: string;
   ring: ReturnType<typeof useRollingBands>;
   ribbon: ReturnType<typeof useHistoryRibbon>;
   palette: ReturnType<typeof useTweaks>['spectroColor'];
   threshold: number;
   points: DeviceTelemetryPoint[];
 }) {
+  const [selectedHourTs, setSelectedHourTs] = useState<number | null>(null);
   const waiting = !ring.hasData;
   const ribbonWaiting = !ribbon.hasData;
   const windowMin = Math.round((ribbon.displayCols * ribbon.bucketMs) / 1000 / 60);
@@ -1101,6 +1106,48 @@ function RealLiveSpectrogramPanel({
           })}
         </div>
       </div>
+
+      <div style={{ marginTop: 14 }}>
+        <div className="mono" style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em', marginBottom: 6,
+        }}>
+          <span>LAST 24 H · MAX/SEC PER HOUR-TILE · CLICK A TILE TO REPLAY</span>
+          <span>NOW →</span>
+        </div>
+        <HistoryRibbon24h
+          deviceId={deviceId}
+          palette={palette}
+          height={56}
+          selectedHourTs={selectedHourTs}
+          onHourClick={(h) => setSelectedHourTs((prev) => (prev === h ? null : h))}
+        />
+        <div className="mono" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(24, 1fr)',
+          fontSize: 9, color: 'var(--ink-3)', marginTop: 4,
+        }}>
+          {Array.from({ length: 24 }).map((_, i) => {
+            const hoursAgo = 23 - i;
+            // Label every 4th tick to avoid crowding; rightmost is "now".
+            const show = hoursAgo === 0 || hoursAgo % 4 === 0;
+            return (
+              <div key={i} style={{ textAlign: 'center' }}>
+                {show ? (hoursAgo === 0 ? 'now' : `-${hoursAgo}h`) : ''}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedHourTs != null && (
+        <HourPlaybackViewer
+          deviceId={deviceId}
+          hourTs={selectedHourTs}
+          threshold={threshold}
+          onClose={() => setSelectedHourTs(null)}
+        />
+      )}
     </div>
   );
 }

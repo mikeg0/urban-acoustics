@@ -1,0 +1,211 @@
+import { useEffect, useMemo, useState } from 'react';
+import { fetchEventsInRange } from '../api';
+import type { DeviceEvent } from '../types';
+import { EventPlayer } from './EventPlayer';
+
+interface HourPlaybackViewerProps {
+  deviceId: string;
+  hourTs: number;            // unix seconds, top of hour
+  threshold: number;
+  onClose: () => void;
+}
+
+const HOUR_S = 3600;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function fmtClock(unixSec: number): string {
+  const d = new Date(unixSec * 1000);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function fmtClockSec(unixSec: number): string {
+  const d = new Date(unixSec * 1000);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+export function HourPlaybackViewer({
+  deviceId, hourTs, threshold, onClose,
+}: HourPlaybackViewerProps) {
+  const [events, setEvents] = useState<DeviceEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setSelectedId(null);
+    fetchEventsInRange(deviceId, hourTs, hourTs + HOUR_S)
+      .then((rows) => {
+        if (cancelled) return;
+        // Backend returns DESC; sort ASC so the timeline reads left→right.
+        const asc = [...rows].sort((a, b) => a.ts - b.ts);
+        setEvents(asc);
+        if (asc.length) setSelectedId(asc[0].event_id);
+      })
+      .catch((e: Error) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [deviceId, hourTs]);
+
+  const selectedEvent = useMemo(
+    () => events.find((e) => e.event_id === selectedId) ?? null,
+    [events, selectedId],
+  );
+
+  const totalBreaches = events.filter((e) => e.peak_db >= threshold).length;
+
+  return (
+    <div style={{
+      marginTop: 14, padding: 14,
+      background: 'var(--bg-1)', border: '1px solid var(--neon-focus)',
+      borderRadius: 8, animation: 'zoom-in 120ms ease-out',
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        marginBottom: 10, gap: 16, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{ fontSize: 13, color: 'var(--ink-0)', fontWeight: 500 }}>
+            Hour playback · {fmtClock(hourTs)} → {fmtClock(hourTs + HOUR_S)}
+          </div>
+          <div className="mono" style={{
+            fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginTop: 2,
+          }}>
+            {loading
+              ? 'LOADING EVENTS…'
+              : error
+                ? `ERROR · ${error}`
+                : `${events.length} CLIP${events.length === 1 ? '' : 'S'} · ${totalBreaches} ≥ ${threshold} dB`}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+            textTransform: 'uppercase', padding: '4px 10px',
+            background: 'var(--bg-2)', border: '1px solid var(--line)',
+            color: 'var(--ink-2)', borderRadius: 4, cursor: 'pointer',
+          }}
+        >✕ Close</button>
+      </div>
+
+      <BreachTimeline
+        hourTs={hourTs}
+        events={events}
+        threshold={threshold}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+      />
+
+      <div style={{ marginTop: 14 }}>
+        {events.length === 0 && !loading && !error && (
+          <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+            No breach clips recorded in this hour.
+          </div>
+        )}
+        {selectedEvent && (
+          <div>
+            <div className="mono" style={{
+              fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em',
+              textTransform: 'uppercase', marginBottom: 6,
+            }}>
+              Selected · {fmtClockSec(selectedEvent.ts)} · {selectedEvent.peak_db.toFixed(1)} dB peak
+            </div>
+            <EventPlayer event={selectedEvent} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BreachTimeline({
+  hourTs, events, threshold, selectedId, onSelect,
+}: {
+  hourTs: number;
+  events: DeviceEvent[];
+  threshold: number;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  // Render each event as a positioned band over a 1-hour-wide track.
+  // Bands narrower than 0.5% of the track widen visually so single-second
+  // clips stay clickable; their hit-target stays exact via the timestamp.
+  const MIN_VISIBLE_PCT = 0.5;
+  return (
+    <div>
+      <div style={{
+        position: 'relative', height: 56,
+        background: 'var(--bg-2)', border: '1px solid var(--line)',
+        borderRadius: 4, overflow: 'hidden',
+      }}>
+        {/* 5-minute gridlines */}
+        {Array.from({ length: 13 }).map((_, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            left: `${(i / 12) * 100}%`, top: 0, bottom: 0,
+            width: 1,
+            background: i === 0 || i === 12
+              ? 'transparent'
+              : i % 3 === 0 ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.05)',
+            pointerEvents: 'none',
+          }} />
+        ))}
+        {events.map((e) => {
+          const startFrac = Math.max(0, Math.min(1, (e.ts - hourTs) / HOUR_S));
+          const widthFrac = Math.max(0, Math.min(1 - startFrac, e.duration_s / HOUR_S));
+          const visibleWidth = Math.max(widthFrac * 100, MIN_VISIBLE_PCT);
+          const breach = e.peak_db >= threshold;
+          const selected = e.event_id === selectedId;
+          const color = breach ? 'var(--neon-hot)' : 'var(--neon-warn)';
+          return (
+            <button
+              key={e.event_id}
+              type="button"
+              onClick={() => onSelect(e.event_id)}
+              title={`${fmtClockSec(e.ts)} · ${e.duration_s.toFixed(1)}s · ${e.peak_db.toFixed(1)} dB`}
+              style={{
+                position: 'absolute',
+                left: `${startFrac * 100}%`,
+                width: `${visibleWidth}%`,
+                top: 4, bottom: 4,
+                background: breach
+                  ? 'oklch(78% 0.18 35 / 0.55)'
+                  : 'oklch(82% 0.16 70 / 0.45)',
+                border: `1.5px solid ${color}`,
+                borderRadius: 2,
+                padding: 0, cursor: 'pointer',
+                boxShadow: selected ? `0 0 8px ${color}` : 'none',
+                outline: selected ? `1.5px solid var(--neon-focus)` : 'none',
+                outlineOffset: 1,
+                transition: 'box-shadow 80ms ease',
+              }} />
+          );
+        })}
+      </div>
+      <div className="mono" style={{
+        position: 'relative', height: 12, marginTop: 4,
+        fontSize: 9, color: 'var(--ink-3)',
+      }}>
+        {[0, 15, 30, 45, 60].map((min) => (
+          <span
+            key={min}
+            style={{
+              position: 'absolute', top: 0,
+              left: `${(min / 60) * 100}%`,
+              transform:
+                min === 0 ? 'translateX(0)'
+                : min === 60 ? 'translateX(-100%)'
+                : 'translateX(-50%)',
+              whiteSpace: 'nowrap',
+            }}
+          >{fmtClock(hourTs + min * 60)}</span>
+        ))}
+      </div>
+    </div>
+  );
+}

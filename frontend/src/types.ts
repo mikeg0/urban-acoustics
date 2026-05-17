@@ -130,6 +130,21 @@ export interface SpectrogramReadResponse {
   frames: SpectrogramFrameOut[];
 }
 
+export interface SpectrogramTileRef {
+  hour: number;       // UTC hour boundary, unix seconds
+  tile_url: string;   // same-origin path; fetch as image/png
+}
+
+export interface SpectrogramHistoryResponse {
+  device_id: string;
+  generated_at: number;
+  tile_db_min: number;
+  tile_db_max: number;
+  tile_rows: number;
+  tile_cols: number;
+  hours: SpectrogramTileRef[]; // ascending; last entry is current (in-progress) hour
+}
+
 export type HealthResolution = 'raw' | '1m' | '1h';
 
 export interface DeviceHealthPoint {

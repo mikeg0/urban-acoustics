@@ -156,12 +156,18 @@ async def create_event_intent(
 async def list_events(
     device_id: UUID | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
+    from_ts: float | None = Query(default=None, alias="from"),
+    to_ts: float | None = Query(default=None, alias="to"),
     _user: ResolvedUser = Depends(require_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[EventResponse]:
     stmt = select(Event).order_by(desc(Event.ts)).limit(limit)
     if device_id is not None:
         stmt = stmt.where(Event.device_id == device_id)
+    if from_ts is not None:
+        stmt = stmt.where(Event.ts >= datetime.fromtimestamp(from_ts, tz=timezone.utc))
+    if to_ts is not None:
+        stmt = stmt.where(Event.ts < datetime.fromtimestamp(to_ts, tz=timezone.utc))
     result = await session.execute(stmt)
     return [_to_response(r) for r in result.scalars()]
 
