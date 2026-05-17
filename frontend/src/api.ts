@@ -3,6 +3,8 @@ import type {
   DeviceEvent,
   DeviceInfo,
   EventLabel,
+  HealthReadResponse,
+  HealthResolution,
   LabelSubmission,
   PlaybackUrl,
   SpectrogramReadResponse,
@@ -60,6 +62,16 @@ export const fetchSpectrogramHistory = (
 ): Promise<SpectrogramReadResponse> =>
   getJson<SpectrogramReadResponse>(
     `/api/v1/devices/${deviceId}/spectrogram?from=${fromTs}&to=${toTs}`,
+  );
+
+export const fetchHealth = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+  res: HealthResolution = '1m',
+): Promise<HealthReadResponse> =>
+  getJson<HealthReadResponse>(
+    `/api/v1/devices/${deviceId}/health?from=${fromTs}&to=${toTs}&res=${res}`,
   );
 
 export const fetchEvents = (deviceId: string, limit = 50): Promise<DeviceEvent[]> =>

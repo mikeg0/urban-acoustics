@@ -226,6 +226,39 @@ class TelemetryReadResponse(BaseModel):
     points: list[TelemetryPoint]
 
 
+# --- REST: device-health read ------------------------------------------------
+
+
+class HealthResolution(str, Enum):
+    RAW = "raw"
+    ONE_MINUTE = "1m"
+    ONE_HOUR = "1h"
+
+
+class HealthPoint(BaseModel):
+    ts: UnixTs
+    uptime_s: float
+    cpu_pct: float
+    cpu_temp_c: float
+    mem_used_mb: float
+    disk_free_mb: float
+    wifi_rssi_dbm: float
+    queue_depth: int
+    queue_bytes: int
+    mic_gain_db: float
+    ntp_offset_ms: float
+    fw_version: str
+    config_version: str
+
+
+class HealthReadResponse(BaseModel):
+    device_id: UUID
+    resolution: HealthResolution
+    from_ts: UnixTs
+    to_ts: UnixTs
+    points: list[HealthPoint]
+
+
 # --- REST: spectrogram read --------------------------------------------------
 
 

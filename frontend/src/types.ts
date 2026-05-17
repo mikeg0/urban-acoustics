@@ -130,6 +130,32 @@ export interface SpectrogramReadResponse {
   frames: SpectrogramFrameOut[];
 }
 
+export type HealthResolution = 'raw' | '1m' | '1h';
+
+export interface DeviceHealthPoint {
+  ts: number;
+  uptime_s: number;
+  cpu_pct: number;
+  cpu_temp_c: number;
+  mem_used_mb: number;
+  disk_free_mb: number;
+  wifi_rssi_dbm: number;
+  queue_depth: number;
+  queue_bytes: number;
+  mic_gain_db: number;
+  ntp_offset_ms: number;
+  fw_version: string;
+  config_version: string;
+}
+
+export interface HealthReadResponse {
+  device_id: string;
+  resolution: HealthResolution;
+  from_ts: number;
+  to_ts: number;
+  points: DeviceHealthPoint[];
+}
+
 export type DeviceEventStatus =
   | 'announced'
   | 'upload_intent_created'

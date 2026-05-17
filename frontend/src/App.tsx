@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { fetchDevice, fetchTelemetry, fetchYear, liveDeviceSocket } from './api';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
 import { DayView, HourView, MonthView, YearHeatmap, YearView } from './drills';
+import { HealthView, RealHealthView } from './health';
 import { LiveView, RealLiveView } from './live';
 import { PALETTES } from './palettes';
 import { AnomaliesFeed, BreachRibbon, ForecastPanel, PeakHoursChart, SourceBreakdown } from './panels';
@@ -30,12 +31,14 @@ const REAL_MODE = VITE_DEMO_MODE === 'false' && !!VITE_DEVICE_ID;
 
 type FlowKey = 'breadcrumb' | 'stacked' | 'zoom';
 
+type PageKey = 'live' | 'dashboard' | 'health';
+
 function TopBar({
   threshold, page, onPageChange, onOpenSettings, sensorPos, sensor,
 }: {
   threshold: number;
-  page: 'dashboard' | 'live';
-  onPageChange: (p: 'dashboard' | 'live') => void;
+  page: PageKey;
+  onPageChange: (p: PageKey) => void;
   onOpenSettings: () => void;
   sensor: string;
   sensorPos: string;
@@ -80,7 +83,7 @@ function TopBar({
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ display: 'flex', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6, padding: 2 }}>
-          {(['dashboard', 'live'] as const).map((k) => (
+          {(['live', 'dashboard', 'health'] as const).map((k) => (
             <button
               key={k}
               onClick={() => onPageChange(k)}
@@ -100,7 +103,7 @@ function TopBar({
               }}
             >
               {k === 'live' && <span style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--neon-hot)', animation: 'live-pulse 1.4s ease-in-out infinite' }} />}
-              {k === 'live' ? 'Live' : 'Dashboard'}
+              {k === 'live' ? 'Live' : k === 'dashboard' ? 'Dashboard' : 'Health'}
             </button>
           ))}
         </div>
@@ -515,7 +518,10 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
   const [flow, setFlow] = useState<FlowKey>(() => (localStorage.getItem('drillFlow') as FlowKey) || 'breadcrumb');
   useEffect(() => { try { localStorage.setItem('drillFlow', flow); } catch { /* ignore */ } }, [flow]);
 
-  const [page, setPage] = useState<'dashboard' | 'live'>(() => (localStorage.getItem('page') as 'dashboard' | 'live') || 'dashboard');
+  const [page, setPage] = useState<PageKey>(() => {
+    const saved = localStorage.getItem('page');
+    return saved === 'live' || saved === 'dashboard' || saved === 'health' ? saved : 'dashboard';
+  });
   useEffect(() => { try { localStorage.setItem('page', page); } catch { /* ignore */ } }, [page]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -570,6 +576,10 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
           {deviceId
             ? <RealLiveView deviceId={deviceId} threshold={dbThreshold} />
             : <LiveView threshold={dbThreshold} />}
+        </div>
+      ) : page === 'health' ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {deviceId ? <RealHealthView deviceId={deviceId} /> : <HealthView />}
         </div>
       ) : (
         <Fragment>
