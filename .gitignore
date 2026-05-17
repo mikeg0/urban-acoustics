@@ -14,11 +14,33 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Pi
+raspberry-pi-zero-2w/.venv/
+raspberry-pi-zero-2w/.pytest_cache/
+
 *.log
 
+# Build artifacts
+*.tar.gz
+
+# Secrets / credentials — never commit these from any directory
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.csr
+*.srl
+*.cer
+*.pfx
+*.p12
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
 # Generated dev mTLS material — regenerate with backend/certs/gen-dev-certs.sh
-backend/certs/*.key
-backend/certs/*.crt
-backend/certs/*.csr
-backend/certs/*.srl
 backend/certs/devices/
