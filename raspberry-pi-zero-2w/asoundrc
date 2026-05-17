@@ -32,3 +32,17 @@ pcm.dmic_sv {
     min_dB -3.0
     max_dB 30.0
 }
+
+# Mono downmix of dmic_sv: takes the left I2S channel only (L/R tied to GND
+# on the INMP441, so right is silence). This is what the firmware records
+# from — arecord -c1 directly against the 2-channel dmic_sv fails.
+pcm.dmic_mono {
+    type route
+    slave {
+        pcm dmic_sv
+        channels 2
+    }
+    ttable {
+        0.0 1.0
+    }
+}

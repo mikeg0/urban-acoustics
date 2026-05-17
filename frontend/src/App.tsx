@@ -1,15 +1,26 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchYear } from './api';
+import { fetchDevice, fetchTelemetry, fetchYear, liveDeviceSocket } from './api';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
 import { DayView, HourView, MonthView, YearHeatmap, YearView } from './drills';
-import { LiveView } from './live';
+import { LiveView, RealLiveView } from './live';
 import { PALETTES } from './palettes';
 import { AnomaliesFeed, BreachRibbon, ForecastPanel, PeakHoursChart, SourceBreakdown } from './panels';
 import { SettingsButton, SettingsDialog } from './settings';
 import { buildSpectrogram, SpectrogramCanvas, TimelineSpectrogram } from './spectrogram';
 import { useTweaks } from './tweaks';
 import { hydrateMonths } from './utils';
-import type { Anomaly, Day, DrillState, MonthHydrated, YearBundle } from './types';
+import type {
+  Anomaly, Day, DeviceInfo, DeviceLiveMessage, DeviceTelemetryPoint,
+  DrillState, MonthHydrated, YearBundle,
+} from './types';
+
+// Real mode is opt-in: both env flags must be set. When on, the Live tab is
+// powered by real-device telemetry from /api/v1; the rest of the dashboard
+// (year heatmap, anomalies, forecast, etc.) still renders from the synthetic
+// /api/year bundle since no real long-horizon history exists yet.
+const VITE_DEVICE_ID = import.meta.env.VITE_DEVICE_ID;
+const VITE_DEMO_MODE = import.meta.env.VITE_DEMO_MODE;
+const REAL_MODE = VITE_DEMO_MODE === 'false' && !!VITE_DEVICE_ID;
 
 type FlowKey = 'breadcrumb' | 'stacked' | 'zoom';
 
@@ -122,6 +133,179 @@ function NowCard({ palette }: { palette: keyof typeof PALETTES }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+const NOW_CARD_WINDOW_S = 15 * 60;
+
+function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: number }) {
+  const [points, setPoints] = useState<DeviceTelemetryPoint[]>([]);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  const refresh = useCallback(async () => {
+    const now = Date.now() / 1000;
+    try {
+      const r = await fetchTelemetry(deviceId, now - NOW_CARD_WINDOW_S, now, '1m');
+      setPoints(r.points);
+    } catch { /* keep last good points */ }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refresh();
+    if (wsConnected) return;
+    const id = setInterval(refresh, 5000);
+    return () => clearInterval(id);
+  }, [refresh, wsConnected]);
+
+  useEffect(() => {
+    let closed = false;
+    let ws: WebSocket | null = null;
+    try { ws = liveDeviceSocket(deviceId); } catch { return; }
+    ws.onopen = () => { if (!closed) setWsConnected(true); };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as DeviceLiveMessage;
+        if (msg.type === 'tick') {
+          setPoints((prev) => {
+            const next = prev.concat({
+              ts: msg.ts, laeq: msg.laeq, lafmax: msg.lafmax, lcpeak: msg.lcpeak,
+            });
+            const cutoff = Date.now() / 1000 - NOW_CARD_WINDOW_S;
+            return next.filter((p) => p.ts >= cutoff);
+          });
+        }
+      } catch { /* ignore */ }
+    };
+    ws.onclose = () => setWsConnected(false);
+    ws.onerror = () => {
+      setWsConnected(false);
+      try { ws?.close(); } catch { /* ignore */ }
+    };
+    return () => {
+      closed = true;
+      try { ws?.close(); } catch { /* ignore */ }
+    };
+  }, [deviceId]);
+
+  const last = points.length ? points[points.length - 1] : null;
+  const lastAge = last ? Math.max(0, Date.now() / 1000 - last.ts) : null;
+  const fresh = lastAge != null && lastAge < 90;
+  const breach = last != null && last.laeq >= threshold;
+  const status: { tone: 'ok' | 'hot' | 'default'; label: string } =
+    fresh ? { tone: 'ok', label: 'STREAMING' }
+      : last == null ? { tone: 'default', label: 'WAITING' }
+        : { tone: 'hot', label: 'STALE' };
+
+  return (
+    <Card title="LIVE · RIGHT NOW" right={<Pill tone={status.tone} icon>{status.label}</Pill>} padding={14}>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+        <div>
+          <div className="mono" style={{
+            fontSize: 40, letterSpacing: '-0.03em',
+            color: breach ? 'var(--neon-hot)' : 'var(--ink-0)',
+            lineHeight: 1,
+          }}>
+            {last ? last.laeq.toFixed(1) : '—'}
+          </div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+            dB(A) · LAeq · {lastAge != null
+              ? lastAge < 90 ? `${Math.round(lastAge)}s ago` : `${Math.round(lastAge / 60)}m ago`
+              : 'no data'}
+          </div>
+        </div>
+        <div style={{ flex: 1, height: 70 }}>
+          <NowSparkline points={points} threshold={threshold} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function NowSparkline({ points, threshold }: {
+  points: DeviceTelemetryPoint[]; threshold: number;
+}) {
+  const W = 240;
+  const H = 70;
+  if (!points.length) {
+    return (
+      <div className="mono" style={{
+        fontSize: 10, color: 'var(--ink-3)', textAlign: 'center', paddingTop: 26,
+        letterSpacing: '0.12em',
+      }}>
+        WAITING FOR TELEMETRY
+      </div>
+    );
+  }
+  const laeqVals = points.map((p) => p.laeq);
+  const lafmaxVals = points.map((p) => p.lafmax);
+  const rawMin = Math.min(...laeqVals, threshold - 10);
+  const rawMax = Math.max(...lafmaxVals, threshold + 5);
+  const min = Math.floor(rawMin / 5) * 5;
+  const max = Math.ceil(rawMax / 5) * 5;
+  const range = Math.max(1, max - min);
+  const firstTs = points[0].ts;
+  const lastTs = points[points.length - 1].ts;
+  const span = Math.max(1, lastTs - firstTs);
+  const xOf = (ts: number) => ((ts - firstTs) / span) * W;
+  const yOf = (v: number) =>
+    H - ((Math.max(min, Math.min(max, v)) - min) / range) * (H - 4) - 2;
+  const tY = yOf(threshold);
+
+  const laeqLine = points.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.laeq).toFixed(1)}`,
+  ).join(' ');
+  const laeqArea = `${laeqLine} L${xOf(lastTs).toFixed(1)},${H} L${xOf(firstTs).toFixed(1)},${H} Z`;
+  const lafmaxLine = points.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.lafmax).toFixed(1)}`,
+  ).join(' ');
+
+  const stopAt = (v: number) => `${((max - v) / range) * 100}%`;
+  const gradId = `nowSpark-${firstTs.toFixed(0)}-${threshold}`;
+
+  return (
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset={stopAt(max)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.5" />
+          <stop offset={stopAt(threshold)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.42" />
+          <stop offset={stopAt(threshold - 0.001)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.32" />
+          <stop offset={stopAt(threshold - 8)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.22" />
+          <stop offset={stopAt(min)} stopColor="oklch(60% 0.14 215)" stopOpacity="0.12" />
+        </linearGradient>
+      </defs>
+
+      {/* breach-zone wash */}
+      <rect x="0" y="0" width={W} height={Math.max(0, tY)}
+        fill="oklch(72% 0.2 35)" fillOpacity="0.05" />
+
+      {/* threshold marker */}
+      <line x1="0" x2={W} y1={tY} y2={tY}
+        stroke="var(--neon-hot)" strokeDasharray="2 3" strokeWidth="1" opacity="0.6" />
+
+      {/* LCpeak dots */}
+      {points.map((p, i) => (
+        <circle key={`pk-${i}`} cx={xOf(p.ts)} cy={yOf(p.lcpeak)}
+          r="1" fill="oklch(75% 0.22 350)" opacity="0.6" />
+      ))}
+
+      {/* LAeq filled area */}
+      <path d={laeqArea} fill={`url(#${gradId})`} />
+
+      {/* LAFmax dashed overlay */}
+      <path d={lafmaxLine} fill="none"
+        stroke="oklch(82% 0.16 70)" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
+
+      {/* LAeq line */}
+      <path d={laeqLine} fill="none" stroke="var(--neon-cool)" strokeWidth="1.5" />
+
+      {/* Breach points */}
+      {points.map((p, i) => {
+        if (p.laeq < threshold) return null;
+        return <circle key={`br-${i}`} cx={xOf(p.ts)} cy={yOf(p.laeq)}
+          r="2" fill="var(--neon-hot)" />;
+      })}
+    </svg>
   );
 }
 
@@ -355,6 +539,10 @@ function DrillFlowZoom(props: DrillProps) {
 }
 
 export function App() {
+  return <DemoApp deviceId={REAL_MODE ? VITE_DEVICE_ID : null} />;
+}
+
+function DemoApp({ deviceId }: { deviceId: string | null }) {
   const tweaks = useTweaks();
   const { spectroColor, dbThreshold, anomalySensitivity } = tweaks;
 
@@ -365,6 +553,16 @@ export function App() {
       .then(setBundle)
       .catch((e: Error) => setError(e.message));
   }, []);
+
+  // When wired to a real device, fetch its metadata so the TopBar and footer
+  // show the real sensor name/location instead of the synthetic city defaults.
+  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  useEffect(() => {
+    if (!deviceId) return;
+    fetchDevice(deviceId)
+      .then(setDevice)
+      .catch(() => { /* fall back to synthetic city.sensor */ });
+  }, [deviceId]);
 
   const [drillState, setDrillState] = useState<DrillState>(() => {
     try {
@@ -413,6 +611,8 @@ export function App() {
 
   const { city, days, anomalies, forecast, peakHours, sources } = bundle;
   const DrillComp = flow === 'breadcrumb' ? DrillFlowBreadcrumb : flow === 'stacked' ? DrillFlowStacked : DrillFlowZoom;
+  const sensor = device?.name ?? city.sensor;
+  const sensorPos = device?.location ?? city.sensorPos;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -421,13 +621,15 @@ export function App() {
         page={page}
         onPageChange={setPage}
         onOpenSettings={() => setSettingsOpen(true)}
-        sensor={city.sensor}
-        sensorPos={city.sensorPos}
+        sensor={sensor}
+        sensorPos={sensorPos}
       />
 
       {page === 'live' ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <LiveView threshold={dbThreshold} />
+          {deviceId
+            ? <RealLiveView deviceId={deviceId} threshold={dbThreshold} />
+            : <LiveView threshold={dbThreshold} />}
         </div>
       ) : (
         <Fragment>
@@ -444,7 +646,9 @@ export function App() {
             minHeight: 0,
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
-              <NowCard palette={spectroColor} />
+              {deviceId
+                ? <RealNowCard deviceId={deviceId} threshold={dbThreshold} />
+                : <NowCard palette={spectroColor} />}
               <Card
                 title="ANOMALIES FEED"
                 subtitle={`${visibleAnomalies.length} events · past 365 days`}
@@ -533,7 +737,7 @@ export function App() {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--ink-3)', letterSpacing: '0.1em',
           }}>
-            <span>{city.name.toUpperCase()} ACOUSTIC MONITORING · {city.sensor} · {city.sensorPos.toUpperCase()}</span>
+            <span>{city.name.toUpperCase()} ACOUSTIC MONITORING · {sensor} · {sensorPos.toUpperCase()}</span>
             <span>DATA: {anomalies.length} anomalies · {forecast.length}-day forecast · ISO 1996-1 METHOD</span>
           </div>
         </Fragment>
@@ -543,3 +747,4 @@ export function App() {
     </div>
   );
 }
+

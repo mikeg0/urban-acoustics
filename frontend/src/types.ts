@@ -90,3 +90,96 @@ export type Tweaks = {
   dbThreshold: number;
   anomalySensitivity: number;
 };
+
+// --- Phase 1 real-device contracts (mirror backend/app/contracts.py) ---------
+
+export interface DeviceInfo {
+  device_id: string;
+  name: string | null;
+  location: string | null;
+  created_at: number;
+  last_seen: number | null;
+}
+
+export type TelemetryResolution = 'raw' | '1m' | '1h';
+
+export interface DeviceTelemetryPoint {
+  ts: number;
+  laeq: number;
+  lafmax: number;
+  lcpeak: number;
+}
+
+export interface TelemetryReadResponse {
+  device_id: string;
+  resolution: TelemetryResolution;
+  from_ts: number;
+  to_ts: number;
+  points: DeviceTelemetryPoint[];
+}
+
+export type DeviceEventStatus =
+  | 'announced'
+  | 'upload_intent_created'
+  | 'uploaded'
+  | 'available'
+  | 'failed';
+
+export type EventLabel =
+  | 'motorcycle'
+  | 'car'
+  | 'construction'
+  | 'helicopter'
+  | 'airplane'
+  | 'siren'
+  | 'dog'
+  | 'voice'
+  | 'other';
+
+export const EVENT_LABELS: readonly EventLabel[] = [
+  'motorcycle',
+  'car',
+  'construction',
+  'helicopter',
+  'airplane',
+  'siren',
+  'dog',
+  'voice',
+  'other',
+];
+
+export interface DeviceEvent {
+  event_id: string;
+  device_id: string;
+  ts: number;
+  duration_s: number;
+  peak_db: number;
+  sha256: string;
+  size: number;
+  status: DeviceEventStatus;
+  classification: string | null;
+  confidence: number | null;
+  model_version: string | null;
+  playback_url: string | null;
+  playback_url_expires_at: number | null;
+}
+
+export interface PlaybackUrl {
+  event_id: string;
+  url: string;
+  expires_at: number;
+}
+
+export interface LabelSubmission {
+  event_id: string;
+  label: EventLabel;
+  created_at: number;
+}
+
+export type DeviceLiveMessage = {
+  type: 'tick';
+  ts: number;
+  laeq: number;
+  lafmax: number;
+  lcpeak: number;
+};

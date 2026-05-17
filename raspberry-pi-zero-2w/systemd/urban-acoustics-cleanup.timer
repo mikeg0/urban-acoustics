@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily prune of orphaned event FLACs and SQLite vacuum
+Documentation=https://github.com/conexed/urban-acoustics
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=24h
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

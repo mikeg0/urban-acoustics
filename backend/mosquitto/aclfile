@@ -1,0 +1,22 @@
+# Phase 1 ACL. The broker derives `username` from the TLS client cert CN
+# (use_identity_as_username true), and `%u` below substitutes that CN.
+#
+# Devices: CN = device UUID. Each device is locked to dev/<its-uuid>/#.
+# Ingest worker: CN = "ingest". Reads everything under dev/+/, writes only
+#   commands to dev/+/cmd/+.
+# Bootstrap (provisioning) certs are NOT permitted by this Phase 1 ACL;
+# provisioning lands in task 08 with its own narrow rule.
+
+# --- per-device subtree -----------------------------------------------------
+# %u expands to the cert CN. Devices may publish telemetry/health/event
+# announcements and subscribe to their command channel and last-will.
+pattern readwrite dev/%u/#
+
+# --- ingest worker ----------------------------------------------------------
+user ingest
+topic read  dev/+/tlm
+topic read  dev/+/health
+topic read  dev/+/event/announce
+topic read  dev/+/event/done
+topic read  dev/+/lwt
+topic write dev/+/cmd/+

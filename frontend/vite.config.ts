@@ -17,7 +17,9 @@ export default defineConfig({
     // macOS/Windows hosts. Harmless on Linux.
     watch: { usePolling: true, interval: 250 },
     proxy: {
-      '/api': { target: API_HOST, changeOrigin: true },
+      // ws: true so the live-telemetry WebSocket under
+      // /api/v1/devices/{id}/live upgrades through Vite to FastAPI.
+      '/api': { target: API_HOST, changeOrigin: true, ws: true },
       '/ws': { target: WS_HOST, ws: true, changeOrigin: true },
     },
   },

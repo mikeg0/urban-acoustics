@@ -15,3 +15,10 @@ frontend/dist/
 frontend/.vite/
 
 *.log
+
+# Generated dev mTLS material — regenerate with backend/certs/gen-dev-certs.sh
+backend/certs/*.key
+backend/certs/*.crt
+backend/certs/*.csr
+backend/certs/*.srl
+backend/certs/devices/

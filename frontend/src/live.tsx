@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { liveSocket } from './api';
-import type { Gap, LiveMessage } from './types';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { fetchDevice, fetchEvents, fetchTelemetry, liveDeviceSocket, liveSocket } from './api';
+import { EventsList } from './events/EventsList';
+import { EventPlayer } from './events/EventPlayer';
+import { LabelPicker } from './events/LabelPicker';
+import type {
+  DeviceEvent,
+  DeviceInfo,
+  DeviceLiveMessage,
+  DeviceTelemetryPoint,
+  Gap,
+  LiveMessage,
+} from './types';
 
 const fmtTime = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -607,5 +617,454 @@ function CurrentHourTimeline({
         ))}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Real-device mode — Phase 1 minimal panel powered by /api/v1
+// ---------------------------------------------------------------------------
+
+const TELEMETRY_WINDOW_S = 30 * 60;   // last 30 minutes at 1m resolution
+const TELEMETRY_POLL_MS = 5000;
+const EVENT_POLL_MS = 10000;
+
+interface RealLiveViewProps {
+  deviceId: string;
+  threshold: number;
+}
+
+export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
+  const [device, setDevice] = useState<DeviceInfo | null>(null);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [points, setPoints] = useState<DeviceTelemetryPoint[]>([]);
+  const [telemetryError, setTelemetryError] = useState<string | null>(null);
+  const [events, setEvents] = useState<DeviceEvent[]>([]);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  // Device metadata: fetched once.
+  useEffect(() => {
+    let cancelled = false;
+    fetchDevice(deviceId)
+      .then((d) => { if (!cancelled) setDevice(d); })
+      .catch((e: Error) => { if (!cancelled) setDeviceError(e.message); });
+    return () => { cancelled = true; };
+  }, [deviceId]);
+
+  // Telemetry: poll every 5s. Live WS ticks (when available) interleave into
+  // the same `points` buffer; if the WS never opens, polling is the source.
+  const refreshTelemetry = useCallback(async () => {
+    const now = Date.now() / 1000;
+    try {
+      const r = await fetchTelemetry(deviceId, now - TELEMETRY_WINDOW_S, now, '1m');
+      setPoints(r.points);
+      setTelemetryError(null);
+    } catch (e) {
+      setTelemetryError((e as Error).message);
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refreshTelemetry();
+    // Skip the interval while the WS is pushing ticks — otherwise the 5 s
+    // 1 m-bucketed poll keeps overwriting the dense per-second WS data and
+    // the chart flips between sparse and dense. The initial fetch above
+    // still runs so the chart fills in instantly on open / reconnect.
+    if (wsConnected) return;
+    const id = setInterval(refreshTelemetry, TELEMETRY_POLL_MS);
+    return () => clearInterval(id);
+  }, [refreshTelemetry, wsConnected]);
+
+  // Events: poll every 10s.
+  const refreshEvents = useCallback(async () => {
+    try {
+      const r = await fetchEvents(deviceId, 50);
+      setEvents(r);
+      setEventsError(null);
+    } catch (e) {
+      setEventsError((e as Error).message);
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refreshEvents();
+    const id = setInterval(refreshEvents, EVENT_POLL_MS);
+    return () => clearInterval(id);
+  }, [refreshEvents]);
+
+  // Forward-compatible live WS: tick messages append to telemetry. If the
+  // endpoint isn't wired up yet (close on connect), polling still drives the
+  // display.
+  useEffect(() => {
+    let closed = false;
+    let ws: WebSocket | null = null;
+    try {
+      ws = liveDeviceSocket(deviceId);
+    } catch {
+      return;
+    }
+    ws.onopen = () => { if (!closed) setWsConnected(true); };
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as DeviceLiveMessage;
+        if (msg.type === 'tick') {
+          setPoints((prev) => {
+            const next = prev.concat({
+              ts: msg.ts,
+              laeq: msg.laeq,
+              lafmax: msg.lafmax,
+              lcpeak: msg.lcpeak,
+            });
+            const cutoff = Date.now() / 1000 - TELEMETRY_WINDOW_S;
+            return next.filter((p) => p.ts >= cutoff);
+          });
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+    };
+    ws.onclose = () => setWsConnected(false);
+    ws.onerror = () => {
+      setWsConnected(false);
+      try { ws?.close(); } catch { /* ignore */ }
+    };
+    return () => {
+      closed = true;
+      try { ws?.close(); } catch { /* ignore */ }
+    };
+  }, [deviceId]);
+
+  const lastPoint = points.length ? points[points.length - 1] : null;
+  const currentDb = lastPoint?.laeq ?? null;
+  const peak = points.length ? Math.max(...points.map((p) => p.lafmax)) : null;
+  const mean = points.length
+    ? points.reduce((a, p) => a + p.laeq, 0) / points.length
+    : null;
+  const breaches = points.filter((p) => p.laeq >= threshold).length;
+  const lastSampleAge = lastPoint ? Math.max(0, Date.now() / 1000 - lastPoint.ts) : null;
+
+  const selectedEvent = useMemo(
+    () => events.find((e) => e.event_id === selectedEventId) ?? null,
+    [events, selectedEventId],
+  );
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 14, padding: 14,
+      height: '100%', overflow: 'auto',
+    }}>
+      <DeviceBanner
+        deviceId={deviceId}
+        device={device}
+        deviceError={deviceError}
+        wsConnected={wsConnected}
+        lastSampleAge={lastSampleAge}
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <BigLiveStat
+          label="Right now"
+          value={currentDb != null ? currentDb.toFixed(1) : '—'}
+          unit="dB · LAeq"
+          tone={
+            currentDb != null && currentDb >= threshold
+              ? 'hot'
+              : currentDb != null && currentDb >= threshold - 8
+                ? 'warn'
+                : 'default'
+          }
+          pulse={wsConnected || lastPoint != null}
+        />
+        <BigLiveStat
+          label="Window peak"
+          value={peak != null ? peak.toFixed(1) : '—'}
+          unit="dB · LAFmax"
+          tone={peak != null && peak >= threshold ? 'hot' : 'default'}
+        />
+        <BigLiveStat
+          label="Window avg"
+          value={mean != null ? mean.toFixed(1) : '—'}
+          unit="dB · LAeq"
+        />
+        <BigLiveStat
+          label="Breach minutes"
+          value={String(breaches)}
+          unit={`min ≥ ${threshold} dB`}
+          tone={breaches > 0 ? 'warn' : 'default'}
+        />
+      </div>
+
+      <RealTelemetrySparkline points={points} threshold={threshold} />
+
+      {telemetryError && (
+        <div className="mono" style={{ fontSize: 11, color: 'var(--neon-hot)' }}>
+          Telemetry: {telemetryError}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 14, minHeight: 0 }}>
+        <div style={{
+          background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8,
+          display: 'flex', flexDirection: 'column', minHeight: 320,
+        }}>
+          <div style={{
+            padding: '10px 14px', borderBottom: '1px solid var(--line)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <div>
+              <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>
+                Recent events
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ink-1)', marginTop: 2 }}>
+                {events.length} event{events.length === 1 ? '' : 's'} · pick one to play & label
+              </div>
+            </div>
+            {eventsError && (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--neon-hot)' }}>
+                {eventsError}
+              </span>
+            )}
+          </div>
+          <EventsList
+            events={events}
+            selectedId={selectedEventId}
+            onSelect={(e) => setSelectedEventId(e.event_id)}
+            threshold={threshold}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
+              Playback
+            </div>
+            <EventPlayer event={selectedEvent} />
+          </div>
+          <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
+            <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
+              Label
+            </div>
+            <LabelPicker
+              event={selectedEvent}
+              onLabelled={() => { refreshEvents(); }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeviceBanner({
+  deviceId, device, deviceError, wsConnected, lastSampleAge,
+}: {
+  deviceId: string;
+  device: DeviceInfo | null;
+  deviceError: string | null;
+  wsConnected: boolean;
+  lastSampleAge: number | null;
+}) {
+  const fresh = lastSampleAge != null && lastSampleAge < 90;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '12px 16px',
+      background: fresh ? 'var(--bg-1)' : 'oklch(22% 0.06 35)',
+      border: `1px solid ${fresh ? 'var(--line)' : 'oklch(50% 0.15 35)'}`,
+      borderRadius: 8,
+      gap: 14, flexWrap: 'wrap',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            width: 10, height: 10, borderRadius: 5,
+            background: fresh ? 'var(--neon-ok)' : 'oklch(78% 0.18 35)',
+            boxShadow: fresh ? '0 0 10px var(--neon-ok)' : 'none',
+            animation: fresh ? 'live-pulse 1.4s ease-in-out infinite' : 'none',
+          }} />
+          <span className="mono" style={{
+            fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: fresh ? 'var(--neon-ok)' : 'oklch(85% 0.16 35)',
+            fontWeight: 600,
+          }}>
+            {fresh ? 'Receiving telemetry' : lastSampleAge == null ? 'Waiting for data' : 'Stale'}
+          </span>
+        </div>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--ink-1)' }}>
+          {device?.name ?? deviceId}
+        </span>
+        {device?.location && (
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
+            · {device.location}
+          </span>
+        )}
+        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+          ID {deviceId}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {lastSampleAge != null && (
+          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+            last sample {lastSampleAge < 90 ? `${Math.round(lastSampleAge)}s` : `${Math.round(lastSampleAge / 60)}m`} ago
+          </span>
+        )}
+        <span className="mono" style={{ fontSize: 10, color: wsConnected ? 'var(--neon-cool)' : 'var(--ink-3)', letterSpacing: '0.12em' }}>
+          {wsConnected ? '● WS LIVE' : '○ POLLING'}
+        </span>
+        {deviceError && (
+          <span className="mono" style={{ fontSize: 10, color: 'var(--neon-hot)' }}>{deviceError}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RealTelemetrySparkline({
+  points, threshold,
+}: { points: DeviceTelemetryPoint[]; threshold: number }) {
+  const W = 800;
+  const H = 140;
+  if (!points.length) {
+    return (
+      <div style={{
+        background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8,
+        padding: 14, fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)',
+      }}>
+        No telemetry in the last {Math.round(TELEMETRY_WINDOW_S / 60)} minutes.
+      </div>
+    );
+  }
+  // Round axis bounds to 5 dB so gridlines + labels land cleanly. LCpeak can
+  // spike well above LAFmax, so clamp the max so a single transient peak
+  // doesn't compress the LAeq trace into a thin band at the bottom.
+  const laeqVals = points.map((p) => p.laeq);
+  const lafmaxVals = points.map((p) => p.lafmax);
+  const rawMin = Math.min(...laeqVals, threshold - 10);
+  const rawMax = Math.max(...lafmaxVals, threshold + 5);
+  const min = Math.floor(rawMin / 5) * 5;
+  const max = Math.ceil(rawMax / 5) * 5;
+  const range = Math.max(1, max - min);
+  const firstTs = points[0].ts;
+  const lastTs = points[points.length - 1].ts;
+  const span = Math.max(1, lastTs - firstTs);
+  const xOf = (ts: number) => ((ts - firstTs) / span) * W;
+  const yOf = (v: number) =>
+    H - ((Math.max(min, Math.min(max, v)) - min) / range) * (H - 8) - 4;
+  const tY = yOf(threshold);
+
+  const laeqLine = points.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.laeq).toFixed(1)}`,
+  ).join(' ');
+  const laeqArea = `${laeqLine} L${xOf(lastTs).toFixed(1)},${H} L${xOf(firstTs).toFixed(1)},${H} Z`;
+  const lafmaxLine = points.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.lafmax).toFixed(1)}`,
+  ).join(' ');
+
+  // Gradient stops: cool floor → amber band starting threshold-8 → hot at
+  // threshold. Stops are expressed as a percentage of the chart height; lower
+  // % = higher on screen (SVG y grows downward).
+  const stopAt = (v: number) => `${((max - v) / range) * 100}%`;
+  const gridLines = Array.from({ length: Math.floor(range / 5) + 1 }, (_, i) => min + i * 5)
+    .filter((v) => v > min && v < max);
+
+  return (
+    <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div>
+          <div style={{ fontSize: 13, color: 'var(--ink-0)', fontWeight: 500 }}>
+            Last {Math.round(TELEMETRY_WINDOW_S / 60)} min · LAeq · LAFmax · LCpeak
+          </div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginTop: 2 }}>
+            {points.length} points · {new Date(firstTs * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+            {' → '}
+            {new Date(lastTs * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+          </div>
+        </div>
+        <div className="mono" style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--ink-3)' }}>
+          <TraceLegend dot="var(--neon-cool)" label="LAeq" />
+          <TraceLegend dot="oklch(82% 0.16 70)" label="LAFmax" dashed />
+          <TraceLegend dot="oklch(75% 0.22 350)" label="LCpeak" dot3 />
+          <TraceLegend dot="var(--neon-hot)" label={`≥ ${threshold}`} dashed />
+        </div>
+      </div>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+        style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="laeqAreaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset={stopAt(max)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.5" />
+            <stop offset={stopAt(threshold)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.42" />
+            <stop offset={stopAt(threshold - 0.001)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.32" />
+            <stop offset={stopAt(threshold - 8)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.22" />
+            <stop offset={stopAt(min)} stopColor="oklch(60% 0.14 215)" stopOpacity="0.12" />
+          </linearGradient>
+        </defs>
+
+        {/* breach-zone wash above threshold */}
+        <rect x="0" y="0" width={W} height={Math.max(0, tY)}
+          fill="oklch(72% 0.2 35)" fillOpacity="0.05" />
+
+        {/* horizontal gridlines + dB labels */}
+        {gridLines.map((v) => (
+          <g key={v}>
+            <line x1="0" x2={W} y1={yOf(v)} y2={yOf(v)}
+              stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
+            <text x="2" y={yOf(v) - 2}
+              fontFamily="var(--mono)" fontSize="9" fill="var(--ink-3)" opacity="0.6">
+              {v}
+            </text>
+          </g>
+        ))}
+
+        {/* threshold marker */}
+        <line x1="0" x2={W} y1={tY} y2={tY}
+          stroke="var(--neon-hot)" strokeDasharray="3 3" strokeWidth="1" opacity="0.7" />
+
+        {/* LCpeak transients — dots only, often well above LAFmax */}
+        {points.map((p, i) => (
+          <circle key={`pk-${i}`} cx={xOf(p.ts)} cy={yOf(p.lcpeak)}
+            r="1.4" fill="oklch(75% 0.22 350)" opacity="0.65" />
+        ))}
+
+        {/* LAeq filled area */}
+        <path d={laeqArea} fill="url(#laeqAreaGrad)" />
+
+        {/* LAFmax dashed overlay */}
+        <path d={lafmaxLine} fill="none"
+          stroke="oklch(82% 0.16 70)" strokeWidth="1" strokeDasharray="2 2" opacity="0.75" />
+
+        {/* LAeq line — primary trace */}
+        <path d={laeqLine} fill="none" stroke="var(--neon-cool)" strokeWidth="1.6" />
+
+        {/* Breach LAeq points */}
+        {points.map((p, i) => {
+          if (p.laeq < threshold) return null;
+          return <circle key={`br-${i}`} cx={xOf(p.ts)} cy={yOf(p.laeq)}
+            r="2.5" fill="var(--neon-hot)" />;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function TraceLegend({ dot, label, dashed, dot3 }: {
+  dot: string; label: string; dashed?: boolean; dot3?: boolean;
+}) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      {dot3 ? (
+        <span style={{ display: 'inline-flex', gap: 2 }}>
+          <span style={{ width: 3, height: 3, borderRadius: 2, background: dot }} />
+          <span style={{ width: 3, height: 3, borderRadius: 2, background: dot }} />
+          <span style={{ width: 3, height: 3, borderRadius: 2, background: dot }} />
+        </span>
+      ) : (
+        <span style={{
+          width: 16, height: 0,
+          borderTop: `${dashed ? '1.5px dashed' : '2px solid'} ${dot}`,
+        }} />
+      )}
+      <span style={{ color: 'var(--ink-2)' }}>{label}</span>
+    </span>
   );
 }

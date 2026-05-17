@@ -1,0 +1,22 @@
+[Unit]
+Description=Urban Acoustics housekeeping (delete orphan FLACs, SQLite VACUUM)
+Documentation=https://github.com/conexed/urban-acoustics
+After=urban-acoustics.service
+
+[Service]
+Type=oneshot
+User=urban-acoustics
+Group=urban-acoustics
+
+# Delete spooled FLACs older than 7 days that no longer have a row in the
+# event_uploads table. We keep 7 days as a cushion in case the supervisor
+# is offline during a long outage.
+ExecStart=/bin/bash -c '\
+  set -euo pipefail; \
+  find /var/lib/urban-acoustics/audio -type f -name "*.flac" -mtime +7 -print0 \
+    | xargs -0 -r rm -v; \
+  /opt/urban-acoustics/venv/bin/python -c "\
+import sqlite3, pathlib; \
+p = pathlib.Path(\"/var/lib/urban-acoustics/queue.db\"); \
+c = sqlite3.connect(p); \
+c.execute(\"VACUUM\"); c.close()"'

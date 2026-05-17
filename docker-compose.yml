@@ -1,3 +1,13 @@
+# Phase 1 cloud substrate (task 02).
+#
+# Layout follows the devlab Traefik pattern: app services join the shared
+# `dev_conexed_com_default` network and are routed by Traefik file-provider
+# configs in /home/mikeg/dev/devlab/traefik/dynamic/. Only Mosquitto publishes
+# a host port — devlab's Traefik has no 8883 entrypoint and this compose
+# cannot edit /home/mikeg/dev/devlab/docker-compose.yml to add one, so MQTT
+# bypasses Traefik. Mosquitto already terminates mTLS itself, so direct
+# host:8883 → broker:8883 is the natural shape.
+
 services:
   backend:
     build:
@@ -5,16 +15,82 @@ services:
       # Use host networking during image build — pip's DNS resolution can fail
       # inside Docker's default bridge on some hosts.
       network: host
+    image: urban-acoustics-backend
     container_name: urban-acoustics-backend
+    # Run Alembic before uvicorn so a fresh DB is migrated on first boot.
+    # The migration is idempotent; --reload survives because uvicorn execs
+    # the same image, just with source mounted in.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        alembic upgrade head
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
     volumes:
       # Mount source for uvicorn --reload. The data directory is persisted on
-      # the host so seed output survives `docker compose down`.
+      # the host so seed output survives `docker compose down`. Scripts and
+      # tools are mounted so the dev helpers can be run with
+      # `docker compose exec backend python -m scripts.register_device` or
+      # `docker compose run backend python -m tools.device_sim`. The tests
+      # mount exposes the FLAC fixture the simulator uploads.
       - ./backend/app:/app/app
+      - ./backend/scripts:/app/scripts
+      - ./backend/tools:/app/tools
+      - ./backend/tests:/app/tests:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+      - ./backend/certs:/app/certs:ro
       - ./backend/data:/app/data
     environment:
       PYTHONUNBUFFERED: "1"
+      DATABASE_URL: "postgresql+asyncpg://urban_acoustics:urban_acoustics_dev@postgres:5432/urban_acoustics"
+      S3_ENDPOINT: "http://minio:9000"
+      S3_PUBLIC_ENDPOINT: "https://urban-acoustics-audio.dev.conexed.com"
+      S3_ACCESS_KEY: "urban_acoustics"
+      S3_SECRET_KEY: "urban_acoustics_dev_secret_12345"
+      S3_BUCKET: "urban-acoustics-events"
+      S3_REGION: "us-east-1"
+      JWT_SECRET: "dev-only-jwt-secret-replace-in-real-deployments"
+      JWT_TTL_SECONDS: "3600"
+      DEVICE_CERT_TTL_DAYS: "90"
+      EVENT_MAX_SIZE_BYTES: "8388608"
+      EVENT_INTENT_TTL_SECONDS: "60"
+      EVENT_PLAYBACK_URL_TTL_SECONDS: "300"
+      DEMO_MODE: "1"
+      ALLOWED_ORIGINS: "https://urban-acoustics.dev.conexed.com,http://localhost:5173"
+      LOG_LEVEL: "INFO"
     networks:
       - traefik
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  ingest:
+    # Same image as backend, different command. Isolates the MQTT consumer
+    # from Uvicorn reloads and API crashes (per task 02 implementation notes).
+    image: urban-acoustics-backend
+    container_name: urban-acoustics-ingest
+    command: ["python", "-m", "app.ingest.mqtt"]
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/certs:/app/certs:ro
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: "postgresql+asyncpg://urban_acoustics:urban_acoustics_dev@postgres:5432/urban_acoustics"
+      MQTT_BROKER_URL: "mqtts://mosquitto:8883"
+      MQTT_CA_FILE: "/app/certs/root-ca.crt"
+      MQTT_CLIENT_CERT: "/app/certs/ingest.crt"
+      MQTT_CLIENT_KEY: "/app/certs/ingest.key"
+      LOG_LEVEL: "INFO"
+    networks:
+      - traefik
+    depends_on:
+      - backend
+      - postgres
+      - mosquitto
     restart: unless-stopped
 
   frontend:
@@ -31,14 +107,110 @@ services:
       VITE_API_HOST: "http://backend:8000"
       VITE_WS_HOST: "ws://backend:8000"
       CHOKIDAR_USEPOLLING: "true"
+      VITE_DEMO_MODE: "false"
+      VITE_DEVICE_ID: "00000000-0000-4000-8000-00000000000a"
     networks:
       - traefik
     depends_on:
       - backend
     restart: unless-stopped
 
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    container_name: urban-acoustics-postgres
+    environment:
+      POSTGRES_USER: urban_acoustics
+      POSTGRES_PASSWORD: urban_acoustics_dev
+      POSTGRES_DB: urban_acoustics
+      # The HA image stores PGDATA under /home/postgres/pgdata/data by default.
+      PGDATA: /home/postgres/pgdata/data
+    volumes:
+      - postgres_data:/home/postgres/pgdata
+    networks:
+      - traefik
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U urban_acoustics -d urban_acoustics"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: urban-acoustics-mosquitto
+    # Direct host port — devlab Traefik has no MQTT entrypoint, see top of file.
+    # Mosquitto terminates mTLS itself; no Traefik cert needed.
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./backend/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./backend/mosquitto/aclfile:/mosquitto/config/aclfile:ro
+      - ./backend/certs:/mosquitto/config/certs:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - traefik
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: urban-acoustics-minio
+    # Console on 9001; S3 API on 9000. Traefik routes both via
+    # urban-acoustics-minio.yml — no host port mappings required.
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: urban_acoustics
+      MINIO_ROOT_PASSWORD: urban_acoustics_dev_secret_12345
+      # Browser-redirect target for the console (must match the Traefik host).
+      MINIO_BROWSER_REDIRECT_URL: "https://urban-acoustics-minio.dev.conexed.com"
+      # Public endpoint that presigned URLs and the device-facing client see.
+      MINIO_SERVER_URL: "https://urban-acoustics-audio.dev.conexed.com"
+    volumes:
+      - minio_data:/data
+    networks:
+      - traefik
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    ports:
+      - "9000:9000"
+
+  minio-init:
+    # One-shot job — creates the `urban-acoustics-events` bucket if missing.
+    # `restart: no` because completion is success; compose will not loop it.
+    image: minio/mc:latest
+    container_name: urban-acoustics-minio-init
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        until mc alias set local http://minio:9000 urban_acoustics urban_acoustics_dev_secret_12345; do
+          echo "waiting for minio..."
+          sleep 1
+        done
+        mc mb --ignore-existing local/urban-acoustics-events
+        mc anonymous set none local/urban-acoustics-events
+        mc ls local/
+        echo "minio-init done"
+    networks:
+      - traefik
+    restart: "no"
+
+volumes:
+  postgres_data:
+  mosquitto_data:
+  mosquitto_log:
+  minio_data:
+
 networks:
   traefik:
     name: dev_conexed_com_default
     external: true
-

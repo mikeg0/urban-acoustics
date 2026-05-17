@@ -1,0 +1,53 @@
+[Unit]
+Description=Urban Acoustics Pi Zero firmware
+Documentation=https://github.com/conexed/urban-acoustics
+After=network-online.target sound.target chrony.service
+Wants=network-online.target sound.target
+
+[Service]
+Type=simple
+User=urban-acoustics
+Group=urban-acoustics
+SupplementaryGroups=audio
+
+# Audio stack often needs a beat after boot before the I2S card is usable.
+ExecStartPre=/bin/sleep 5
+
+Environment=PYTHONUNBUFFERED=1
+Environment=URBAN_ACOUSTICS_CONFIG=/etc/urban-acoustics/config.json
+ExecStart=/opt/urban-acoustics/venv/bin/python -m urban_acoustics
+
+Restart=on-failure
+RestartSec=10
+# Don't restart-storm a wedged pi.
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Stop politely so a current FLAC encode + MQTT done publish can flush.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# --- memory hygiene -------------------------------------------------------
+# Hard kill at 256 MiB so a leak can't OOM the kernel. The supervisor logs
+# a warning at memory_soft_cap_mb (default 192 MiB) well before this.
+MemoryMax=256M
+MemoryHigh=192M
+
+# --- sandboxing -----------------------------------------------------------
+ProtectSystem=strict
+ReadWritePaths=/var/lib/urban-acoustics
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
