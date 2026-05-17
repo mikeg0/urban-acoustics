@@ -302,6 +302,93 @@ class SpectrogramHistoryResponse(BaseModel):
     hours: list[SpectrogramTileRef]  # ascending; final entry is current hour
 
 
+# --- REST: dashboard summary -------------------------------------------------
+
+
+class DailySummaryPoint(BaseModel):
+    """One day in the dashboard's year view.
+
+    ``hours`` is a length-24 vector of mean LAeq per UTC hour-of-day; entries
+    are ``None`` where no telemetry exists. ``peak_hour`` is the argmax over
+    that vector (defaults to 0 if all hours are ``None``).
+    """
+
+    date: str  # YYYY-MM-DD UTC
+    dow: int = Field(ge=0, le=6, description="0=Mon..6=Sun")
+    mean: float
+    peak: float
+    breaches: int = Field(ge=0)
+    peak_hour: int = Field(ge=0, le=23)
+    hours: list[float | None] = Field(min_length=24, max_length=24)
+    event: str | None = None  # top events.classification of the day
+
+
+class DailySummaryResponse(BaseModel):
+    device_id: UUID
+    from_ts: UnixTs
+    to_ts: UnixTs
+    threshold: float
+    days: list[DailySummaryPoint]
+
+
+class AnomalyPoint(BaseModel):
+    """A flagged event with a computed-against-hourly-baseline z-score."""
+
+    event_id: UUID
+    ts: UnixTs
+    day_key: str  # YYYY-MM-DD
+    hour: int = Field(ge=0, le=23)
+    peak_db: float
+    hour_mean_db: float
+    z: float
+    classification: str | None = None
+
+
+class AnomaliesResponse(BaseModel):
+    device_id: UUID
+    from_ts: UnixTs
+    to_ts: UnixTs
+    points: list[AnomalyPoint]
+
+
+class ForecastPoint(BaseModel):
+    """One day of seasonal-naive forecast.
+
+    Computed as the average of the last 4 occurrences of the same weekday
+    over the prior 28 days, with a 95% CI built from the std of those
+    occurrences. ``peak_hour`` is the mode across them.
+    """
+
+    date: str  # YYYY-MM-DD UTC
+    dow: int = Field(ge=0, le=6)
+    mean: float
+    peak: float
+    low: float
+    high: float
+    peak_hour: int = Field(ge=0, le=23)
+
+
+class ForecastResponse(BaseModel):
+    device_id: UUID
+    generated_at: UnixTs
+    threshold: float
+    points: list[ForecastPoint]
+
+
+class SourceCount(BaseModel):
+    name: str
+    pct: float = Field(ge=0.0, le=100.0)
+    count: int = Field(ge=0)
+
+
+class SourcesResponse(BaseModel):
+    device_id: UUID
+    from_ts: UnixTs
+    to_ts: UnixTs
+    total: int = Field(ge=0)
+    sources: list[SourceCount]
+
+
 # --- REST: labels ------------------------------------------------------------
 
 

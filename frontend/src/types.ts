@@ -229,6 +229,78 @@ export interface LabelSubmission {
   created_at: number;
 }
 
+// --- Dashboard rollup endpoints (real-device mode) --------------------------
+
+// dow is 0=Mon..6=Sun on the wire (Python `weekday()`); the Day adapter
+// converts to the frontend's 0=Sun..6=Sat convention.
+export interface DailySummaryDay {
+  date: string;
+  dow: number;
+  mean: number;
+  peak: number;
+  breaches: number;
+  peak_hour: number;
+  hours: (number | null)[];
+  event: string | null;
+}
+
+export interface DailySummaryResponse {
+  device_id: string;
+  from_ts: number;
+  to_ts: number;
+  threshold: number;
+  days: DailySummaryDay[];
+}
+
+export interface AnomalyWire {
+  event_id: string;
+  ts: number;
+  day_key: string;
+  hour: number;
+  peak_db: number;
+  hour_mean_db: number;
+  z: number;
+  classification: string | null;
+}
+
+export interface AnomaliesResponse {
+  device_id: string;
+  from_ts: number;
+  to_ts: number;
+  points: AnomalyWire[];
+}
+
+export interface ForecastWirePoint {
+  date: string;
+  dow: number;
+  mean: number;
+  peak: number;
+  low: number;
+  high: number;
+  peak_hour: number;
+}
+
+export interface ForecastResponse {
+  device_id: string;
+  generated_at: number;
+  threshold: number;
+  points: ForecastWirePoint[];
+}
+
+export interface SourceCount {
+  name: string;
+  pct: number;
+  count: number;
+}
+
+export interface SourcesResponse {
+  device_id: string;
+  from_ts: number;
+  to_ts: number;
+  total: number;
+  sources: SourceCount[];
+}
+
 export type DeviceLiveMessage =
   | {
       type: 'tick';

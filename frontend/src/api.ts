@@ -1,12 +1,16 @@
 import type {
+  AnomaliesResponse,
+  DailySummaryResponse,
   Day,
   DeviceEvent,
   DeviceInfo,
   EventLabel,
+  ForecastResponse,
   HealthReadResponse,
   HealthResolution,
   LabelSubmission,
   PlaybackUrl,
+  SourcesResponse,
   SpectrogramHistoryResponse,
   SpectrogramReadResponse,
   TelemetryReadResponse,
@@ -111,6 +115,52 @@ export const submitEventLabel = (
   label: EventLabel,
 ): Promise<LabelSubmission> =>
   postJson<LabelSubmission>(`/api/v1/events/${eventId}/labels`, { label });
+
+// --- dashboard rollup endpoints --------------------------------------------
+
+export const fetchDailySummary = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+  threshold: number,
+): Promise<DailySummaryResponse> =>
+  getJson<DailySummaryResponse>(
+    `/api/v1/devices/${deviceId}/summary/daily` +
+      `?from=${fromTs}&to=${toTs}&threshold=${threshold}`,
+  );
+
+export const fetchAnomaliesRange = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+  z: number,
+  limit = 500,
+): Promise<AnomaliesResponse> =>
+  getJson<AnomaliesResponse>(
+    `/api/v1/devices/${deviceId}/anomalies` +
+      `?from=${fromTs}&to=${toTs}&z=${z}&limit=${limit}`,
+  );
+
+export const fetchDeviceForecast = (
+  deviceId: string,
+  days = 7,
+  threshold = 85,
+): Promise<ForecastResponse> =>
+  getJson<ForecastResponse>(
+    `/api/v1/devices/${deviceId}/forecast?days=${days}&threshold=${threshold}`,
+  );
+
+export const fetchDeviceSources = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+): Promise<SourcesResponse> =>
+  getJson<SourcesResponse>(
+    `/api/v1/devices/${deviceId}/sources?from=${fromTs}&to=${toTs}`,
+  );
+
+export const spectrogramTileUrl = (deviceId: string, hourEpoch: number): string =>
+  `/api/v1/devices/${deviceId}/spectrogram/tile?hour=${hourEpoch}`;
 
 // Forward-compatible: backend route lands with the ingest websocket bridge.
 // Callers must tolerate immediate close / error and fall back to REST polling.

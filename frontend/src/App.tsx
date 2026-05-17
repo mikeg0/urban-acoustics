@@ -1,6 +1,23 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchDevice, fetchTelemetry, fetchYear, liveDeviceSocket } from './api';
+import {
+  fetchAnomaliesRange,
+  fetchDailySummary,
+  fetchDevice,
+  fetchDeviceForecast,
+  fetchDeviceSources,
+  fetchTelemetry,
+  fetchYear,
+  liveDeviceSocket,
+} from './api';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
+import {
+  anomaliesToUi,
+  daysToMonths,
+  forecastToUi,
+  peakHoursFromDays,
+  sourcesToUi,
+  summaryToDays,
+} from './dashboard_adapter';
 import { DayView, HourView, MonthView, YearHeatmap, YearView } from './drills';
 import { HealthView, RealHealthView } from './health';
 import { LiveView, RealLiveView } from './live';
@@ -17,8 +34,8 @@ import {
 import { useTweaks } from './tweaks';
 import { hydrateMonths } from './utils';
 import type {
-  Anomaly, Day, DeviceInfo, DeviceLiveMessage, DeviceTelemetryPoint,
-  DrillState, MonthHydrated, YearBundle,
+  Anomaly, Day, DeviceInfo, DeviceLiveMessage,
+  DrillState, ForecastPoint, MonthHydrated, Source, YearBundle,
 } from './types';
 
 // Real mode is opt-in: both env flags must be set. When on, the Live tab is
@@ -257,6 +274,25 @@ function HeadlineStats({
 }: {
   year: Day[]; threshold: number; sensitivity: number; anomaliesCount: number;
 }) {
+  const wrap = (children: React.ReactNode) => (
+    <div style={{
+      display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14,
+      padding: '16px 0', borderBottom: '1px solid var(--line)',
+    }}>{children}</div>
+  );
+
+  if (year.length === 0) {
+    return wrap(
+      <>
+        <StatBig label="Year avg" value="—" unit="dB" />
+        <StatBig label="Threshold breaches" value="—" unit={`hrs ≥ ${threshold}dB`} tone="hot" />
+        <StatBig label="Loudest day" value="—" unit="dB" delta="awaiting data" />
+        <StatBig label="Modal peak hour" value="—:—" delta="awaiting data" />
+        <StatBig label="Anomalies flagged" value={anomaliesCount} unit={`z≥${sensitivity.toFixed(1)}`} delta="past 365 days" />
+      </>,
+    );
+  }
+
   const totalBreaches = year.reduce((a, d) => a + d.breaches, 0);
   const loudestDay = year.reduce((a, d) => (d.peak > a.peak ? d : a), year[0]);
   const peakHourCounts = new Array(24).fill(0);
@@ -265,18 +301,15 @@ function HeadlineStats({
   const meanDb = +(year.reduce((a, d) => a + d.mean, 0) / year.length).toFixed(1);
   const loudestDate = new Date(loudestDay.date + 'T00:00:00');
 
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14,
-      padding: '16px 0', borderBottom: '1px solid var(--line)',
-    }}>
+  return wrap(
+    <>
       <StatBig label="Year avg"           value={meanDb}                     unit="dB" />
       <StatBig label="Threshold breaches" value={totalBreaches.toLocaleString()} unit={`hrs ≥ ${threshold}dB`} tone="hot" />
       <StatBig label="Loudest day"        value={loudestDay.peak.toFixed(1)} unit="dB"
         delta={loudestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + (loudestDay.event ? ` · ${loudestDay.event}` : '')} />
       <StatBig label="Modal peak hour"    value={`${String(modalPeak).padStart(2, '0')}:00`} delta="weekday rush + nightlife bleed" />
       <StatBig label="Anomalies flagged"  value={anomaliesCount}             unit={`z≥${sensitivity.toFixed(1)}`} delta="past 365 days" />
-    </div>
+    </>,
   );
 }
 
@@ -287,9 +320,13 @@ interface DrillProps {
   palette: keyof typeof PALETTES;
   months: MonthHydrated[];
   yearDays: Day[];
+  /** Real-mode passes a deviceId so the hour-view spectrogram and the
+   *  24-hour timeline render from server-rendered tiles instead of the
+   *  synthetic seeded preview. */
+  deviceId?: string | null;
 }
 
-function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, yearDays }: DrillProps) {
+function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, yearDays, deviceId = null }: DrillProps) {
   const { month, dayKey, hour } = state;
   const monthObj = month != null ? months[month] : null;
   const dayObj = dayKey ? yearDays.find((d) => d.key === dayKey) ?? null : null;
@@ -345,7 +382,7 @@ function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, year
             <div>
               <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 6 }}>24-HOUR SPECTROGRAM · CLICK TO DRILL</div>
               <TimelineSpectrogram day={dayObj} palette={palette} threshold={threshold}
-                showBars onHourClick={(h) => setState({ ...state, hour: h })} />
+                showBars onHourClick={(h) => setState({ ...state, hour: h })} deviceId={deviceId} />
             </div>
           </div>
         )}
@@ -362,11 +399,11 @@ function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, year
                 {dayObj.hours[hour].toFixed(1)} <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>dB</span>
               </div>
             </div>
-            <HourView day={dayObj} hour={hour} palette={palette} threshold={threshold} />
+            <HourView day={dayObj} hour={hour} palette={palette} threshold={threshold} deviceId={deviceId} />
             <div>
               <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 6 }}>FULL DAY · 24h CONTEXT</div>
               <TimelineSpectrogram day={dayObj} palette={palette} threshold={threshold} hourFocus={hour}
-                showBars onHourClick={(h) => setState({ ...state, hour: h })} />
+                showBars onHourClick={(h) => setState({ ...state, hour: h })} deviceId={deviceId} />
             </div>
           </div>
         )}
@@ -376,7 +413,7 @@ function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, year
 }
 
 function DrillFlowStacked(props: DrillProps) {
-  const { state, setState, threshold, palette, months, yearDays } = props;
+  const { state, setState, threshold, palette, months, yearDays, deviceId = null } = props;
   const { month, dayKey, hour } = state;
   const monthObj = month != null ? months[month] : null;
   const dayObj = dayKey ? yearDays.find((d) => d.key === dayKey) ?? null : null;
@@ -419,7 +456,7 @@ function DrillFlowStacked(props: DrillProps) {
             onPickHour={(h) => setState({ ...state, hour: h })} selectedHour={hour} />
           <div style={{ marginTop: 12 }}>
             <TimelineSpectrogram day={dayObj} palette={palette} threshold={threshold} hourFocus={hour}
-              showBars onHourClick={(h) => setState({ ...state, hour: h })} />
+              showBars onHourClick={(h) => setState({ ...state, hour: h })} deviceId={deviceId} />
           </div>
         </Section>
       )}
@@ -427,7 +464,7 @@ function DrillFlowStacked(props: DrillProps) {
         <Section title={`HOUR · ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00 · SPECTROGRAM`}
           depth={3}
           right={<span className="mono" style={{ fontSize: 10, color: 'var(--neon-focus)' }}>deepest level</span>}>
-          <HourView day={dayObj} hour={hour} palette={palette} threshold={threshold} />
+          <HourView day={dayObj} hour={hour} palette={palette} threshold={threshold} deviceId={deviceId} />
         </Section>
       )}
     </div>
@@ -482,20 +519,65 @@ function DrillFlowZoom(props: DrillProps) {
 }
 
 export function App() {
-  return <DemoApp deviceId={REAL_MODE ? VITE_DEVICE_ID : null} />;
+  return <DashboardApp deviceId={REAL_MODE ? VITE_DEVICE_ID : null} />;
 }
 
-function DemoApp({ deviceId }: { deviceId: string | null }) {
+// Rolling year window for the dashboard, in seconds. Capped one second below
+// the backend's 366d max to avoid round-trip rounding edge cases.
+const YEAR_WINDOW_S = 365 * 24 * 3600 - 1;
+
+const DEFAULT_CITY = {
+  name: 'Riverton',
+  district: 'Canal / 7th',
+  sensor: 'SNS-0412',
+  sensorPos: 'Canal / 7th',
+  year: new Date().getUTCFullYear(),
+};
+
+function DashboardApp({ deviceId }: { deviceId: string | null }) {
   const tweaks = useTweaks();
   const { spectroColor, dbThreshold, anomalySensitivity } = tweaks;
 
+  // Demo bundle (synthetic /api/year) — only loaded when not in real mode.
   const [bundle, setBundle] = useState<YearBundle | null>(null);
+  // Real-mode dashboard data, fetched in parallel from the rollup endpoints.
+  const [realDays, setRealDays] = useState<Day[] | null>(null);
+  const [realAnomalies, setRealAnomalies] = useState<Anomaly[] | null>(null);
+  const [realForecast, setRealForecast] = useState<ForecastPoint[] | null>(null);
+  const [realSources, setRealSources] = useState<Source[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
+    if (deviceId) return;
     fetchYear()
       .then(setBundle)
       .catch((e: Error) => setError(e.message));
-  }, []);
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (!deviceId) return;
+    let cancelled = false;
+    const now = Math.floor(Date.now() / 1000);
+    const from = now - YEAR_WINDOW_S;
+    // Fire all four in parallel. A failure on one panel must not block the
+    // others — we keep the unfilled slots as empty arrays so the dashboard
+    // still renders.
+    fetchDailySummary(deviceId, from, now, dbThreshold)
+      .then((r) => { if (!cancelled) setRealDays(summaryToDays(r)); })
+      .catch(() => { if (!cancelled) setRealDays([]); });
+    fetchAnomaliesRange(deviceId, from, now, anomalySensitivity)
+      .then((r) => { if (!cancelled) setRealAnomalies(anomaliesToUi(r)); })
+      .catch(() => { if (!cancelled) setRealAnomalies([]); });
+    fetchDeviceForecast(deviceId, 7, dbThreshold)
+      .then((r) => { if (!cancelled) setRealForecast(forecastToUi(r)); })
+      .catch(() => { if (!cancelled) setRealForecast([]); });
+    fetchDeviceSources(deviceId, from, now)
+      .then((r) => { if (!cancelled) setRealSources(sourcesToUi(r)); })
+      .catch(() => { if (!cancelled) setRealSources([]); });
+    return () => { cancelled = true; };
+    // Refetch when the dB threshold changes — it controls breach counting on
+    // the server side. Anomaly sensitivity also changes the z-filter cutoff.
+  }, [deviceId, dbThreshold, anomalySensitivity]);
 
   // When wired to a real device, fetch its metadata so the TopBar and footer
   // show the real sensor name/location instead of the synthetic city defaults.
@@ -526,10 +608,24 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const months = useMemo<MonthHydrated[]>(() => bundle ? hydrateMonths(bundle) : [], [bundle]);
-  const visibleAnomalies = useMemo<Anomaly[]>(
-    () => bundle ? bundle.anomalies.filter((a) => a.z >= anomalySensitivity) : [],
+  // Demo-mode data, fully derived from the synthetic bundle.
+  const demoMonths = useMemo<MonthHydrated[]>(
+    () => (bundle ? hydrateMonths(bundle) : []),
+    [bundle],
+  );
+  const demoAnomalies = useMemo<Anomaly[]>(
+    () => (bundle ? bundle.anomalies.filter((a) => a.z >= anomalySensitivity) : []),
     [bundle, anomalySensitivity],
+  );
+
+  // Real-mode data; the four endpoint adapters are the source of truth.
+  const realMonths = useMemo<MonthHydrated[]>(
+    () => (realDays ? daysToMonths(realDays) : []),
+    [realDays],
+  );
+  const realPeakHours = useMemo<number[]>(
+    () => (realDays ? peakHoursFromDays(realDays) : []),
+    [realDays],
   );
 
   const handleAnomalyClick = useCallback((a: Anomaly) => {
@@ -537,7 +633,12 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
     setDrillState({ month: d.getMonth(), dayKey: a.key, hour: a.hour });
   }, []);
 
-  if (error) {
+  // Decide what to render. Real mode waits for the summary (the spine of
+  // every panel); the others fall back to empty arrays after their own
+  // fetch failure.
+  const ready = deviceId ? realDays != null : bundle != null;
+
+  if (error && !deviceId) {
     return (
       <div style={{ padding: 40, color: 'var(--ink-1)', fontFamily: 'var(--mono)' }}>
         Failed to load year data: {error}
@@ -547,7 +648,7 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
       </div>
     );
   }
-  if (!bundle) {
+  if (!ready) {
     return (
       <div style={{ padding: 40, color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em' }}>
         LOADING YEAR DATA…
@@ -555,7 +656,24 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
     );
   }
 
-  const { city, days, anomalies, forecast, peakHours, sources } = bundle;
+  const city = bundle?.city ?? DEFAULT_CITY;
+  const days: Day[] = deviceId ? (realDays ?? []) : (bundle?.days ?? []);
+  const months: MonthHydrated[] = deviceId ? realMonths : demoMonths;
+  const anomalies: Anomaly[] = deviceId
+    ? (realAnomalies ?? [])
+    : (bundle?.anomalies ?? []);
+  const visibleAnomalies = deviceId
+    ? anomalies.filter((a) => a.z >= anomalySensitivity)
+    : demoAnomalies;
+  const forecast: ForecastPoint[] = deviceId
+    ? (realForecast ?? [])
+    : (bundle?.forecast ?? []);
+  const peakHours: number[] = deviceId
+    ? realPeakHours
+    : (bundle?.peakHours ?? []);
+  const sources: Source[] = deviceId
+    ? (realSources ?? [])
+    : (bundle?.sources ?? []);
   const DrillComp = flow === 'breadcrumb' ? DrillFlowBreadcrumb : flow === 'stacked' ? DrillFlowStacked : DrillFlowZoom;
   const sensor = device?.name ?? city.sensor;
   const sensorPos = device?.location ?? city.sensorPos;
@@ -634,7 +752,7 @@ function DemoApp({ deviceId }: { deviceId: string | null }) {
               }
             >
               <DrillComp state={drillState} setState={setDrillState} threshold={dbThreshold}
-                palette={spectroColor} months={months} yearDays={days} />
+                palette={spectroColor} months={months} yearDays={days} deviceId={deviceId} />
             </Card>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0, overflow: 'auto' }}>

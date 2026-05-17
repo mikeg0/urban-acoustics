@@ -90,11 +90,6 @@ async def get_device_spectrogram(
     )
 
 
-# How far back the tile endpoint will accept an `hour` query. Generous enough
-# to cover any 24h window plus clock skew; tight enough to reject probing.
-_TILE_MAX_AGE = timedelta(hours=26)
-
-
 def _tile_url(device_id: UUID, hour_epoch: int) -> str:
     return f"/api/v1/devices/{device_id}/spectrogram/tile?hour={hour_epoch}"
 
@@ -154,13 +149,14 @@ async def get_device_spectrogram_tile(
 
     if hour_dt > current_hour:
         raise HTTPException(status_code=400, detail="`hour` is in the future")
-    if (current_hour - hour_dt) > _TILE_MAX_AGE:
-        raise HTTPException(status_code=400, detail="`hour` is too far in the past")
 
     if await session.get(Device, device_id) is None:
         raise HTTPException(status_code=404, detail="device not found")
 
     is_current_hour = hour_dt == current_hour
+    # Hours with no frames render as all-"no data" pixels (value 0); clients
+    # already treat that as the palette floor. We do not 404 for missing
+    # history because gaps and outages are part of the data.
     png = await get_or_generate_tile(
         session,
         storage,

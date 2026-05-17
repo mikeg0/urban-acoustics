@@ -16,14 +16,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import data as data_lib
 from . import seed as seed_mod
+from .api.v1 import anomalies as anomalies_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
 from .api.v1 import devices as devices_router
 from .api.v1 import events as events_router
+from .api.v1 import forecast as forecast_router
 from .api.v1 import health as health_router
 from .api.v1 import labels as labels_router
 from .api.v1 import live as live_router
+from .api.v1 import sources as sources_router
 from .api.v1 import spectrogram as spectrogram_router
+from .api.v1 import summary as summary_router
 from .api.v1 import telemetry as telemetry_router
 from .live import live_ws_handler
 from .settings import get_settings
@@ -73,6 +77,10 @@ app.include_router(spectrogram_router.router, prefix=V1, tags=["spectrogram"])
 app.include_router(events_router.router, prefix=V1, tags=["events"])
 app.include_router(labels_router.router, prefix=V1, tags=["labels"])
 app.include_router(live_router.router, prefix=V1, tags=["live"])
+app.include_router(summary_router.router, prefix=V1, tags=["summary"])
+app.include_router(anomalies_router.router, prefix=V1, tags=["anomalies"])
+app.include_router(forecast_router.router, prefix=V1, tags=["forecast"])
+app.include_router(sources_router.router, prefix=V1, tags=["sources"])
 
 # --- legacy /api/health (kept per acceptance criteria) ----------------------
 

@@ -4,7 +4,19 @@ import { mulberry32, normDb } from './utils';
 import { PALETTES, type PaletteKey } from './palettes';
 import { BAND_CENTERS_HZ, SPECTROGRAM_N_BANDS } from './types';
 import type { Day, SpectrogramHistoryResponse } from './types';
-import { fetchSpectrogramHistory24h, fetchSpectrogramTile } from './api';
+import {
+  fetchSpectrogramHistory24h,
+  fetchSpectrogramTile,
+  spectrogramTileUrl,
+} from './api';
+
+// Tile contract constants — must match backend/app/spectrogram_tiles.py.
+// The 24h-history manifest carries equivalent values; these duplicates exist
+// for the historical-tile components below that don't go through a manifest.
+const TILE_DB_MIN_DEFAULT = 20;
+const TILE_DB_MAX_DEFAULT = 110;
+const TILE_COLS_DEFAULT = 3600;
+const TILE_ROWS_DEFAULT = SPECTROGRAM_N_BANDS;
 
 /** Build a fake spectrogram matrix [freqBins][timeSlices], values 0..1. */
 export function buildSpectrogram(seed: number, intensity = 1): number[][] {
@@ -120,6 +132,10 @@ interface TimelineSpectrogramProps {
   onHourHover?: (h: number | null) => void;
   onHourClick?: (h: number) => void;
   showBars?: boolean;
+  /** Real-device mode: render the day's 24 historical tiles instead of the
+   *  synthetic per-hour spectrograms. When unset, falls back to the seeded
+   *  buildSpectrogram path (demo-mode behaviour). */
+  deviceId?: string | null;
 }
 
 export function TimelineSpectrogram({
@@ -130,12 +146,14 @@ export function TimelineSpectrogram({
   onHourHover,
   onHourClick,
   showBars = false,
+  deviceId = null,
 }: TimelineSpectrogramProps) {
   const height = 200;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
   useEffect(() => {
+    if (deviceId) return;  // Real-mode path uses RealDayStrip — no synth.
     const canvas = canvasRef.current;
     if (!canvas) return;
     const F = 64;
@@ -169,7 +187,7 @@ export function TimelineSpectrogram({
       }
     }
     ctx.putImageData(img, 0, 0);
-  }, [day, palette]);
+  }, [day, palette, deviceId]);
 
   const handleMove = (e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
@@ -187,7 +205,16 @@ export function TimelineSpectrogram({
         onMouseLeave={() => { setHover(null); onHourHover?.(null); }}
         onClick={() => hover != null && onHourClick?.(hover)}
       >
-        <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {deviceId ? (
+          <RealDayStrip
+            deviceId={deviceId}
+            dayKey={day.key}
+            palette={palette}
+            height={height}
+          />
+        ) : (
+          <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+        )}
         {showBars && (
           <svg
             width="100%" height="100%"
@@ -712,7 +739,111 @@ interface HistoryTileProps {
   refreshKey: number;
 }
 
-function HistoryTile({
+// Compute the UTC hour-boundary epoch for a given dayKey (YYYY-MM-DD UTC)
+// and hour-of-day [0..23]. Dashboard summary days are UTC-anchored, so the
+// tile URL it generates aligns 1:1 with the backend's tile contract.
+function dayHourToEpoch(dayKey: string, hour: number): number {
+  const ts = Date.parse(`${dayKey}T00:00:00Z`);
+  return Math.floor(ts / 1000) + hour * 3600;
+}
+
+interface RealHourTileProps {
+  deviceId: string;
+  dayKey: string;
+  hour: number;
+  palette?: PaletteKey;
+  height?: number;
+  borderRadius?: number;
+}
+
+/** Single-hour historical spectrogram tile, palette-mapped on the client.
+ *
+ *  Used in the dashboard's HourView when wired to a real device. Falls back
+ *  silently (renders the empty-tile floor colour) if the hour is older than
+ *  the spectrogram_frames retention window. */
+export function RealHourTile({
+  deviceId,
+  dayKey,
+  hour,
+  palette = 'heat',
+  height = 220,
+  borderRadius = 4,
+}: RealHourTileProps) {
+  const epoch = dayHourToEpoch(dayKey, hour);
+  const url = spectrogramTileUrl(deviceId, epoch);
+  // Closed historical hours are immutable on the backend, so the browser
+  // cache keys on URL alone — `refreshKey=0` keeps the cache hit.
+  return (
+    <div style={{
+      width: '100%',
+      height,
+      borderRadius,
+      overflow: 'hidden',
+      background: 'var(--bg-2)',
+      display: 'flex',
+    }}>
+      <HistoryTile
+        url={url}
+        palette={palette}
+        minDb={TILE_DB_MIN_DEFAULT}
+        maxDb={TILE_DB_MAX_DEFAULT}
+        rows={TILE_ROWS_DEFAULT}
+        cols={TILE_COLS_DEFAULT}
+        refreshKey={0}
+      />
+    </div>
+  );
+}
+
+interface RealDayStripProps {
+  deviceId: string;
+  dayKey: string;
+  palette?: PaletteKey;
+  height?: number;
+}
+
+/** 24-hour spectrogram strip for a historical day, stitched from 24 tiles.
+ *
+ *  The dashboard's TimelineSpectrogram swaps in this component when in real
+ *  mode. The dB-bar overlay on top of the strip continues to come from
+ *  Day.hours[24] (real values from the summary endpoint), so empty hours
+ *  render as the palette floor with no bar above them. */
+export function RealDayStrip({
+  deviceId,
+  dayKey,
+  palette = 'heat',
+  height = 200,
+}: RealDayStripProps) {
+  return (
+    <div style={{
+      display: 'flex',
+      width: '100%',
+      height,
+      gap: 1,
+      borderRadius: 4,
+      overflow: 'hidden',
+      background: 'var(--bg-2)',
+    }}>
+      {Array.from({ length: 24 }, (_, h) => {
+        const epoch = dayHourToEpoch(dayKey, h);
+        return (
+          <HistoryTile
+            key={h}
+            url={spectrogramTileUrl(deviceId, epoch)}
+            palette={palette}
+            minDb={TILE_DB_MIN_DEFAULT}
+            maxDb={TILE_DB_MAX_DEFAULT}
+            rows={TILE_ROWS_DEFAULT}
+            cols={TILE_COLS_DEFAULT}
+            refreshKey={0}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+export function HistoryTile({
   url,
   palette,
   minDb,

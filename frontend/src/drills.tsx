@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Sparkline } from './atoms';
 import { dbColor, type PaletteKey } from './palettes';
-import { buildSpectrogram, SpectrogramCanvas } from './spectrogram';
+import { RealHourTile, SpectrogramCanvas, buildSpectrogram } from './spectrogram';
 import { mulberry32, normDb } from './utils';
 import { WavPlayer } from './wavplayer';
 import type { Day, MonthHydrated } from './types';
@@ -18,6 +18,16 @@ export function YearHeatmap({
   onPickDay?: (d: Day) => void;
   selectedDay?: string | null;
 }) {
+  if (days.length === 0) {
+    return (
+      <div className="mono" style={{
+        padding: '24px 0', color: 'var(--ink-3)', fontSize: 11,
+        letterSpacing: '0.1em', textTransform: 'uppercase',
+      }}>
+        No history yet — waiting for the first day of telemetry to land.
+      </div>
+    );
+  }
   const start = new Date(days[0].date + 'T00:00:00');
   const startDow = start.getDay();
   const first = new Date(start);
@@ -332,12 +342,15 @@ function classifySegments(day: Day, hour: number): SegInfo[] {
 }
 
 export function HourView({
-  day, hour, palette, threshold,
+  day, hour, palette, threshold, deviceId = null,
 }: {
   day: Day;
   hour: number;
   palette: PaletteKey;
   threshold: number;
+  /** Real-device mode: render the hour's historical tile from the backend
+   *  instead of the seeded buildSpectrogram preview. */
+  deviceId?: string | null;
 }) {
   const data = useMemo(() => {
     const seed = (day.key.charCodeAt(4) * 31 + hour * 2731 + day.hours[hour] * 100) | 0;
@@ -416,7 +429,9 @@ export function HourView({
         onMouseLeave={() => setHoverSeg(null)}
         onClick={() => hoverSeg != null && setSegIndex(hoverSeg)}
       >
-        <SpectrogramCanvas data={data} palette={palette} height={220} />
+        {deviceId
+          ? <RealHourTile deviceId={deviceId} dayKey={day.key} hour={hour} palette={palette} height={220} />
+          : <SpectrogramCanvas data={data} palette={palette} height={220} />}
         {hoverSeg != null && hoverSeg !== segIndex && (
           <div style={{
             position: 'absolute',
