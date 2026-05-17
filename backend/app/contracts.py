@@ -52,6 +52,25 @@ class Telemetry(_Forward):
     lcpeak: DbLevel
 
 
+# Number of 1/3-octave bands the firmware emits on dev/{id}/spect. Mirrors
+# ``raspberry-pi-zero-2w/urban_acoustics/dsp.py::ISO_THIRD_OCTAVE_HZ``.
+SPECTROGRAM_N_BANDS = 30
+
+
+class Spectrogram(_Forward):
+    """Live 1/3-octave band frame, published at ~10 Hz on ``dev/{id}/spect``.
+
+    Ephemeral by design — the ingest worker does not persist these. They
+    flow MQTT → pg_notify → live WebSocket and are dropped after fan-out.
+    """
+
+    ts: UnixTs
+    bands: Annotated[
+        list[DbLevel],
+        Field(min_length=SPECTROGRAM_N_BANDS, max_length=SPECTROGRAM_N_BANDS),
+    ]
+
+
 class Health(_Forward):
     ts: UnixTs
     uptime_s: float = Field(ge=0.0)
@@ -207,6 +226,24 @@ class TelemetryReadResponse(BaseModel):
     points: list[TelemetryPoint]
 
 
+# --- REST: spectrogram read --------------------------------------------------
+
+
+class SpectrogramFrameOut(BaseModel):
+    ts: UnixTs
+    bands: Annotated[
+        list[DbLevel],
+        Field(min_length=SPECTROGRAM_N_BANDS, max_length=SPECTROGRAM_N_BANDS),
+    ]
+
+
+class SpectrogramReadResponse(BaseModel):
+    device_id: UUID
+    from_ts: UnixTs
+    to_ts: UnixTs
+    frames: list[SpectrogramFrameOut]
+
+
 # --- REST: labels ------------------------------------------------------------
 
 
@@ -258,6 +295,7 @@ class DeviceIdentity(BaseModel):
 
 
 TOPIC_TELEMETRY = "dev/{device_id}/tlm"
+TOPIC_SPECTROGRAM = "dev/{device_id}/spect"
 TOPIC_HEALTH = "dev/{device_id}/health"
 TOPIC_EVENT_ANNOUNCE = "dev/{device_id}/event/announce"
 TOPIC_EVENT_DONE = "dev/{device_id}/event/done"
@@ -265,9 +303,18 @@ TOPIC_LWT = "dev/{device_id}/lwt"
 TOPIC_CMD_WILDCARD = "dev/{device_id}/cmd/+"
 TOPIC_CMD = "dev/{device_id}/cmd/{cmd_name}"
 
+# Postgres NOTIFY channel for ephemeral spectrogram fan-out. The ingest
+# worker writes here; the live WebSocket subscribes. Payload is the JSON
+# dict ``{device_id, ts, bands}`` (~360 B, well under the 8 KB limit).
+NOTIFY_SPECTROGRAM_CHANNEL = "ua_spect"
+
 
 def telemetry_topic(device_id: UUID | str) -> str:
     return TOPIC_TELEMETRY.format(device_id=device_id)
+
+
+def spectrogram_topic(device_id: UUID | str) -> str:
+    return TOPIC_SPECTROGRAM.format(device_id=device_id)
 
 
 def health_topic(device_id: UUID | str) -> str:

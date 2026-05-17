@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { fetchDevice, fetchEvents, fetchTelemetry, liveDeviceSocket, liveSocket } from './api';
+import {
+  fetchDevice,
+  fetchEvents,
+  fetchSpectrogramHistory,
+  fetchTelemetry,
+  liveDeviceSocket,
+  liveSocket,
+} from './api';
 import { EventsList } from './events/EventsList';
 import { EventPlayer } from './events/EventPlayer';
 import { LabelPicker } from './events/LabelPicker';
+import {
+  HistorySpectrogram,
+  LiveSpectrogram,
+  SPECTROGRAM_COLUMN_MS,
+  useHistoryRibbon,
+  useRollingBands,
+} from './spectrogram';
+import { useTweaks } from './tweaks';
 import type {
   DeviceEvent,
   DeviceInfo,
@@ -628,12 +643,23 @@ const TELEMETRY_WINDOW_S = 30 * 60;   // last 30 minutes at 1m resolution
 const TELEMETRY_POLL_MS = 5000;
 const EVENT_POLL_MS = 10000;
 
+// Spectrogram rolling-window: ~60 s at the wire rate (≈12 Hz, see Pi
+// supervisor's spectrogram_decimate). 720 columns is enough headroom even
+// if a particular Pi runs un-decimated.
+const SPECT_MAX_FRAMES = 720;
+
+// History ribbon: 1-hour window, ~1200 display columns → 3 s/bucket. Frames
+// inside a bucket are max-merged, so spikes survive the downsample.
+const HISTORY_WINDOW_S = 3600;
+const HISTORY_COLS = 1200;
+
 interface RealLiveViewProps {
   deviceId: string;
   threshold: number;
 }
 
 export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
+  const { spectroColor } = useTweaks();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [points, setPoints] = useState<DeviceTelemetryPoint[]>([]);
@@ -642,6 +668,29 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const spectRing = useRollingBands(SPECT_MAX_FRAMES);
+  const historyRibbon = useHistoryRibbon(HISTORY_WINDOW_S, HISTORY_COLS);
+  // Hold the push functions in refs so the WS effect doesn't re-subscribe
+  // each render — the underlying buffers are stable across pushes.
+  const spectPushRef = useRef(spectRing.push);
+  const historyPushRef = useRef(historyRibbon.push);
+  useEffect(() => { spectPushRef.current = spectRing.push; }, [spectRing.push]);
+  useEffect(() => { historyPushRef.current = historyRibbon.push; }, [historyRibbon.push]);
+
+  // Backfill the history ribbon on mount / device change. The endpoint
+  // returns all stored frames in the window; we just hand them to push(),
+  // which max-merges them into display buckets.
+  useEffect(() => {
+    let cancelled = false;
+    const now = Date.now() / 1000;
+    fetchSpectrogramHistory(deviceId, now - HISTORY_WINDOW_S, now)
+      .then((r) => {
+        if (cancelled) return;
+        for (const fr of r.frames) historyPushRef.current(fr.ts, fr.bands);
+      })
+      .catch(() => { /* ribbon stays empty on backfill failure */ });
+    return () => { cancelled = true; };
+  }, [deviceId]);
 
   // Device metadata: fetched once.
   useEffect(() => {
@@ -719,7 +768,11 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
             const cutoff = Date.now() / 1000 - TELEMETRY_WINDOW_S;
             return next.filter((p) => p.ts >= cutoff);
           });
+        } else if (msg.type === 'spect') {
+          spectPushRef.current(msg.ts, msg.bands);
+          historyPushRef.current(msg.ts, msg.bands);
         }
+        // 'ping' is a keepalive — no UI side-effect.
       } catch {
         // ignore malformed payloads
       }
@@ -795,7 +848,13 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
         />
       </div>
 
-      <RealTelemetrySparkline points={points} threshold={threshold} />
+      <RealLiveSpectrogramPanel
+        ring={spectRing}
+        ribbon={historyRibbon}
+        palette={spectroColor}
+        threshold={threshold}
+        points={points}
+      />
 
       {telemetryError && (
         <div className="mono" style={{ fontSize: 11, color: 'var(--neon-hot)' }}>
@@ -920,151 +979,253 @@ function DeviceBanner({
   );
 }
 
-function RealTelemetrySparkline({
-  points, threshold,
-}: { points: DeviceTelemetryPoint[]; threshold: number }) {
-  const W = 800;
-  const H = 140;
-  if (!points.length) {
-    return (
-      <div style={{
-        background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8,
-        padding: 14, fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)',
-      }}>
-        No telemetry in the last {Math.round(TELEMETRY_WINDOW_S / 60)} minutes.
-      </div>
-    );
-  }
-  // Round axis bounds to 5 dB so gridlines + labels land cleanly. LCpeak can
-  // spike well above LAFmax, so clamp the max so a single transient peak
-  // doesn't compress the LAeq trace into a thin band at the bottom.
-  const laeqVals = points.map((p) => p.laeq);
-  const lafmaxVals = points.map((p) => p.lafmax);
-  const rawMin = Math.min(...laeqVals, threshold - 10);
-  const rawMax = Math.max(...lafmaxVals, threshold + 5);
-  const min = Math.floor(rawMin / 5) * 5;
-  const max = Math.ceil(rawMax / 5) * 5;
-  const range = Math.max(1, max - min);
-  const firstTs = points[0].ts;
-  const lastTs = points[points.length - 1].ts;
-  const span = Math.max(1, lastTs - firstTs);
-  const xOf = (ts: number) => ((ts - firstTs) / span) * W;
-  const yOf = (v: number) =>
-    H - ((Math.max(min, Math.min(max, v)) - min) / range) * (H - 8) - 4;
-  const tY = yOf(threshold);
-
-  const laeqLine = points.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.laeq).toFixed(1)}`,
-  ).join(' ');
-  const laeqArea = `${laeqLine} L${xOf(lastTs).toFixed(1)},${H} L${xOf(firstTs).toFixed(1)},${H} Z`;
-  const lafmaxLine = points.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.lafmax).toFixed(1)}`,
-  ).join(' ');
-
-  // Gradient stops: cool floor → amber band starting threshold-8 → hot at
-  // threshold. Stops are expressed as a percentage of the chart height; lower
-  // % = higher on screen (SVG y grows downward).
-  const stopAt = (v: number) => `${((max - v) / range) * 100}%`;
-  const gridLines = Array.from({ length: Math.floor(range / 5) + 1 }, (_, i) => min + i * 5)
-    .filter((v) => v > min && v < max);
-
+function RealLiveSpectrogramPanel({
+  ring, ribbon, palette, threshold, points,
+}: {
+  ring: ReturnType<typeof useRollingBands>;
+  ribbon: ReturnType<typeof useHistoryRibbon>;
+  palette: ReturnType<typeof useTweaks>['spectroColor'];
+  threshold: number;
+  points: DeviceTelemetryPoint[];
+}) {
+  const waiting = !ring.hasData;
+  const ribbonWaiting = !ribbon.hasData;
+  const windowMin = Math.round((ribbon.displayCols * ribbon.bucketMs) / 1000 / 60);
+  const OVERLAY_MIN_DB = 30;
+  const OVERLAY_MAX_DB = 140;
   return (
     <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 13, color: 'var(--ink-0)', fontWeight: 500 }}>
-            Last {Math.round(TELEMETRY_WINDOW_S / 60)} min · LAeq · LAFmax · LCpeak
+            Live spectrogram · ⅓-octave · 20 Hz–16 kHz
           </div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginTop: 2 }}>
-            {points.length} points · {new Date(firstTs * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
-            {' → '}
-            {new Date(lastTs * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+            ~{Math.round((ring.maxFrames * 85.33) / 1000)} s window · {ring.nBands} bands · breach ≥ {threshold} dB
           </div>
         </div>
-        <div className="mono" style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--ink-3)' }}>
-          <TraceLegend dot="var(--neon-cool)" label="LAeq" />
-          <TraceLegend dot="oklch(82% 0.16 70)" label="LAFmax" dashed />
-          <TraceLegend dot="oklch(75% 0.22 350)" label="LCpeak" dot3 />
-          <TraceLegend dot="var(--neon-hot)" label={`≥ ${threshold}`} dashed />
+        <div className="mono" style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', alignItems: 'center' }}>
+          <LineSwatch color={LAEQ_STROKE} label="LAeq" />
+          <LineSwatch color={LAFMAX_STROKE} label="LAFmax" />
+          <LineSwatch color={LCPEAK_STROKE} label="LCpeak" />
+          <span style={{ opacity: 0.6 }}>·</span>
+          <span>QUIET → LOUD</span>
+          <span style={{
+            display: 'inline-block', width: 64, height: 8,
+            verticalAlign: 'middle', borderRadius: 2,
+            background: paletteCss(palette),
+            border: '1px solid var(--line)',
+          }} />
         </div>
       </div>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
-        style={{ display: 'block', overflow: 'visible' }}>
-        <defs>
-          <linearGradient id="laeqAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset={stopAt(max)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.5" />
-            <stop offset={stopAt(threshold)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.42" />
-            <stop offset={stopAt(threshold - 0.001)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.32" />
-            <stop offset={stopAt(threshold - 8)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.22" />
-            <stop offset={stopAt(min)} stopColor="oklch(60% 0.14 215)" stopOpacity="0.12" />
-          </linearGradient>
-        </defs>
+      <div style={{ position: 'relative' }}>
+        <LiveSpectrogram
+          ring={ring}
+          palette={palette}
+          height={180}
+          minDb={20}
+          maxDb={110}
+          showFreqAxis
+          showGrid
+        />
+        <LiveMetricsOverlay
+          points={points}
+          currentCol={ring.currentCol}
+          maxFrames={ring.maxFrames}
+          minDb={OVERLAY_MIN_DB}
+          maxDb={OVERLAY_MAX_DB}
+        />
+        {waiting && (
+          <div className="mono" style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, letterSpacing: '0.14em', color: 'var(--ink-3)',
+            background: 'rgba(0,0,0,0.35)', borderRadius: 4, pointerEvents: 'none',
+          }}>
+            WAITING FOR SPECTROGRAM FRAMES…
+          </div>
+        )}
+      </div>
 
-        {/* breach-zone wash above threshold */}
-        <rect x="0" y="0" width={W} height={Math.max(0, tY)}
-          fill="oklch(72% 0.2 35)" fillOpacity="0.05" />
-
-        {/* horizontal gridlines + dB labels */}
-        {gridLines.map((v) => (
-          <g key={v}>
-            <line x1="0" x2={W} y1={yOf(v)} y2={yOf(v)}
-              stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-            <text x="2" y={yOf(v) - 2}
-              fontFamily="var(--mono)" fontSize="9" fill="var(--ink-3)" opacity="0.6">
-              {v}
-            </text>
-          </g>
-        ))}
-
-        {/* threshold marker */}
-        <line x1="0" x2={W} y1={tY} y2={tY}
-          stroke="var(--neon-hot)" strokeDasharray="3 3" strokeWidth="1" opacity="0.7" />
-
-        {/* LCpeak transients — dots only, often well above LAFmax */}
-        {points.map((p, i) => (
-          <circle key={`pk-${i}`} cx={xOf(p.ts)} cy={yOf(p.lcpeak)}
-            r="1.4" fill="oklch(75% 0.22 350)" opacity="0.65" />
-        ))}
-
-        {/* LAeq filled area */}
-        <path d={laeqArea} fill="url(#laeqAreaGrad)" />
-
-        {/* LAFmax dashed overlay */}
-        <path d={lafmaxLine} fill="none"
-          stroke="oklch(82% 0.16 70)" strokeWidth="1" strokeDasharray="2 2" opacity="0.75" />
-
-        {/* LAeq line — primary trace */}
-        <path d={laeqLine} fill="none" stroke="var(--neon-cool)" strokeWidth="1.6" />
-
-        {/* Breach LAeq points */}
-        {points.map((p, i) => {
-          if (p.laeq < threshold) return null;
-          return <circle key={`br-${i}`} cx={xOf(p.ts)} cy={yOf(p.laeq)}
-            r="2.5" fill="var(--neon-hot)" />;
-        })}
-      </svg>
+      <div style={{ marginTop: 14 }}>
+        <div className="mono" style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em', marginBottom: 6,
+        }}>
+          <span>LAST {windowMin} MIN · MAX/BUCKET</span>
+          <span>NOW →</span>
+        </div>
+        <div style={{ position: 'relative' }}>
+          <HistorySpectrogram
+            ribbon={ribbon}
+            palette={palette}
+            height={56}
+            minDb={20}
+            maxDb={110}
+          />
+          {ribbonWaiting && (
+            <div className="mono" style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, letterSpacing: '0.14em', color: 'var(--ink-3)',
+              background: 'rgba(0,0,0,0.35)', borderRadius: 4, pointerEvents: 'none',
+            }}>
+              LOADING HISTORY…
+            </div>
+          )}
+        </div>
+        <div className="mono" style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          fontSize: 9, color: 'var(--ink-3)', marginTop: 4,
+        }}>
+          {Array.from({ length: 6 }).map((_, i) => {
+            const minsAgo = windowMin - Math.round((i * windowMin) / 5);
+            return (
+              <div key={i} style={{ textAlign: i === 0 ? 'left' : i === 5 ? 'right' : 'center' }}>
+                {minsAgo === 0 ? 'now' : `-${minsAgo}m`}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
 
-function TraceLegend({ dot, label, dashed, dot3 }: {
-  dot: string; label: string; dashed?: boolean; dot3?: boolean;
-}) {
+// Stroke colors for the three broadband-metric overlay lines. Picked to
+// stay legible against every spectrogram palette (heat / ice / mono / neon):
+// cool cyan for the average, amber for the fast-RMS max, hot red for the
+// true peak — mirrors the visual hierarchy on pro acoustic meters.
+const LAEQ_STROKE = 'oklch(85% 0.14 215)';
+const LAFMAX_STROKE = 'oklch(88% 0.16 80)';
+const LCPEAK_STROKE = 'oklch(72% 0.22 30)';
+
+function LineSwatch({ color, label }: { color: string; label: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      {dot3 ? (
-        <span style={{ display: 'inline-flex', gap: 2 }}>
-          <span style={{ width: 3, height: 3, borderRadius: 2, background: dot }} />
-          <span style={{ width: 3, height: 3, borderRadius: 2, background: dot }} />
-          <span style={{ width: 3, height: 3, borderRadius: 2, background: dot }} />
-        </span>
-      ) : (
-        <span style={{
-          width: 16, height: 0,
-          borderTop: `${dashed ? '1.5px dashed' : '2px solid'} ${dot}`,
-        }} />
-      )}
+      <span style={{
+        display: 'inline-block', width: 14, height: 2,
+        background: color, borderRadius: 1,
+        boxShadow: `0 0 4px ${color}`,
+      }} />
       <span style={{ color: 'var(--ink-2)' }}>{label}</span>
     </span>
   );
+}
+
+/** SVG overlay of LAeq / LAFmax / LCpeak on top of the live spectrogram.
+ *
+ *  The spectrogram's right edge is locked to ``Date.now() - buffer``; we map
+ *  each point's wall-clock ``ts`` to the same column space so the lines slide
+ *  in lockstep with the scrolling canvas. Lines break on gaps > 2 s so a
+ *  dropped WS doesn't draw a fake "trend" across missing seconds. */
+function LiveMetricsOverlay({
+  points, currentCol, maxFrames, minDb, maxDb,
+}: {
+  points: DeviceTelemetryPoint[];
+  currentCol: number;
+  maxFrames: number;
+  minDb: number;
+  maxDb: number;
+}) {
+  const W = 1000;
+  const H = 100;
+  const rightEdgeMs = currentCol * SPECTROGRAM_COLUMN_MS;
+  const totalMs = maxFrames * SPECTROGRAM_COLUMN_MS;
+  const leftEdgeMs = rightEdgeMs - totalMs;
+  const dbSpan = Math.max(1, maxDb - minDb);
+
+  const xFor = (ts_s: number) => ((ts_s * 1000 - leftEdgeMs) / totalMs) * W;
+  const yFor = (db: number) => {
+    const v = Math.max(0, Math.min(1, (db - minDb) / dbSpan));
+    return (1 - v) * H;
+  };
+
+  // Visible window with a small bleed on either side so a path entering or
+  // leaving the canvas still draws its connecting segment.
+  const bleedMs = 2000;
+  const visible: DeviceTelemetryPoint[] = [];
+  for (const p of points) {
+    const ms = p.ts * 1000;
+    if (ms < leftEdgeMs - bleedMs || ms > rightEdgeMs + bleedMs) continue;
+    visible.push(p);
+  }
+
+  const buildPath = (key: 'laeq' | 'lafmax' | 'lcpeak') => {
+    let d = '';
+    let lastTs: number | null = null;
+    for (const p of visible) {
+      const cmd = (lastTs == null || p.ts - lastTs > 2) ? 'M' : 'L';
+      d += `${cmd}${xFor(p.ts).toFixed(2)},${yFor(p[key]).toFixed(2)}`;
+      lastTs = p.ts;
+    }
+    return d;
+  };
+
+  const ticks = [40, 70, 100, 130];
+
+  return (
+    <>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+      >
+        {ticks.map((db) => {
+          const y = yFor(db);
+          return (
+            <line key={db} x1={0} x2={W} y1={y} y2={y}
+              stroke="rgba(255,255,255,0.07)" strokeWidth={1}
+              strokeDasharray="2 4"
+              vectorEffect="non-scaling-stroke" />
+          );
+        })}
+        {visible.length >= 2 && (
+          <>
+            <path d={buildPath('laeq')} stroke={LAEQ_STROKE} strokeWidth={1.4}
+              fill="none" vectorEffect="non-scaling-stroke" opacity={0.9}
+              strokeLinejoin="round" strokeLinecap="round" />
+            <path d={buildPath('lafmax')} stroke={LAFMAX_STROKE} strokeWidth={1.2}
+              fill="none" vectorEffect="non-scaling-stroke" opacity={0.8}
+              strokeLinejoin="round" strokeLinecap="round" />
+            <path d={buildPath('lcpeak')} stroke={LCPEAK_STROKE} strokeWidth={1.4}
+              fill="none" vectorEffect="non-scaling-stroke" opacity={0.95}
+              strokeLinejoin="round" strokeLinecap="round" />
+          </>
+        )}
+      </svg>
+      <div style={{
+        position: 'absolute', left: 4, top: 0, bottom: 0,
+        fontFamily: 'var(--mono)', fontSize: 9, color: 'rgba(255,255,255,0.7)',
+        pointerEvents: 'none',
+      }}>
+        {ticks.map((db) => (
+          <span key={db} style={{
+            position: 'absolute',
+            top: `${(yFor(db) / H) * 100}%`,
+            transform: 'translateY(-50%)',
+            textShadow: '0 0 4px rgba(0,0,0,0.85)', padding: '0 2px',
+          }}>
+            {db} dB
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// Mirrors the inline gradient strings in palettes.ts so the chip in the
+// header matches whichever palette the user picked in Settings.
+function paletteCss(key: ReturnType<typeof useTweaks>['spectroColor']): string {
+  switch (key) {
+    case 'heat':
+      return 'linear-gradient(90deg, rgb(8,6,14), rgb(48,12,82), rgb(156,30,78), rgb(234,62,40), rgb(252,176,48), rgb(254,240,120))';
+    case 'ice':
+      return 'linear-gradient(90deg, rgb(6,8,14), rgb(14,48,96), rgb(16,164,220), rgb(164,232,220), rgb(240,252,240))';
+    case 'mono':
+      return 'linear-gradient(90deg, rgb(10,10,10), rgb(120,120,120), rgb(250,250,246))';
+    case 'neon':
+      return 'linear-gradient(90deg, rgb(10,6,24), rgb(50,18,120), rgb(220,40,160), rgb(252,220,80), rgb(245,245,220))';
+  }
 }

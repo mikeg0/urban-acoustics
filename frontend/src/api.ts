@@ -5,6 +5,7 @@ import type {
   EventLabel,
   LabelSubmission,
   PlaybackUrl,
+  SpectrogramReadResponse,
   TelemetryReadResponse,
   TelemetryResolution,
   YearBundle,
@@ -50,6 +51,15 @@ export const fetchTelemetry = (
 ): Promise<TelemetryReadResponse> =>
   getJson<TelemetryReadResponse>(
     `/api/v1/devices/${deviceId}/telemetry?from=${fromTs}&to=${toTs}&res=${res}`,
+  );
+
+export const fetchSpectrogramHistory = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+): Promise<SpectrogramReadResponse> =>
+  getJson<SpectrogramReadResponse>(
+    `/api/v1/devices/${deviceId}/spectrogram?from=${fromTs}&to=${toTs}`,
   );
 
 export const fetchEvents = (deviceId: string, limit = 50): Promise<DeviceEvent[]> =>

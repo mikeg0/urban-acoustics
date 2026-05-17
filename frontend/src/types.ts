@@ -118,6 +118,18 @@ export interface TelemetryReadResponse {
   points: DeviceTelemetryPoint[];
 }
 
+export interface SpectrogramFrameOut {
+  ts: number;
+  bands: number[];
+}
+
+export interface SpectrogramReadResponse {
+  device_id: string;
+  from_ts: number;
+  to_ts: number;
+  frames: SpectrogramFrameOut[];
+}
+
 export type DeviceEventStatus =
   | 'announced'
   | 'upload_intent_created'
@@ -176,10 +188,32 @@ export interface LabelSubmission {
   created_at: number;
 }
 
-export type DeviceLiveMessage = {
-  type: 'tick';
-  ts: number;
-  laeq: number;
-  lafmax: number;
-  lcpeak: number;
-};
+export type DeviceLiveMessage =
+  | {
+      type: 'tick';
+      ts: number;
+      laeq: number;
+      lafmax: number;
+      lcpeak: number;
+    }
+  | {
+      type: 'spect';
+      ts: number;
+      bands: number[];
+    }
+  | {
+      type: 'ping';
+      ts: number;
+    };
+
+// 1/3-octave ISO 266 nominal centre frequencies the firmware emits on
+// dev/{id}/spect. Mirrors raspberry-pi-zero-2w/urban_acoustics/dsp.py::
+// ISO_THIRD_OCTAVE_HZ and backend/app/contracts.py::SPECTROGRAM_N_BANDS.
+export const BAND_CENTERS_HZ: readonly number[] = [
+  20, 25, 31.5, 40, 50, 63, 80, 100,
+  125, 160, 200, 250, 315, 400, 500, 630,
+  800, 1000, 1250, 1600, 2000, 2500, 3150, 4000,
+  5000, 6300, 8000, 10000, 12500, 16000,
+];
+
+export const SPECTROGRAM_N_BANDS = BAND_CENTERS_HZ.length;

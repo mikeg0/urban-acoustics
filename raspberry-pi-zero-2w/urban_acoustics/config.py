@@ -79,6 +79,15 @@ class Config:
     health_period_s: float = 60.0
     telemetry_period_s: float = 1.0
 
+    # --- spectrogram ---
+    # Live 1/3-octave band stream on dev/{id}/spect. Bandwidth ~1.4 KB/s
+    # at the default decimation; flip to False if CPU or broker pressure
+    # ever becomes an issue.
+    spectrogram_enabled: bool = True
+    # Publish every Nth STFT frame. window=4096, hop=2048 on 48 kHz gives
+    # 23.4 frames/sec; decimating by 2 → ~11.7 Hz on the wire.
+    spectrogram_decimate: int = 2
+
     # Derived: hash of the active config payload (without the version itself)
     # exposed in Health messages so the cloud can detect drift.
     config_version: str = field(default="", init=False, compare=False)

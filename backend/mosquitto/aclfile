@@ -15,6 +15,7 @@ pattern readwrite dev/%u/#
 # --- ingest worker ----------------------------------------------------------
 user ingest
 topic read  dev/+/tlm
+topic read  dev/+/spect
 topic read  dev/+/health
 topic read  dev/+/event/announce
 topic read  dev/+/event/done

@@ -1,10 +1,17 @@
 """/api/v1/devices/{id}/live — push telemetry over WebSocket.
 
-Each connection gets its own asyncpg connection that ``LISTEN``s on the
-``urban_acoustics`` channel (the same one ``app.ingest.mqtt`` already
-notifies on after each telemetry flush). When a notify lands referencing
-this device, we ``SELECT`` rows with ``ts > last_sent`` and stream each
-as a ``tick`` matching the frontend's ``DeviceLiveMessage`` shape.
+Each connection gets its own asyncpg connection that ``LISTEN``s on two
+channels:
+
+* ``urban_acoustics`` — telemetry batches. Driven by the ingest worker's
+  per-flush ``pg_notify``; the handler then ``SELECT``s new rows from
+  ``telemetry_db`` and emits one ``tick`` message per row.
+* ``ua_spect`` — spectrogram band frames. The ingest worker pushes the
+  full ``{device_id, ts, bands}`` JSON directly in the notify payload —
+  no DB read is needed because spectrograms are not persisted.
+
+The handler forwards both kinds to the same WebSocket. The frontend's
+``DeviceLiveMessage`` discriminated union routes by ``type``.
 
 LISTEN connections shouldn't share a pool (UNLISTEN-on-release is fragile
 and the connection's notification queue is per-connection state), so we
@@ -19,11 +26,13 @@ import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
+from ...contracts import NOTIFY_SPECTROGRAM_CHANNEL
 from ...db import get_sessionmaker
 from ...models import Device
 
@@ -34,6 +43,14 @@ log = logging.getLogger("urban-acoustics.live-ws")
 NOTIFY_CHANNEL = "urban_acoustics"
 HEARTBEAT_SECONDS = 30.0
 CATCHUP_SECONDS = 5.0
+# Bound on the cross-thread queue between asyncpg notify callbacks and
+# the WS sender. At ~10 Hz spect this is ~100 s of buffering — plenty of
+# headroom if the WS briefly stalls, while still bounding memory.
+NOTIFY_QUEUE_MAX = 1024
+
+# Sentinel object meaning "telemetry needs a SELECT". Using a dedicated
+# object (rather than None) makes the queue's contents self-describing.
+_TLM_WAKE = object()
 
 
 def _asyncpg_dsn(database_url: str) -> str:
@@ -66,13 +83,14 @@ async def live_telemetry_ws(websocket: WebSocket, device_id: UUID) -> None:
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         return
 
-    # Bridge asyncpg's callback (runs on the same event loop, but as a
-    # separate task scheduled by the driver) into a queue our main loop
-    # awaits.
-    notify_queue: asyncio.Queue[None] = asyncio.Queue()
+    # Bridge asyncpg's callbacks (which run on the event loop but as
+    # separate tasks scheduled by the driver) into a queue our main loop
+    # drains. Items are either ``_TLM_WAKE`` (telemetry needs a SELECT) or
+    # a ``dict`` already in the WS wire shape.
+    notify_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=NOTIFY_QUEUE_MAX)
     device_id_str = str(device_id)
 
-    def on_notify(_conn, _pid, _channel, payload: str) -> None:
+    def on_notify_tlm(_conn, _pid, _channel, payload: str) -> None:
         try:
             data = json.loads(payload)
         except (ValueError, TypeError):
@@ -82,40 +100,77 @@ async def live_telemetry_ws(websocket: WebSocket, device_id: UUID) -> None:
         if device_id_str not in data.get("device_ids", []):
             return
         try:
-            notify_queue.put_nowait(None)
+            notify_queue.put_nowait(_TLM_WAKE)
         except asyncio.QueueFull:
-            # We coalesce notifies (one queued entry triggers a SELECT that
-            # picks up all new rows), so the queue can't really fill — but
-            # if it ever does, dropping is the right move.
+            # Coalescing means one wake-up batch-SELECTs everything new, so
+            # the queue effectively can't fill from telemetry — but if it
+            # ever does, dropping a wake-up is safe (next one will sweep).
+            pass
+
+    def on_notify_spect(_conn, _pid, _channel, payload: str) -> None:
+        try:
+            data = json.loads(payload)
+        except (ValueError, TypeError):
+            return
+        if data.get("device_id") != device_id_str:
+            return
+        ts = data.get("ts")
+        bands = data.get("bands")
+        if not isinstance(ts, (int, float)) or not isinstance(bands, list):
+            return
+        # Mirror the frontend's DeviceLiveMessage shape.
+        try:
+            notify_queue.put_nowait({"type": "spect", "ts": ts, "bands": bands})
+        except asyncio.QueueFull:
+            # Frame drops here mean the WS is slower than 10 Hz — visible
+            # as a brief gap in the scrolling spectrogram, acceptable.
             pass
 
     try:
-        # Register listener BEFORE the catch-up SELECT so we don't miss rows
-        # committed between the SELECT and add_listener.
-        await conn.add_listener(NOTIFY_CHANNEL, on_notify)
+        # Register listeners BEFORE the catch-up SELECT so we don't miss
+        # rows or band frames that land during startup.
+        await conn.add_listener(NOTIFY_CHANNEL, on_notify_tlm)
+        await conn.add_listener(NOTIFY_SPECTROGRAM_CHANNEL, on_notify_spect)
 
         last_ts = datetime.now(timezone.utc) - timedelta(seconds=CATCHUP_SECONDS)
         last_ts = await _push_new_rows(websocket, conn, device_id, last_ts)
 
         while True:
             try:
-                await asyncio.wait_for(notify_queue.get(), timeout=HEARTBEAT_SECONDS)
+                item = await asyncio.wait_for(notify_queue.get(), timeout=HEARTBEAT_SECONDS)
             except asyncio.TimeoutError:
                 await websocket.send_json({"type": "ping", "ts": time.time()})
                 continue
 
-            # Drain coalesced notifies — one SELECT picks them all up.
-            while not notify_queue.empty():
-                notify_queue.get_nowait()
+            # Drain anything queued without blocking. Spect frames are
+            # forwarded preserving order; one or more telemetry wake-ups
+            # collapse into a single SELECT after the drain.
+            pending: list[Any] = [item]
+            while True:
+                try:
+                    pending.append(notify_queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
 
-            last_ts = await _push_new_rows(websocket, conn, device_id, last_ts)
+            needs_select = False
+            for p in pending:
+                if p is _TLM_WAKE:
+                    needs_select = True
+                else:
+                    await websocket.send_json(p)
+            if needs_select:
+                last_ts = await _push_new_rows(websocket, conn, device_id, last_ts)
     except WebSocketDisconnect:
         return
     except Exception:
         log.exception("live ws: stream loop error device=%s", device_id)
     finally:
         try:
-            await conn.remove_listener(NOTIFY_CHANNEL, on_notify)
+            await conn.remove_listener(NOTIFY_CHANNEL, on_notify_tlm)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            await conn.remove_listener(NOTIFY_SPECTROGRAM_CHANNEL, on_notify_spect)
         except Exception:  # noqa: BLE001
             pass
         try:

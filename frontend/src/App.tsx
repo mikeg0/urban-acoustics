@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchDevice, fetchTelemetry, fetchYear, liveDeviceSocket } from './api';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
 import { DayView, HourView, MonthView, YearHeatmap, YearView } from './drills';
@@ -6,7 +6,13 @@ import { LiveView, RealLiveView } from './live';
 import { PALETTES } from './palettes';
 import { AnomaliesFeed, BreachRibbon, ForecastPanel, PeakHoursChart, SourceBreakdown } from './panels';
 import { SettingsButton, SettingsDialog } from './settings';
-import { buildSpectrogram, SpectrogramCanvas, TimelineSpectrogram } from './spectrogram';
+import {
+  LiveSpectrogram,
+  SpectrogramCanvas,
+  TimelineSpectrogram,
+  buildSpectrogram,
+  useRollingBands,
+} from './spectrogram';
 import { useTweaks } from './tweaks';
 import { hydrateMonths } from './utils';
 import type {
@@ -137,25 +143,35 @@ function NowCard({ palette }: { palette: keyof typeof PALETTES }) {
 }
 
 const NOW_CARD_WINDOW_S = 15 * 60;
+// Compact spectrogram window for the dashboard card. ~20 s at the wire rate
+// (~12 Hz) so each column is wide enough to read at the smaller height.
+const NOW_CARD_SPECT_FRAMES = 240;
 
 function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: number }) {
-  const [points, setPoints] = useState<DeviceTelemetryPoint[]>([]);
+  const { spectroColor } = useTweaks();
+  const [lastTick, setLastTick] = useState<{ ts: number; laeq: number } | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const spectRing = useRollingBands(NOW_CARD_SPECT_FRAMES);
+  const spectPushRef = useRef(spectRing.push);
+  useEffect(() => { spectPushRef.current = spectRing.push; }, [spectRing.push]);
 
-  const refresh = useCallback(async () => {
+  // Seed lastTick from the REST telemetry endpoint so the number is non-empty
+  // on first render even if the WS is still connecting.
+  const seed = useCallback(async () => {
     const now = Date.now() / 1000;
     try {
-      const r = await fetchTelemetry(deviceId, now - NOW_CARD_WINDOW_S, now, '1m');
-      setPoints(r.points);
-    } catch { /* keep last good points */ }
+      const r = await fetchTelemetry(deviceId, now - 60, now, 'raw');
+      const newest = r.points[r.points.length - 1];
+      if (newest) setLastTick({ ts: newest.ts, laeq: newest.laeq });
+    } catch { /* fall through to the WS */ }
   }, [deviceId]);
 
   useEffect(() => {
-    refresh();
+    seed();
     if (wsConnected) return;
-    const id = setInterval(refresh, 5000);
+    const id = setInterval(seed, 5000);
     return () => clearInterval(id);
-  }, [refresh, wsConnected]);
+  }, [seed, wsConnected]);
 
   useEffect(() => {
     let closed = false;
@@ -166,13 +182,9 @@ function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: num
       try {
         const msg = JSON.parse(ev.data) as DeviceLiveMessage;
         if (msg.type === 'tick') {
-          setPoints((prev) => {
-            const next = prev.concat({
-              ts: msg.ts, laeq: msg.laeq, lafmax: msg.lafmax, lcpeak: msg.lcpeak,
-            });
-            const cutoff = Date.now() / 1000 - NOW_CARD_WINDOW_S;
-            return next.filter((p) => p.ts >= cutoff);
-          });
+          setLastTick({ ts: msg.ts, laeq: msg.laeq });
+        } else if (msg.type === 'spect') {
+          spectPushRef.current(msg.ts, msg.bands);
         }
       } catch { /* ignore */ }
     };
@@ -187,14 +199,14 @@ function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: num
     };
   }, [deviceId]);
 
-  const last = points.length ? points[points.length - 1] : null;
-  const lastAge = last ? Math.max(0, Date.now() / 1000 - last.ts) : null;
+  const lastAge = lastTick ? Math.max(0, Date.now() / 1000 - lastTick.ts) : null;
   const fresh = lastAge != null && lastAge < 90;
-  const breach = last != null && last.laeq >= threshold;
+  const breach = lastTick != null && lastTick.laeq >= threshold;
   const status: { tone: 'ok' | 'hot' | 'default'; label: string } =
     fresh ? { tone: 'ok', label: 'STREAMING' }
-      : last == null ? { tone: 'default', label: 'WAITING' }
+      : lastTick == null ? { tone: 'default', label: 'WAITING' }
         : { tone: 'hot', label: 'STALE' };
+  const waitingSpect = !spectRing.hasData;
 
   return (
     <Card title="LIVE · RIGHT NOW" right={<Pill tone={status.tone} icon>{status.label}</Pill>} padding={14}>
@@ -205,7 +217,7 @@ function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: num
             color: breach ? 'var(--neon-hot)' : 'var(--ink-0)',
             lineHeight: 1,
           }}>
-            {last ? last.laeq.toFixed(1) : '—'}
+            {lastTick ? lastTick.laeq.toFixed(1) : '—'}
           </div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
             dB(A) · LAeq · {lastAge != null
@@ -213,99 +225,27 @@ function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: num
               : 'no data'}
           </div>
         </div>
-        <div style={{ flex: 1, height: 70 }}>
-          <NowSparkline points={points} threshold={threshold} />
+        <div style={{ flex: 1, position: 'relative' }}>
+          <LiveSpectrogram
+            ring={spectRing}
+            palette={spectroColor}
+            height={70}
+            minDb={20}
+            maxDb={110}
+          />
+          {waitingSpect && (
+            <div className="mono" style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, letterSpacing: '0.12em', color: 'var(--ink-3)',
+              background: 'rgba(0,0,0,0.4)', borderRadius: 4, pointerEvents: 'none',
+            }}>
+              WAITING FOR SPECTROGRAM
+            </div>
+          )}
         </div>
       </div>
     </Card>
-  );
-}
-
-function NowSparkline({ points, threshold }: {
-  points: DeviceTelemetryPoint[]; threshold: number;
-}) {
-  const W = 240;
-  const H = 70;
-  if (!points.length) {
-    return (
-      <div className="mono" style={{
-        fontSize: 10, color: 'var(--ink-3)', textAlign: 'center', paddingTop: 26,
-        letterSpacing: '0.12em',
-      }}>
-        WAITING FOR TELEMETRY
-      </div>
-    );
-  }
-  const laeqVals = points.map((p) => p.laeq);
-  const lafmaxVals = points.map((p) => p.lafmax);
-  const rawMin = Math.min(...laeqVals, threshold - 10);
-  const rawMax = Math.max(...lafmaxVals, threshold + 5);
-  const min = Math.floor(rawMin / 5) * 5;
-  const max = Math.ceil(rawMax / 5) * 5;
-  const range = Math.max(1, max - min);
-  const firstTs = points[0].ts;
-  const lastTs = points[points.length - 1].ts;
-  const span = Math.max(1, lastTs - firstTs);
-  const xOf = (ts: number) => ((ts - firstTs) / span) * W;
-  const yOf = (v: number) =>
-    H - ((Math.max(min, Math.min(max, v)) - min) / range) * (H - 4) - 2;
-  const tY = yOf(threshold);
-
-  const laeqLine = points.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.laeq).toFixed(1)}`,
-  ).join(' ');
-  const laeqArea = `${laeqLine} L${xOf(lastTs).toFixed(1)},${H} L${xOf(firstTs).toFixed(1)},${H} Z`;
-  const lafmaxLine = points.map((p, i) =>
-    `${i === 0 ? 'M' : 'L'}${xOf(p.ts).toFixed(1)},${yOf(p.lafmax).toFixed(1)}`,
-  ).join(' ');
-
-  const stopAt = (v: number) => `${((max - v) / range) * 100}%`;
-  const gradId = `nowSpark-${firstTs.toFixed(0)}-${threshold}`;
-
-  return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none" style={{ display: 'block' }}>
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset={stopAt(max)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.5" />
-          <stop offset={stopAt(threshold)} stopColor="oklch(72% 0.2 35)" stopOpacity="0.42" />
-          <stop offset={stopAt(threshold - 0.001)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.32" />
-          <stop offset={stopAt(threshold - 8)} stopColor="oklch(82% 0.16 70)" stopOpacity="0.22" />
-          <stop offset={stopAt(min)} stopColor="oklch(60% 0.14 215)" stopOpacity="0.12" />
-        </linearGradient>
-      </defs>
-
-      {/* breach-zone wash */}
-      <rect x="0" y="0" width={W} height={Math.max(0, tY)}
-        fill="oklch(72% 0.2 35)" fillOpacity="0.05" />
-
-      {/* threshold marker */}
-      <line x1="0" x2={W} y1={tY} y2={tY}
-        stroke="var(--neon-hot)" strokeDasharray="2 3" strokeWidth="1" opacity="0.6" />
-
-      {/* LCpeak dots */}
-      {points.map((p, i) => (
-        <circle key={`pk-${i}`} cx={xOf(p.ts)} cy={yOf(p.lcpeak)}
-          r="1" fill="oklch(75% 0.22 350)" opacity="0.6" />
-      ))}
-
-      {/* LAeq filled area */}
-      <path d={laeqArea} fill={`url(#${gradId})`} />
-
-      {/* LAFmax dashed overlay */}
-      <path d={lafmaxLine} fill="none"
-        stroke="oklch(82% 0.16 70)" strokeWidth="1" strokeDasharray="2 2" opacity="0.7" />
-
-      {/* LAeq line */}
-      <path d={laeqLine} fill="none" stroke="var(--neon-cool)" strokeWidth="1.5" />
-
-      {/* Breach points */}
-      {points.map((p, i) => {
-        if (p.laeq < threshold) return null;
-        return <circle key={`br-${i}`} cx={xOf(p.ts)} cy={yOf(p.laeq)}
-          r="2" fill="var(--neon-hot)" />;
-      })}
-    </svg>
   );
 }
 

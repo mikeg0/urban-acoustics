@@ -21,7 +21,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, REAL, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -74,6 +74,23 @@ class Telemetry(Base):
     laeq: Mapped[float] = mapped_column(Float, nullable=False)
     lafmax: Mapped[float] = mapped_column(Float, nullable=False)
     lcpeak: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class SpectrogramFrame(Base):
+    __tablename__ = "spectrogram_frames"
+    __table_args__ = (
+        PrimaryKeyConstraint("device_id", "ts", name="pk_spectrogram_frames"),
+    )
+
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    device_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("devices.device_id"),
+        nullable=False,
+    )
+    bands: Mapped[list[float]] = mapped_column(
+        ARRAY(REAL, dimensions=1), nullable=False
+    )
 
 
 class DeviceHealth(Base):

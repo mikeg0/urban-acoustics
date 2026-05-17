@@ -35,6 +35,10 @@ def telemetry_topic(device_id: UUID) -> str:
     return f"dev/{device_id}/tlm"
 
 
+def spectrogram_topic(device_id: UUID) -> str:
+    return f"dev/{device_id}/spect"
+
+
 def health_topic(device_id: UUID) -> str:
     return f"dev/{device_id}/health"
 
@@ -201,10 +205,11 @@ class ApiTransport:
             timeout=timeout_s,
             headers={"X-Device-Id": str(device_id), "User-Agent": "urban-acoustics-pi/0.1"},
         )
-        # Upload client: plain HTTPS against the MinIO presigned-URL host,
-        # using the system trust store. The presigned URL is sha256-bound, so
-        # client identity is not needed on the PUT side.
-        self._upload = httpx.AsyncClient(timeout=timeout_s)
+        # Upload client: plain HTTPS against the MinIO presigned-URL host.
+        # In dev the MinIO endpoint is fronted by a private CA, so we reuse
+        # the same pinned bundle as the API client. Presigned URLs are
+        # sha256-bound, so no client cert on the PUT side.
+        self._upload = httpx.AsyncClient(verify=str(ca_file), timeout=timeout_s)
 
     async def aclose(self) -> None:
         await self._api.aclose()

@@ -22,6 +22,7 @@ from .api.v1 import events as events_router
 from .api.v1 import health as health_router
 from .api.v1 import labels as labels_router
 from .api.v1 import live as live_router
+from .api.v1 import spectrogram as spectrogram_router
 from .api.v1 import telemetry as telemetry_router
 from .live import live_ws_handler
 from .settings import get_settings
@@ -66,6 +67,7 @@ V1 = "/api/v1"
 app.include_router(health_router.router, prefix=V1, tags=["health"])
 app.include_router(devices_router.router, prefix=V1, tags=["devices"])
 app.include_router(telemetry_router.router, prefix=V1, tags=["telemetry"])
+app.include_router(spectrogram_router.router, prefix=V1, tags=["spectrogram"])
 app.include_router(events_router.router, prefix=V1, tags=["events"])
 app.include_router(labels_router.router, prefix=V1, tags=["labels"])
 app.include_router(live_router.router, prefix=V1, tags=["live"])

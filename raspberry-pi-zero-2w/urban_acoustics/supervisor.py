@@ -30,12 +30,17 @@ from .calibration import from_config as calibration_from_config
 from .capture import AudioCapture, PcmBlock
 from .config import Config
 from .detector import EventCandidate, EventDetector
-from .dsp import compute_telemetry
+from .dsp import STFTBander, compute_telemetry
 from .encoder import FlacEncoderError, encode_flac
 from .health import HealthPublisher
 from .queue_store import QueueStore
 from .ringbuffer import AudioRingBuffer
-from .telemetry import TelemetryPublisher, TelemetrySample
+from .telemetry import (
+    SpectrogramPublisher,
+    SpectrogramSample,
+    TelemetryPublisher,
+    TelemetrySample,
+)
 from .transport import ApiTransport, MqttTransport
 from .uploader import EventUploader
 
@@ -89,6 +94,11 @@ class Supervisor:
         self.telemetry: TelemetryPublisher | None = None
         self.health: HealthPublisher | None = None
         self.uploader: EventUploader | None = None
+        self.spectrogram: SpectrogramPublisher | None = None
+        # Lazily constructed when the first PCM block arrives — keeps the
+        # sample-rate/calibration dependency local to the capture loop.
+        self.stft_bander: STFTBander | None = None
+        self._spect_frame_counter: int = 0
         self._pending_events: list[EventCandidate] = []
         self._last_capture_at = self._started_at
 
@@ -122,6 +132,10 @@ class Supervisor:
         self.telemetry = TelemetryPublisher(
             device_id=self.cfg.device_id, mqtt=self.mqtt, queue=self.queue,
         )
+        if self.cfg.spectrogram_enabled:
+            self.spectrogram = SpectrogramPublisher(
+                device_id=self.cfg.device_id, mqtt=self.mqtt,
+            )
         self.health = HealthPublisher(
             device_id=self.cfg.device_id,
             cfg=self.cfg,
@@ -204,10 +218,33 @@ class Supervisor:
         sample = TelemetrySample(ts=block.ts, laeq=laeq, lafmax=lafmax, lcpeak=lcpeak)
         await self.telemetry.emit(sample)
 
+        # Spectrogram: run a separate windowed STFT over the same audio.
+        # Skips entirely when disabled in config or the broker is offline
+        # (no replay queue — frames are ephemeral).
+        if self.spectrogram is not None:
+            await self._emit_spectrogram_frames(block)
+
         candidate = self.detector.feed(ts=block.ts, lafmax_db=lafmax)
         if candidate is not None:
             self._pending_events.append(candidate)
         await self._flush_pending_events(now=block.ts + block.samples.size / block.sample_rate)
+
+    async def _emit_spectrogram_frames(self, block: PcmBlock) -> None:
+        assert self.spectrogram is not None
+        if self.stft_bander is None:
+            self.stft_bander = STFTBander(
+                sample_rate=block.sample_rate, calib=self.calibration,
+            )
+        bander = self.stft_bander
+        frames = await asyncio.to_thread(bander.feed, block.samples, block.ts)
+        decim = max(1, self.cfg.spectrogram_decimate)
+        for ts, bands in frames:
+            self._spect_frame_counter += 1
+            if self._spect_frame_counter % decim != 0:
+                continue
+            await self.spectrogram.emit(
+                SpectrogramSample(ts=ts, bands=tuple(bands.tolist())),
+            )
 
     async def _flush_pending_events(self, *, now: float) -> None:
         """Promote events whose post-roll window is now in the ring buffer

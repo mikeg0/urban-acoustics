@@ -63,15 +63,17 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..contracts import (
+    NOTIFY_SPECTROGRAM_CHANNEL,
     EventAnnounce,
     EventDone,
     EventStatus,
     Health,
     LastWill,
+    Spectrogram,
     Telemetry,
     is_valid_event_transition,
 )
-from ..models import Device, DeviceHealth, Event
+from ..models import Device, DeviceHealth, Event, SpectrogramFrame
 from ..models import Telemetry as TelemetryRow
 
 
@@ -82,6 +84,12 @@ log = logging.getLogger("urban-acoustics.ingest")
 
 TELEMETRY_FLUSH_SECONDS = 1.0
 TELEMETRY_BATCH_MAX = 500
+# Spectrogram persistence — batched at the same cadence as telemetry. The
+# live fan-out still happens per-frame via pg_notify; this is the
+# historical-ribbon write path. At ~10 Hz a flush every 1 s carries ~10
+# frames; on multi-device fleets the batch will be larger but is bounded
+# below.
+SPECT_BATCH_MAX = 1000
 HEALTH_FLUSH_SECONDS = 2.0
 HEALTH_BATCH_MAX = 100
 LAST_SEEN_FLUSH_SECONDS = 5.0
@@ -101,7 +109,7 @@ _RECONNECT_MAX = 30
 class _RawMessage:
     """Cheap shape produced on the paho thread, consumed on the asyncio loop."""
 
-    kind: str  # "tlm" | "health" | "event_announce" | "event_done" | "lwt"
+    kind: str  # "tlm" | "spect" | "health" | "event_announce" | "event_done" | "lwt"
     device_id: UUID
     topic: str
     payload: dict[str, Any]
@@ -126,6 +134,8 @@ def _parse_topic(topic: str) -> tuple[str, UUID] | None:
         tail = parts[2]
         if tail == "tlm":
             return ("tlm", device_id)
+        if tail == "spect":
+            return ("spect", device_id)
         if tail == "health":
             return ("health", device_id)
         if tail == "lwt":
@@ -183,6 +193,8 @@ class IngestWorker:
         # Counters used in heartbeat logs.
         self._counts = {
             "tlm": 0,
+            "spect": 0,
+            "spect_dropped": 0,
             "health": 0,
             "event_announce": 0,
             "event_done": 0,
@@ -238,6 +250,8 @@ class IngestWorker:
         #  lwt        QoS 1 (retained)
         subs = [
             ("dev/+/tlm", 0),
+            # Spectrogram bands are ephemeral live data — same QoS as tlm.
+            ("dev/+/spect", 0),
             ("dev/+/health", 1),
             ("dev/+/event/announce", 1),
             ("dev/+/event/done", 1),
@@ -379,6 +393,10 @@ class IngestWorker:
         assert self._queue is not None
         tlm_buf: list[_RawMessage] = []
         health_buf: list[_RawMessage] = []
+        # Per-frame validated payloads queued for batched persistence. The
+        # live-notify path inside ``_handle_spect`` is per-frame; this
+        # buffer only feeds the history table.
+        spect_buf: list[tuple[UUID, Spectrogram]] = []
         next_flush = time.monotonic() + TELEMETRY_FLUSH_SECONDS
 
         while True:
@@ -395,6 +413,16 @@ class IngestWorker:
                     if len(tlm_buf) >= TELEMETRY_BATCH_MAX:
                         await self._flush_tlm(tlm_buf)
                         tlm_buf = []
+                elif item.kind == "spect":
+                    # Live notify runs per-frame so the scrolling
+                    # spectrogram stays at ~10 Hz; the validated payload
+                    # is queued for batched persistence on the flush sweep.
+                    spec = await self._handle_spect(item)
+                    if spec is not None:
+                        spect_buf.append((item.device_id, spec))
+                        if len(spect_buf) >= SPECT_BATCH_MAX:
+                            await self._flush_spect(spect_buf)
+                            spect_buf = []
                 elif item.kind == "health":
                     health_buf.append(item)
                     if len(health_buf) >= HEALTH_BATCH_MAX:
@@ -412,6 +440,9 @@ class IngestWorker:
                 if tlm_buf:
                     await self._flush_tlm(tlm_buf)
                     tlm_buf = []
+                if spect_buf:
+                    await self._flush_spect(spect_buf)
+                    spect_buf = []
                 if health_buf:
                     await self._flush_health(health_buf)
                     health_buf = []
@@ -521,6 +552,97 @@ class IngestWorker:
             except SQLAlchemyError:
                 await session.rollback()
                 log.exception("ingest: telemetry batch insert failed (count=%d)", len(valid_rows))
+
+    # --- spectrogram ---------------------------------------------------
+
+    async def _handle_spect(self, item: _RawMessage) -> Spectrogram | None:
+        """Validate a band frame and fan it out via pg_notify.
+
+        Returns the validated frame so the caller can buffer it for batched
+        persistence (see ``_flush_spect``). The notify path remains
+        per-frame so live WebSocket consumers see scrolling-spectrogram
+        latency in tens of milliseconds.
+        """
+        try:
+            spec = Spectrogram.model_validate(item.payload)
+        except ValidationError as e:
+            self._counts["validation_errors"] = self._counts.get("validation_errors", 0) + 1
+            log.warning(
+                "ingest: invalid spect device=%s errors=%s",
+                item.device_id,
+                _summarize_errors(e),
+            )
+            return None
+
+        payload_json = json.dumps(
+            {
+                "device_id": str(item.device_id),
+                "ts": spec.ts,
+                "bands": spec.bands,
+            },
+            separators=(",", ":"),
+        )
+        try:
+            async with self._session_factory() as session:
+                await session.execute(
+                    text("SELECT pg_notify(:chan, :payload)"),
+                    {"chan": NOTIFY_SPECTROGRAM_CHANNEL, "payload": payload_json},
+                )
+                await session.commit()
+        except SQLAlchemyError:
+            # NOTIFY failures shouldn't crash the worker — count and move on.
+            self._counts["spect_dropped"] = self._counts.get("spect_dropped", 0) + 1
+            if self._counts["spect_dropped"] % 100 == 1:
+                log.exception(
+                    "ingest: pg_notify failed for spect device=%s (total dropped=%d)",
+                    item.device_id,
+                    self._counts["spect_dropped"],
+                )
+        return spec
+
+    async def _flush_spect(self, items: list[tuple[UUID, Spectrogram]]) -> None:
+        """Persist validated spect frames into ``spectrogram_frames``.
+
+        Errors are swallowed (logged at most every 100 failures) so a DB
+        hiccup doesn't take down the live notify path — these rows back the
+        history ribbon, which is allowed to have gaps.
+        """
+        if not items:
+            return
+        rows: list[dict[str, Any]] = []
+        for device_id, spec in items:
+            rows.append(
+                {
+                    "ts": datetime.fromtimestamp(spec.ts, tz=timezone.utc),
+                    "device_id": device_id,
+                    "bands": list(spec.bands),
+                }
+            )
+        async with self._session_factory() as session:
+            valid_rows: list[dict[str, Any]] = []
+            for r in rows:
+                if await self._ensure_device_known(session, r["device_id"]):
+                    valid_rows.append(r)
+            if not valid_rows:
+                return
+            stmt = pg_insert(SpectrogramFrame.__table__).values(valid_rows)
+            # Duplicate (device_id, ts) can arrive when a device reconnects
+            # and replays its outbox. Last-write-wins is wrong (frames are
+            # immutable), so drop the dupe.
+            stmt = stmt.on_conflict_do_nothing(constraint="pk_spectrogram_frames")
+            try:
+                await session.execute(stmt)
+                await session.commit()
+            except SQLAlchemyError:
+                await session.rollback()
+                self._counts["spect_dropped"] = (
+                    self._counts.get("spect_dropped", 0) + len(valid_rows)
+                )
+                if self._counts["spect_dropped"] % 100 < len(valid_rows):
+                    log.exception(
+                        "ingest: spect batch insert failed (count=%d)",
+                        len(valid_rows),
+                    )
 
     # --- health --------------------------------------------------------
 
