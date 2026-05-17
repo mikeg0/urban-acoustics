@@ -677,19 +677,31 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   useEffect(() => { spectPushRef.current = spectRing.push; }, [spectRing.push]);
   useEffect(() => { historyPushRef.current = historyRibbon.push; }, [historyRibbon.push]);
 
-  // Backfill the history ribbon on mount / device change. The endpoint
-  // returns all stored frames in the window; we just hand them to push(),
-  // which max-merges them into display buckets.
+  // Backfill the history ribbon on mount / device change, and again whenever
+  // the tab regains visibility — backgrounded tabs throttle WS delivery and
+  // timers, so live pushes drop frames and the ribbon shows NaN gaps. The
+  // endpoint returns all stored frames in the window; push() max-merges them
+  // into display buckets, which is idempotent for already-filled columns.
   useEffect(() => {
     let cancelled = false;
-    const now = Date.now() / 1000;
-    fetchSpectrogramHistory(deviceId, now - HISTORY_WINDOW_S, now)
-      .then((r) => {
-        if (cancelled) return;
-        for (const fr of r.frames) historyPushRef.current(fr.ts, fr.bands);
-      })
-      .catch(() => { /* ribbon stays empty on backfill failure */ });
-    return () => { cancelled = true; };
+    const backfill = () => {
+      const now = Date.now() / 1000;
+      fetchSpectrogramHistory(deviceId, now - HISTORY_WINDOW_S, now)
+        .then((r) => {
+          if (cancelled) return;
+          for (const fr of r.frames) historyPushRef.current(fr.ts, fr.bands);
+        })
+        .catch(() => { /* ribbon stays as-is on backfill failure */ });
+    };
+    backfill();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') backfill();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [deviceId]);
 
   // Device metadata: fetched once.

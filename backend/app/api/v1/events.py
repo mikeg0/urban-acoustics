@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -25,6 +26,35 @@ from ...settings import Settings, get_settings
 from ...storage import Storage, get_storage
 
 router = APIRouter()
+log = logging.getLogger("urban-acoustics.events")
+
+
+async def _verify_uploaded(row: Event, storage: Storage, session: AsyncSession) -> None:
+    """If the event is ``uploaded`` and the object is present in storage,
+    transition to ``available``. The MQTT worker can only confirm the
+    device claimed to upload; we confirm it landed in MinIO before
+    handing out playback URLs, per phase-1-contracts state machine.
+    """
+    if row.status != EventStatus.UPLOADED.value or not row.storage_key:
+        return
+    head = await storage.head_object(row.storage_key)
+    if head is None:
+        return
+    # Size mismatch is treated as a hard failure: MinIO already enforces the
+    # signed sha256, so a wrong size means something else is going on.
+    content_length = head.get("ContentLength")
+    if content_length is not None and content_length != row.size:
+        log.warning(
+            "events: size mismatch for event_id=%s storage=%s db=%s",
+            row.event_id, content_length, row.size,
+        )
+        row.status = EventStatus.FAILED.value
+        row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        return
+    row.status = EventStatus.AVAILABLE.value
+    row.updated_at = datetime.now(timezone.utc)
+    await session.commit()
 
 
 def _to_response(row: Event, *, playback: tuple[str, float] | None = None) -> EventResponse:
@@ -148,6 +178,8 @@ async def get_event(
     if row is None:
         raise HTTPException(status_code=404, detail="event not found")
 
+    await _verify_uploaded(row, storage, session)
+
     playback = None
     if row.status == EventStatus.AVAILABLE.value and row.storage_key:
         signed = storage.presign_get(
@@ -174,6 +206,7 @@ async def get_event_playback_url(
     row = await session.get(Event, event_id)
     if row is None:
         raise HTTPException(status_code=404, detail="event not found")
+    await _verify_uploaded(row, storage, session)
     if row.status != EventStatus.AVAILABLE.value or not row.storage_key:
         raise HTTPException(status_code=409, detail=f"event is not available (status={row.status})")
     signed = storage.presign_get(
