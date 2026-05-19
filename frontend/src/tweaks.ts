@@ -5,7 +5,6 @@ const STORAGE_KEY = 'urban-acoustics:tweaks';
 
 const DEFAULTS: Tweaks = {
   spectroColor: 'ice',
-  dbThreshold: 86,
   anomalySensitivity: 2.9,
 };
 

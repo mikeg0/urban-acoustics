@@ -4,6 +4,8 @@ import type {
   Day,
   DeviceEvent,
   DeviceInfo,
+  DeviceRuntimeConfig,
+  DeviceRuntimeConfigUpdate,
   EventLabel,
   ForecastResponse,
   HealthReadResponse,
@@ -34,6 +36,16 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return r.json();
 }
 
+async function putJson<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+
 // --- demo (legacy /api routes, only present when DEMO_MODE=1 on the server) -
 
 export const fetchYear = (): Promise<YearBundle> => getJson<YearBundle>('/api/year');
@@ -49,6 +61,23 @@ export const liveSocket = (): WebSocket => {
 
 export const fetchDevice = (deviceId: string): Promise<DeviceInfo> =>
   getJson<DeviceInfo>(`/api/v1/devices/${deviceId}`);
+
+// Per-device runtime tunables. Pushed live to the Pi over MQTT by the
+// backend on PUT; the GET surfaces whatever the device currently has so
+// the UI's slider opens at the right position.
+export const fetchRuntimeConfig = (
+  deviceId: string,
+): Promise<DeviceRuntimeConfig> =>
+  getJson<DeviceRuntimeConfig>(`/api/v1/devices/${deviceId}/runtime-config`);
+
+export const putRuntimeConfig = (
+  deviceId: string,
+  body: DeviceRuntimeConfigUpdate,
+): Promise<DeviceRuntimeConfig> =>
+  putJson<DeviceRuntimeConfig>(
+    `/api/v1/devices/${deviceId}/runtime-config`,
+    body,
+  );
 
 export const fetchTelemetry = (
   deviceId: string,

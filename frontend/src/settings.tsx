@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { putRuntimeConfig } from './api';
 import { applyTweaks, getDefaults, useTweaks } from './tweaks';
 import { PALETTES } from './palettes';
 import type { Tweaks } from './types';
@@ -54,8 +55,47 @@ export function SettingsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export interface SettingsDialogProps {
+  open: boolean;
+  onClose: () => void;
+  // Device-backed event threshold. Null deviceId disables the slider (no
+  // server to talk to — demo mode without a real device).
+  deviceId: string | null;
+  deviceThreshold: number;
+  onDeviceThresholdChange: (v: number) => void;
+  // Config version reported by the device's most recent Health message.
+  // When it matches the version produced by our last PUT, we know the
+  // device has applied the change; until then we render "Pending…".
+  appliedConfigVersion: string | null;
+}
+
+const PUT_DEBOUNCE_MS = 400;
+const THRESHOLD_MIN = 65;
+const THRESHOLD_MAX = 100;
+
+export function SettingsDialog({
+  open,
+  onClose,
+  deviceId,
+  deviceThreshold,
+  onDeviceThresholdChange,
+  appliedConfigVersion,
+}: SettingsDialogProps) {
   const tweaks = useTweaks();
+  const [pendingPut, setPendingPut] = useState(false);
+  const [putError, setPutError] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
+  // Track which threshold value our most-recent PUT used, so the "Applied"
+  // indicator can compare against the version the device next reports.
+  // We don't have a way to predict the device's hash here, so we just show
+  // "Pending" until a new Health version arrives, then clear.
+  const lastPutVersionRef = useRef<string | null>(appliedConfigVersion);
+  useEffect(() => {
+    if (lastPutVersionRef.current !== appliedConfigVersion) {
+      lastPutVersionRef.current = appliedConfigVersion;
+      setPendingPut(false);
+    }
+  }, [appliedConfigVersion]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,10 +104,37 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  // Cancel any scheduled PUT when the dialog unmounts so a stale click
+  // doesn't fire after the user has navigated away.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current !== null) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+  }, []);
+
   if (!open) return null;
 
   const update = (partial: Partial<Tweaks>) => applyTweaks(partial);
   const resetAll = () => applyTweaks(getDefaults());
+
+  const handleThresholdChange = (v: number) => {
+    onDeviceThresholdChange(v);
+    if (!deviceId) return;  // demo mode, no device to push to
+    if (debounceRef.current !== null) window.clearTimeout(debounceRef.current);
+    setPutError(null);
+    setPendingPut(true);
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      putRuntimeConfig(deviceId, { event_threshold_db: v })
+        .catch((e: Error) => {
+          setPutError(e.message);
+          setPendingPut(false);
+        });
+    }, PUT_DEBOUNCE_MS);
+  };
 
   return (
     <div
@@ -170,13 +237,17 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </section>
 
           <section>
-            <SectionHead label="Breach threshold"
-              hint="Hours at or above this level are counted as breaches across the dashboard."
-              value={`${tweaks.dbThreshold} dB`} />
+            <SectionHead label="Event threshold"
+              hint="LAFmax at or above this level opens an event on the device, and counts as a breach across the dashboard. Saved to the sensor."
+              value={`${deviceThreshold} dB`} />
             <div style={{ marginTop: 12 }}>
-              <input type="range" min="65" max="100" step="1"
-                value={tweaks.dbThreshold}
-                onChange={(e) => update({ dbThreshold: +e.target.value })}
+              <input type="range"
+                min={THRESHOLD_MIN}
+                max={THRESHOLD_MAX}
+                step="1"
+                value={deviceThreshold}
+                disabled={!deviceId}
+                onChange={(e) => handleThresholdChange(+e.target.value)}
                 style={{ width: '100%' }} />
               <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
                 <span>65 dB · quiet street</span>
@@ -185,11 +256,20 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                 {[70, 75, 80, 85, 90].map((v) => (
-                  <Preset key={v} active={tweaks.dbThreshold === v} onClick={() => update({ dbThreshold: v })}>
+                  <Preset
+                    key={v}
+                    active={deviceThreshold === v}
+                    onClick={() => handleThresholdChange(v)}
+                  >
                     {v} dB
                   </Preset>
                 ))}
               </div>
+              {putError && (
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--danger, #ff8080)' }}>
+                  Failed to push to device: {putError}
+                </div>
+              )}
             </div>
           </section>
 
@@ -225,7 +305,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           background: 'var(--bg-0)',
         }}>
           <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
-            CHANGES APPLY LIVE · SAVED TO DEVICE
+            {deviceId
+              ? (pendingPut
+                ? 'PENDING · WAITING FOR DEVICE HEALTH'
+                : appliedConfigVersion
+                  ? `APPLIED · CONFIG ${appliedConfigVersion.slice(0, 8)}`
+                  : 'APPLIED · DISPLAY ONLY UNTIL FIRST HEALTH')
+              : 'DEMO MODE · NO DEVICE TO SAVE TO'}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={resetAll}

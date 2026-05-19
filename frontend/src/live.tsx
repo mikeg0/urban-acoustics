@@ -965,14 +965,6 @@ function DeviceBanner({
             {fresh ? 'Receiving telemetry' : lastSampleAge == null ? 'Waiting for data' : 'Stale'}
           </span>
         </div>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--ink-1)' }}>
-          {device?.name ?? deviceId}
-        </span>
-        {device?.location && (
-          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-            · {device.location}
-          </span>
-        )}
         <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
           ID {deviceId}
         </span>
@@ -1005,6 +997,7 @@ function RealLiveSpectrogramPanel({
   points: DeviceTelemetryPoint[];
 }) {
   const [selectedHourTs, setSelectedHourTs] = useState<number | null>(null);
+  const [showOverlay, setShowOverlay] = useState(true);
   const waiting = !ring.hasData;
   const ribbonWaiting = !ribbon.hasData;
   const windowMin = Math.round((ribbon.displayCols * ribbon.bucketMs) / 1000 / 60);
@@ -1022,9 +1015,21 @@ function RealLiveSpectrogramPanel({
           </div>
         </div>
         <div className="mono" style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', alignItems: 'center' }}>
-          <LineSwatch color={LAEQ_STROKE} label="LAeq" />
-          <LineSwatch color={LAFMAX_STROKE} label="LAFmax" />
-          <LineSwatch color={LCPEAK_STROKE} label="LCpeak" />
+          <button
+            onClick={() => setShowOverlay((v) => !v)}
+            title={showOverlay ? 'Hide dB overlay lines' : 'Show dB overlay lines'}
+            style={{
+              fontSize: 9, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+              textTransform: 'uppercase', padding: '3px 8px',
+              background: showOverlay ? 'var(--bg-2)' : 'transparent',
+              border: '1px solid var(--line)',
+              color: showOverlay ? 'var(--ink-1)' : 'var(--ink-3)',
+              borderRadius: 3, cursor: 'pointer',
+            }}
+          >{showOverlay ? '● dB overlay' : '○ dB overlay'}</button>
+          <LineSwatch color={LAEQ_STROKE} label="LAeq" dimmed={!showOverlay} />
+          <LineSwatch color={LAFMAX_STROKE} label="LAFmax" dimmed={!showOverlay} />
+          <LineSwatch color={LCPEAK_STROKE} label="LCpeak" dimmed={!showOverlay} />
           <span style={{ opacity: 0.6 }}>·</span>
           <span>QUIET → LOUD</span>
           <span style={{
@@ -1045,13 +1050,15 @@ function RealLiveSpectrogramPanel({
           showFreqAxis
           showGrid
         />
-        <LiveMetricsOverlay
-          points={points}
-          currentCol={ring.currentCol}
-          maxFrames={ring.maxFrames}
-          minDb={OVERLAY_MIN_DB}
-          maxDb={OVERLAY_MAX_DB}
-        />
+        {showOverlay && (
+          <LiveMetricsOverlay
+            points={points}
+            currentCol={ring.currentCol}
+            maxFrames={ring.maxFrames}
+            minDb={OVERLAY_MIN_DB}
+            maxDb={OVERLAY_MAX_DB}
+          />
+        )}
         {waiting && (
           <div className="mono" style={{
             position: 'absolute', inset: 0,
@@ -1129,11 +1136,15 @@ function RealLiveSpectrogramPanel({
         }}>
           {Array.from({ length: 24 }).map((_, i) => {
             const hoursAgo = 23 - i;
-            // Label every 4th tick to avoid crowding; rightmost is "now".
+            // Label every 4th tick to avoid crowding.
             const show = hoursAgo === 0 || hoursAgo % 4 === 0;
+            const d = new Date(Date.now() - hoursAgo * 3600 * 1000);
+            const h = d.getHours();
+            const hour12 = h % 12 === 0 ? 12 : h % 12;
+            const ampm = h < 12 ? 'am' : 'pm';
             return (
               <div key={i} style={{ textAlign: 'center' }}>
-                {show ? (hoursAgo === 0 ? 'now' : `-${hoursAgo}h`) : ''}
+                {show ? `${hour12}${ampm}` : ''}
               </div>
             );
           })}
@@ -1160,13 +1171,13 @@ const LAEQ_STROKE = 'oklch(85% 0.14 215)';
 const LAFMAX_STROKE = 'oklch(88% 0.16 80)';
 const LCPEAK_STROKE = 'oklch(72% 0.22 30)';
 
-function LineSwatch({ color, label }: { color: string; label: string }) {
+function LineSwatch({ color, label, dimmed }: { color: string; label: string; dimmed?: boolean }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, opacity: dimmed ? 0.35 : 1 }}>
       <span style={{
         display: 'inline-block', width: 14, height: 2,
         background: color, borderRadius: 1,
-        boxShadow: `0 0 4px ${color}`,
+        boxShadow: dimmed ? 'none' : `0 0 4px ${color}`,
       }} />
       <span style={{ color: 'var(--ink-2)' }}>{label}</span>
     </span>

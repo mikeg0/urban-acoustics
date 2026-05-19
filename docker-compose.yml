@@ -59,12 +59,23 @@ services:
       DEMO_MODE: "1"
       ALLOWED_ORIGINS: "https://urban-acoustics.dev.conexed.com,http://localhost:5173"
       LOG_LEVEL: "INFO"
+      # Outbound command publisher (api → dev/<id>/cmd/<verb>). Reuses the
+      # ingest cert because the broker ACL already grants "ingest" write
+      # access to dev/+/cmd/+. The publisher is started on app startup and
+      # gracefully no-ops if the broker is unreachable; PUT /runtime-config
+      # then 503s until it reconnects.
+      MQTT_BROKER_URL: "mqtts://mosquitto:8883"
+      MQTT_CA_FILE: "/app/certs/root-ca.crt"
+      MQTT_CLIENT_CERT: "/app/certs/ingest.crt"
+      MQTT_CLIENT_KEY: "/app/certs/ingest.key"
     networks:
       - traefik
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_started
+      mosquitto:
         condition: service_started
     restart: unless-stopped
 

@@ -87,9 +87,23 @@ export type DrillState = {
 
 export type Tweaks = {
   spectroColor: 'heat' | 'ice' | 'mono' | 'neon';
-  dbThreshold: number;
   anomalySensitivity: number;
 };
+
+// Per-device tunables fetched from /api/v1/devices/{id}/runtime-config.
+// `event_threshold_db` is null when no override has been set yet (the
+// device runs on its bootstrap default). `applied_config_version` is the
+// hash from the device's most recent Health message — if it differs from
+// what the UI just PUT, the change is in-flight.
+export interface DeviceRuntimeConfig {
+  device_id: string;
+  event_threshold_db: number | null;
+  applied_config_version: string | null;
+}
+
+export interface DeviceRuntimeConfigUpdate {
+  event_threshold_db: number;
+}
 
 // --- Phase 1 real-device contracts (mirror backend/app/contracts.py) ---------
 

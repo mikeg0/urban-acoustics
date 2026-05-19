@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchDevice, fetchHealth } from './api';
+import { fetchHealth } from './api';
 import { Pill } from './atoms';
-import type { DeviceHealthPoint, DeviceInfo, HealthResolution } from './types';
+import type { DeviceHealthPoint, HealthResolution } from './types';
 
 type RangeKey = '1h' | '24h' | '7d' | '30d';
 
@@ -140,18 +140,9 @@ interface RealHealthViewProps {
 }
 
 export function RealHealthView({ deviceId }: RealHealthViewProps) {
-  const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [state, setState] = useState<HealthViewState>({
     range: '24h', points: [], loading: true, error: null,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchDevice(deviceId)
-      .then((d) => { if (!cancelled) setDevice(d); })
-      .catch(() => { /* device card just shows the bare ID */ });
-    return () => { cancelled = true; };
-  }, [deviceId]);
 
   const load = useCallback(async (range: RangeKey) => {
     const spec = RANGES.find((r) => r.key === range)!;
@@ -192,7 +183,6 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
     }}>
       <HealthHeader
         deviceId={deviceId}
-        device={device}
         latest={latest}
         lastSampleAge={lastSampleAge}
         fresh={fresh}
@@ -245,10 +235,9 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
 }
 
 function HealthHeader({
-  deviceId, device, latest, lastSampleAge, fresh,
+  deviceId, latest, lastSampleAge, fresh,
 }: {
   deviceId: string;
-  device: DeviceInfo | null;
   latest: DeviceHealthPoint | null;
   lastSampleAge: number | null;
   fresh: boolean;
@@ -268,14 +257,6 @@ function HealthHeader({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <Pill tone={tone} icon>{statusLabel}</Pill>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--ink-1)' }}>
-          {device?.name ?? deviceId}
-        </span>
-        {device?.location && (
-          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-            · {device.location}
-          </span>
-        )}
         <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
           ID {deviceId}
         </span>

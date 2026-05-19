@@ -21,7 +21,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, REAL, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, REAL, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -37,6 +37,12 @@ class Device(Base):
     location: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Per-device runtime tunables pushed from the dashboard. JSONB so adding
+    # fields later is a no-op on the schema. Empty dict means "use device
+    # defaults from /etc/urban-acoustics/config.json".
+    runtime_config: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
 
 
 class DeviceCert(Base):

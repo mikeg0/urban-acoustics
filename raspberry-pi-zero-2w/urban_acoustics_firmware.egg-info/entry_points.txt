@@ -1,0 +1,2 @@
+[console_scripts]
+urban-acoustics = urban_acoustics.__main__:main

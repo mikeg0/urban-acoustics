@@ -5,6 +5,7 @@ import {
   fetchDevice,
   fetchDeviceForecast,
   fetchDeviceSources,
+  fetchRuntimeConfig,
   fetchTelemetry,
   fetchYear,
   liveDeviceSocket,
@@ -51,14 +52,13 @@ type FlowKey = 'breadcrumb' | 'stacked' | 'zoom';
 type PageKey = 'live' | 'dashboard' | 'health';
 
 function TopBar({
-  threshold, page, onPageChange, onOpenSettings, sensorPos, sensor,
+  threshold, page, onPageChange, onOpenSettings, device,
 }: {
   threshold: number;
   page: PageKey;
   onPageChange: (p: PageKey) => void;
   onOpenSettings: () => void;
-  sensor: string;
-  sensorPos: string;
+  device: DeviceInfo | null;
 }) {
   const [t, setT] = useState(() => new Date());
   useEffect(() => {
@@ -83,9 +83,9 @@ function TopBar({
             <rect x="17" y="8" width="2" height="6" fill="var(--neon-cool)" />
           </svg>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em' }}>Riverton · Urban Acoustics</div>
+            <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em' }}>{device?.name ?? '—'}</div>
             <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
-              PUBLIC NOISE ATLAS · v0.1
+              Urban Acoustics · v0.1
             </div>
           </div>
         </div>
@@ -93,7 +93,9 @@ function TopBar({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <LiveDot />
           <div>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--ink-1)' }}>{sensor} · {sensorPos}</div>
+            <div className="mono" style={{ fontSize: 11, color: device?.location ? 'var(--ink-1)' : 'var(--ink-3)' }}>
+              {device?.location ?? '— unconfigured —'}
+            </div>
             <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>STREAMING · 48 kHz · A-weighted</div>
           </div>
         </div>
@@ -534,9 +536,34 @@ const DEFAULT_CITY = {
   year: new Date().getUTCFullYear(),
 };
 
+// Bootstrap default — matches raspberry-pi-zero-2w/urban_acoustics/config.py
+// (event_threshold_db: 80.0). The dashboard reads the device's actual value
+// from the runtime-config endpoint and overwrites this; this constant just
+// avoids a 0-dB flash on initial render.
+const DEFAULT_DB_THRESHOLD = 80;
+
 function DashboardApp({ deviceId }: { deviceId: string | null }) {
   const tweaks = useTweaks();
-  const { spectroColor, dbThreshold, anomalySensitivity } = tweaks;
+  const { spectroColor, anomalySensitivity } = tweaks;
+
+  // The threshold is per-device, persisted server-side, and pushed to the
+  // Pi over MQTT — see frontend/src/settings.tsx for the slider that PUTs
+  // to /api/v1/devices/{id}/runtime-config. We keep the variable name
+  // ``dbThreshold`` so the ~20 consumers below stay untouched.
+  const [dbThreshold, setDbThreshold] = useState<number>(DEFAULT_DB_THRESHOLD);
+  const [appliedConfigVersion, setAppliedConfigVersion] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deviceId) return;
+    let cancelled = false;
+    fetchRuntimeConfig(deviceId)
+      .then((r) => {
+        if (cancelled) return;
+        if (r.event_threshold_db !== null) setDbThreshold(r.event_threshold_db);
+        setAppliedConfigVersion(r.applied_config_version);
+      })
+      .catch(() => { /* keep default; UI still renders */ });
+    return () => { cancelled = true; };
+  }, [deviceId]);
 
   // Demo bundle (synthetic /api/year) — only loaded when not in real mode.
   const [bundle, setBundle] = useState<YearBundle | null>(null);
@@ -675,8 +702,6 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
     ? (realSources ?? [])
     : (bundle?.sources ?? []);
   const DrillComp = flow === 'breadcrumb' ? DrillFlowBreadcrumb : flow === 'stacked' ? DrillFlowStacked : DrillFlowZoom;
-  const sensor = device?.name ?? city.sensor;
-  const sensorPos = device?.location ?? city.sensorPos;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -685,8 +710,7 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
         page={page}
         onPageChange={setPage}
         onOpenSettings={() => setSettingsOpen(true)}
-        sensor={sensor}
-        sensorPos={sensorPos}
+        device={device}
       />
 
       {page === 'live' ? (
@@ -805,13 +829,20 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--ink-3)', letterSpacing: '0.1em',
           }}>
-            <span>{city.name.toUpperCase()} ACOUSTIC MONITORING · {sensor} · {sensorPos.toUpperCase()}</span>
+            <span>{city.name.toUpperCase()} ACOUSTIC MONITORING · {device?.name ?? '—'} · {(device?.location ?? '—').toUpperCase()}</span>
             <span>DATA: {anomalies.length} anomalies · {forecast.length}-day forecast · ISO 1996-1 METHOD</span>
           </div>
         </Fragment>
       )}
 
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        deviceId={deviceId}
+        deviceThreshold={dbThreshold}
+        onDeviceThresholdChange={setDbThreshold}
+        appliedConfigVersion={appliedConfigVersion}
+      />
     </div>
   );
 }

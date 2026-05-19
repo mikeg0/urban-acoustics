@@ -9,6 +9,7 @@ paths so the existing Vite frontend keeps working without code changes.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import FastAPI, WebSocket
@@ -19,6 +20,7 @@ from . import seed as seed_mod
 from .api.v1 import anomalies as anomalies_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
+from .api.v1 import device_runtime_config as device_runtime_config_router
 from .api.v1 import devices as devices_router
 from .api.v1 import events as events_router
 from .api.v1 import forecast as forecast_router
@@ -29,9 +31,17 @@ from .api.v1 import sources as sources_router
 from .api.v1 import spectrogram as spectrogram_router
 from .api.v1 import summary as summary_router
 from .api.v1 import telemetry as telemetry_router
+from .db import get_sessionmaker
+from .ingest.mqtt_publish import (
+    get_command_publisher,
+    init_command_publisher,
+    shutdown_command_publisher,
+)
 from .live import live_ws_handler
+from .models import Device
 from .settings import get_settings
 from .storage import get_storage
+from sqlalchemy import select
 
 settings = get_settings()
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -65,6 +75,69 @@ async def _on_startup() -> None:
         log.info("DEMO_MODE=1: seeding synthetic dashboard data")
         seed_mod.main()
 
+    # Stand up the outbound command publisher. Optional — when the API
+    # process has no MQTT_BROKER_URL the publisher stays None and the
+    # runtime-config PUT endpoint 503s. The connection is async-by-design
+    # so a broker that comes up later still works without a restart.
+    init_command_publisher(settings)
+    await _replay_retained_commands()
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    shutdown_command_publisher()
+
+
+async def _replay_retained_commands() -> None:
+    """Re-publish each device's current runtime_config as a retained command.
+
+    The broker normally stores the most recent retained command per topic,
+    so devices reconnect into the right state without any backend
+    involvement. This pass exists to recover from broker-data loss (volume
+    wipe, fresh dev stack) — same payload + same topic is idempotent on
+    the wire, so it's safe to run on every API startup.
+    """
+    publisher = get_command_publisher()
+    if publisher is None:
+        return
+
+    # Wait briefly for the publisher's first connect before we start firing.
+    # Don't block startup forever — the publisher will keep reconnecting and
+    # admin PUTs will work once it's up. Replay is best-effort.
+    for _ in range(20):
+        if publisher.connected:
+            break
+        await asyncio.sleep(0.25)
+    if not publisher.connected:
+        log.info("startup: publisher not yet connected; skipping retained replay")
+        return
+
+    factory = get_sessionmaker()
+    async with factory() as session:
+        rows = await session.execute(
+            select(Device.device_id, Device.runtime_config).where(
+                Device.runtime_config != {},
+            )
+        )
+        candidates = list(rows.all())
+
+    replayed = 0
+    for device_id, cfg in candidates:
+        if not cfg:
+            continue
+        try:
+            await asyncio.to_thread(
+                publisher.publish_command,
+                device_id=device_id,
+                cmd="config",
+                args=cfg,
+            )
+            replayed += 1
+        except RuntimeError:
+            log.exception("startup: failed to replay retained config for %s", device_id)
+    if replayed:
+        log.info("startup: replayed retained config for %d device(s)", replayed)
+
 
 # --- v1 routers --------------------------------------------------------------
 
@@ -81,6 +154,9 @@ app.include_router(summary_router.router, prefix=V1, tags=["summary"])
 app.include_router(anomalies_router.router, prefix=V1, tags=["anomalies"])
 app.include_router(forecast_router.router, prefix=V1, tags=["forecast"])
 app.include_router(sources_router.router, prefix=V1, tags=["sources"])
+app.include_router(
+    device_runtime_config_router.router, prefix=V1, tags=["runtime-config"]
+)
 
 # --- legacy /api/health (kept per acceptance criteria) ----------------------
 

@@ -21,6 +21,7 @@ systemd restarts the unit.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import signal
 import time
@@ -28,7 +29,12 @@ from uuid import uuid4
 
 from .calibration import from_config as calibration_from_config
 from .capture import AudioCapture, PcmBlock
-from .config import Config
+from .config import (
+    Config,
+    MUTABLE_FIELDS,
+    load_config,
+    write_overlay,
+)
 from .detector import EventCandidate, EventDetector
 from .dsp import STFTBander, compute_telemetry
 from .encoder import FlacEncoderError, encode_flac
@@ -120,6 +126,7 @@ class Supervisor:
             key_file=self.cfg.mqtt_key_file,
             keepalive_s=self.cfg.mqtt_keepalive_s,
             loop=self._loop,
+            command_handler=self._on_command,
         )
         self.api = ApiTransport(
             device_id=self.cfg.device_id,
@@ -192,6 +199,96 @@ class Supervisor:
                 self._loop.add_signal_handler(sig, self._stop_event.set)
             except NotImplementedError:
                 signal.signal(sig, lambda *_: self._stop_event.set())  # type: ignore[union-attr]
+
+    # --- command channel --------------------------------------------------
+
+    async def _on_command(self, topic: str, payload: bytes) -> None:
+        """Apply a retained ``dev/<id>/cmd/<verb>`` envelope.
+
+        Runs on the asyncio loop (paho dispatches via run_coroutine_threadsafe,
+        see transport.py). Only ``cmd=config`` is wired in v1; other verbs
+        get logged and dropped so a stray retained message doesn't crash the
+        supervisor.
+        """
+        verb = topic.rsplit("/", 1)[-1] if "/" in topic else ""
+        try:
+            envelope = json.loads(payload.decode())
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            log.warning("cmd: malformed JSON on %s (len=%d) — dropping", topic, len(payload))
+            return
+        if not isinstance(envelope, dict):
+            log.warning("cmd: non-object envelope on %s — dropping", topic)
+            return
+        env_cmd = envelope.get("cmd")
+        if env_cmd != verb:
+            log.warning(
+                "cmd: topic verb %r != envelope cmd %r on %s — dropping",
+                verb, env_cmd, topic,
+            )
+            return
+
+        if verb == "config":
+            await self._apply_config_command(envelope.get("args") or {})
+            return
+        log.info("cmd: unsupported verb %r on %s — ignoring", verb, topic)
+
+    async def _apply_config_command(self, args: dict) -> None:
+        """Apply a ``config`` command. The envelope's ``args`` carries the
+        full overlay the cloud wants in effect; we filter to MUTABLE_FIELDS,
+        validate the values, persist them, and update the running detector.
+        """
+        if not isinstance(args, dict):
+            log.warning("cmd/config: args is not an object — dropping")
+            return
+        updates: dict = {}
+        for key, value in args.items():
+            if key not in MUTABLE_FIELDS:
+                log.warning("cmd/config: dropping unknown key %r", key)
+                continue
+            if key == "event_threshold_db":
+                try:
+                    v = float(value)
+                except (TypeError, ValueError):
+                    log.warning("cmd/config: event_threshold_db %r is not numeric — dropping", value)
+                    continue
+                # Belt-and-braces range check; the backend already enforces
+                # this but the Pi shouldn't trust the wire.
+                if not 50.0 <= v <= 110.0:
+                    log.warning("cmd/config: event_threshold_db %.2f out of range — dropping", v)
+                    continue
+                updates[key] = v
+        if not updates:
+            log.info("cmd/config: no applicable updates after filtering")
+            return
+
+        try:
+            new_overlay = write_overlay(updates)
+        except (OSError, ValueError) as exc:
+            log.error("cmd/config: persist failed: %s", exc)
+            return
+
+        if "event_threshold_db" in updates and self.detector is not None:
+            new_threshold = float(updates["event_threshold_db"])
+            # Detector reads these attributes on every feed() call, so a
+            # straight assignment is enough — no detector restart needed.
+            self.detector.threshold_db = new_threshold
+            self.detector.close_db = new_threshold - self.cfg.event_hysteresis_db
+
+        # Rebuild Config so config_version reflects the new overlay; the
+        # health publisher captures cfg by reference so this propagates on
+        # its next emit.
+        try:
+            new_cfg = load_config()
+        except SystemExit as exc:
+            log.error("cmd/config: reload failed: %s", exc)
+            return
+        self.cfg = new_cfg
+        if self.health is not None:
+            self.health._cfg = new_cfg  # noqa: SLF001 — same package, narrow seam
+        log.info(
+            "cmd/config: applied %s → config_version=%s",
+            new_overlay, new_cfg.config_version,
+        )
 
     # --- capture / DSP / detection ---------------------------------------
 

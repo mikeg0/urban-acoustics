@@ -22,6 +22,18 @@ log = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = pathlib.Path("/etc/urban-acoustics/config.json")
 DEFAULT_DATA_DIR = pathlib.Path("/var/lib/urban-acoustics")
 DEFAULT_AUDIO_DIR = DEFAULT_DATA_DIR / "audio"
+# Cloud-pushed tunables land here. The systemd unit grants write access to
+# /var/lib/urban-acoustics (see systemd/urban-acoustics.service), so the
+# supervisor can persist commands without relaxing the /etc read-only
+# sandbox. ``load_config()`` overlays this onto the bootstrap JSON if it
+# exists, so the file is purely optional.
+DEFAULT_OVERLAY_PATH = DEFAULT_DATA_DIR / "config-overrides.json"
+
+# Whitelist of fields the cloud is allowed to override at runtime. Everything
+# else in the bootstrap config is identity/calibration/transport — flipping
+# those over MQTT is out of scope for v1. Adding to this set is the only
+# change required to let the dashboard tune additional knobs later.
+MUTABLE_FIELDS: frozenset[str] = frozenset({"event_threshold_db"})
 
 
 @dataclass(frozen=True)
@@ -115,11 +127,17 @@ _ENV_OVERRIDES: dict[str, str] = {
 }
 
 
-def load_config(path: pathlib.Path | None = None) -> Config:
+def load_config(
+    path: pathlib.Path | None = None,
+    *,
+    overlay_path: pathlib.Path | None = None,
+) -> Config:
     """Load config from JSON file, with a small set of env-var overrides.
 
-    Missing required fields raise SystemExit early so systemd reports the
-    failure cleanly instead of crashing inside the supervisor loop.
+    If ``overlay_path`` exists, its whitelisted keys are merged on top of the
+    bootstrap JSON. Missing required fields raise SystemExit early so systemd
+    reports the failure cleanly instead of crashing inside the supervisor
+    loop.
     """
     path = path or pathlib.Path(os.environ.get("URBAN_ACOUSTICS_CONFIG", str(DEFAULT_CONFIG_PATH)))
     if not path.exists():
@@ -129,6 +147,9 @@ def load_config(path: pathlib.Path | None = None) -> Config:
         raw = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         raise SystemExit(f"config file {path} is not valid JSON: {exc}") from exc
+
+    overlay_path = overlay_path or DEFAULT_OVERLAY_PATH
+    _merge_overlay(raw, overlay_path)
 
     if "device_id" not in raw:
         raise SystemExit(f"config file {path} missing required field 'device_id'")
@@ -171,3 +192,70 @@ def load_config(path: pathlib.Path | None = None) -> Config:
         cfg.api_base, cfg.mqtt_broker_host, cfg.mqtt_broker_port,
     )
     return cfg
+
+
+def _merge_overlay(raw: dict, overlay_path: pathlib.Path) -> None:
+    """In-place merge whitelisted keys from the cloud-pushed overlay onto raw.
+
+    Unknown keys are dropped with a warning rather than failing the load —
+    we'd rather a stale field on disk be ignored than have a healthy device
+    refuse to boot when MUTABLE_FIELDS shrinks.
+    """
+    if not overlay_path.exists():
+        return
+    try:
+        overlay = json.loads(overlay_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("config: overlay %s unreadable (%s) — using defaults", overlay_path, exc)
+        return
+    if not isinstance(overlay, dict):
+        log.warning("config: overlay %s is not a JSON object — ignoring", overlay_path)
+        return
+    applied: dict = {}
+    for key, value in overlay.items():
+        if key not in MUTABLE_FIELDS:
+            log.warning("config: overlay key %r not in MUTABLE_FIELDS — dropping", key)
+            continue
+        raw[key] = value
+        applied[key] = value
+    if applied:
+        log.info("config: applied overlay from %s: %s", overlay_path, applied)
+
+
+def write_overlay(
+    updates: dict, *, path: pathlib.Path | None = None,
+) -> dict:
+    """Atomically merge ``updates`` into the overlay file. Returns the
+    new contents.
+
+    Keys outside ``MUTABLE_FIELDS`` raise ``ValueError`` — the caller (the
+    command handler) is the only path that should be writing here, and it's
+    already validated the envelope. The atomic write (tmp + rename in the
+    same directory) means a power-cut mid-write leaves either the old
+    contents intact or the new contents fully committed, never a torn file.
+    """
+    path = path or DEFAULT_OVERLAY_PATH
+    bad = [k for k in updates if k not in MUTABLE_FIELDS]
+    if bad:
+        raise ValueError(f"overlay write rejected: keys not in MUTABLE_FIELDS: {bad}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    current: dict = {}
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text())
+            if isinstance(loaded, dict):
+                current = loaded
+        except (json.JSONDecodeError, OSError):
+            log.warning("config: existing overlay %s unreadable; replacing", path)
+
+    current.update(updates)
+    # Drop unknown keys that may have crept in from an older firmware.
+    current = {k: v for k, v in current.items() if k in MUTABLE_FIELDS}
+
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(current, sort_keys=True, separators=(",", ":")))
+    os.replace(tmp, path)
+    log.info("config: overlay written %s = %s", path, current)
+    return current

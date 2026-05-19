@@ -35,6 +35,9 @@ MemoryHigh=192M
 
 # --- sandboxing -----------------------------------------------------------
 ProtectSystem=strict
+# /var/lib/urban-acoustics holds: SQLite queue, spooled FLAC events, and the
+# cloud-pushed config overlay (config-overrides.json). /etc/urban-acoustics
+# stays read-only — bootstrap config lives there and is never mutated.
 ReadWritePaths=/var/lib/urban-acoustics
 ProtectHome=true
 PrivateTmp=true
