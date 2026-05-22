@@ -277,6 +277,25 @@ export interface LabelSubmission {
   created_at: number;
 }
 
+// User-drawn time-range annotations from the live spectrogram. Persisted
+// separately from `events` — they have no audio backing, only a label and
+// a [ts_start, ts_end) interval.
+export interface SpectrogramAnnotation {
+  id: number;
+  device_id: string;
+  ts_start: number;
+  ts_end: number;
+  label: EventLabel;
+  created_at: number;
+}
+
+// Recent events listing is a merged feed of audio-backed events and
+// user-drawn annotations. The kind discriminator lets the row renderer
+// branch without conflating the two concepts.
+export type RecentEntry =
+  | { kind: 'event'; event: DeviceEvent }
+  | { kind: 'annotation'; annotation: SpectrogramAnnotation };
+
 // --- Dashboard rollup endpoints (real-device mode) --------------------------
 
 // dow is 0=Mon..6=Sun on the wire (Python `weekday()`); the Day adapter

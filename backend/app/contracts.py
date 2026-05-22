@@ -435,6 +435,45 @@ class LabelResponse(BaseModel):
     created_at: UnixTs
 
 
+# --- REST: spectrogram annotations -------------------------------------------
+
+# Reject obvious noise (single-pixel click) and pathological ranges. The
+# floor matches the popup-suppression threshold on the client; the cap is
+# generous enough to label a long-running construction band.
+ANNOTATION_MIN_DURATION_S = 0.5
+ANNOTATION_MAX_DURATION_S = 600.0
+
+
+class AnnotationRequest(_Forward):
+    ts_start: UnixTs
+    ts_end: UnixTs
+    label: EventLabel
+
+    @model_validator(mode="after")
+    def _range_ok(self) -> "AnnotationRequest":
+        if self.ts_end <= self.ts_start:
+            raise ValueError("ts_end must be after ts_start")
+        duration = self.ts_end - self.ts_start
+        if duration < ANNOTATION_MIN_DURATION_S:
+            raise ValueError(
+                f"annotation must span at least {ANNOTATION_MIN_DURATION_S}s"
+            )
+        if duration > ANNOTATION_MAX_DURATION_S:
+            raise ValueError(
+                f"annotation must span at most {ANNOTATION_MAX_DURATION_S}s"
+            )
+        return self
+
+
+class AnnotationResponse(BaseModel):
+    id: int
+    device_id: UUID
+    ts_start: UnixTs
+    ts_end: UnixTs
+    label: EventLabel
+    created_at: UnixTs
+
+
 # --- Device identity ---------------------------------------------------------
 
 

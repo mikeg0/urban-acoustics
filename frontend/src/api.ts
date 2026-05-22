@@ -14,6 +14,7 @@ import type {
   LabelSubmission,
   PlaybackUrl,
   SourcesResponse,
+  SpectrogramAnnotation,
   SpectrogramHistoryResponse,
   SpectrogramReadResponse,
   TelemetryReadResponse,
@@ -176,6 +177,68 @@ export const submitEventLabel = (
   label: EventLabel,
 ): Promise<LabelSubmission> =>
   postJson<LabelSubmission>(`/api/v1/events/${eventId}/labels`, { label });
+
+// --- Spectrogram annotations -----------------------------------------------
+
+// Raised by `submitAnnotation` so the caller can surface the backend's
+// 400/409 messages inline rather than as a generic network error. The
+// regular `Error` thrown by `postJson` loses the response body, which is
+// where the conflict info lives.
+export class AnnotationApiError extends Error {
+  status: number;
+  detail: unknown;
+  constructor(status: number, detail: unknown, message: string) {
+    super(message);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+export const submitAnnotation = async (
+  deviceId: string,
+  body: { ts_start: number; ts_end: number; label: EventLabel },
+): Promise<SpectrogramAnnotation> => {
+  const url = `/api/v1/devices/${deviceId}/annotations`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    let detail: unknown = null;
+    try {
+      const j = await r.json();
+      detail = j?.detail ?? j;
+    } catch {
+      // ignore body-parse failure; detail stays null
+    }
+    const msg =
+      typeof detail === 'string'
+        ? detail
+        : detail && typeof detail === 'object' && 'message' in detail
+          ? String((detail as { message: unknown }).message)
+          : `${url} → ${r.status}`;
+    throw new AnnotationApiError(r.status, detail, msg);
+  }
+  return r.json();
+};
+
+export const listAnnotations = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+  limit = 500,
+): Promise<SpectrogramAnnotation[]> =>
+  getJson<SpectrogramAnnotation[]>(
+    `/api/v1/devices/${deviceId}/annotations` +
+      `?from=${fromTs}&to=${toTs}&limit=${limit}`,
+  );
+
+export const deleteAnnotation = async (annotationId: number): Promise<void> => {
+  const url = `/api/v1/annotations/${annotationId}`;
+  const r = await fetch(url, { method: 'DELETE' });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+};
 
 // --- dashboard rollup endpoints --------------------------------------------
 

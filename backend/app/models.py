@@ -161,3 +161,19 @@ class Label(Base):
     )
     label: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SpectrogramAnnotation(Base):
+    __tablename__ = "spectrogram_annotations"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("devices.device_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    ts_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ts_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

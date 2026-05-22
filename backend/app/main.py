@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import data as data_lib
 from . import seed as seed_mod
+from .api.v1 import annotations as annotations_router
 from .api.v1 import anomalies as anomalies_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
@@ -150,6 +151,7 @@ app.include_router(device_health_router.router, prefix=V1, tags=["device-health"
 app.include_router(spectrogram_router.router, prefix=V1, tags=["spectrogram"])
 app.include_router(events_router.router, prefix=V1, tags=["events"])
 app.include_router(labels_router.router, prefix=V1, tags=["labels"])
+app.include_router(annotations_router.router, prefix=V1, tags=["annotations"])
 app.include_router(live_router.router, prefix=V1, tags=["live"])
 app.include_router(summary_router.router, prefix=V1, tags=["summary"])
 app.include_router(anomalies_router.router, prefix=V1, tags=["anomalies"])

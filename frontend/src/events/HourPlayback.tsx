@@ -1,4 +1,4 @@
-import type { DeviceEvent } from '../types';
+import type { DeviceEvent, SpectrogramAnnotation } from '../types';
 import type { PaletteKey } from '../palettes';
 import { HourTileBackdrop } from '../spectrogram';
 
@@ -15,6 +15,9 @@ interface HourPlaybackViewerProps {
   deletingUnlabeled: boolean;
   deviceId: string;
   palette: PaletteKey;
+  annotations?: SpectrogramAnnotation[];
+  selectedAnnotationId?: number | null;
+  onSelectAnnotation?: (id: number) => void;
 }
 
 const HOUR_S = 3600;
@@ -35,6 +38,7 @@ export function HourPlaybackViewer({
   hourTs, threshold, events, loading, error, selectedId, onSelect, onClose,
   onDeleteUnlabeled, deletingUnlabeled,
   deviceId, palette,
+  annotations, selectedAnnotationId, onSelectAnnotation,
 }: HourPlaybackViewerProps) {
   const totalBreaches = events.filter((e) => e.peak_db >= threshold).length;
   const unlabeledCount = events.filter((e) => e.label == null).length;
@@ -106,6 +110,9 @@ export function HourPlaybackViewer({
         onSelect={onSelect}
         deviceId={deviceId}
         palette={palette}
+        annotations={annotations}
+        selectedAnnotationId={selectedAnnotationId ?? null}
+        onSelectAnnotation={onSelectAnnotation}
       />
 
       {events.length === 0 && !loading && !error && (
@@ -119,6 +126,7 @@ export function HourPlaybackViewer({
 
 function BreachTimeline({
   hourTs, events, threshold, selectedId, onSelect, deviceId, palette,
+  annotations, selectedAnnotationId, onSelectAnnotation,
 }: {
   hourTs: number;
   events: DeviceEvent[];
@@ -127,6 +135,9 @@ function BreachTimeline({
   onSelect: (id: string) => void;
   deviceId: string;
   palette: PaletteKey;
+  annotations?: SpectrogramAnnotation[];
+  selectedAnnotationId: number | null;
+  onSelectAnnotation?: (id: number) => void;
 }) {
   // Render each event as a positioned band over a 1-hour-wide track.
   // Bands narrower than 0.5% of the track widen visually so single-second
@@ -152,6 +163,40 @@ function BreachTimeline({
             pointerEvents: 'none',
           }} />
         ))}
+        {annotations && annotations
+          .filter((a) => a.ts_end > hourTs && a.ts_start < hourTs + HOUR_S)
+          .map((a) => {
+            const startFrac = Math.max(0, Math.min(1, (a.ts_start - hourTs) / HOUR_S));
+            const endFrac = Math.max(0, Math.min(1, (a.ts_end - hourTs) / HOUR_S));
+            const widthFrac = Math.max(0, endFrac - startFrac);
+            const visibleWidth = Math.max(widthFrac * 100, MIN_VISIBLE_PCT);
+            const selected = a.id === selectedAnnotationId;
+            const hue = '82% 0.16 270';
+            const duration = a.ts_end - a.ts_start;
+            return (
+              <button
+                key={`ann-${a.id}`}
+                type="button"
+                onClick={() => onSelectAnnotation?.(a.id)}
+                title={`${fmtClockSec(a.ts_start)} · ${duration.toFixed(1)}s · ${a.label} (annotation)`}
+                style={{
+                  position: 'absolute',
+                  left: `${startFrac * 100}%`,
+                  width: `${visibleWidth}%`,
+                  top: 0, bottom: 0,
+                  background: selected
+                    ? `oklch(${hue} / 0.45)`
+                    : `oklch(${hue} / 0.25)`,
+                  border: `1.5px dashed ${selected ? 'var(--neon-focus)' : `oklch(${hue} / 0.85)`}`,
+                  borderRadius: 2,
+                  padding: 0, cursor: 'pointer',
+                  boxShadow: selected ? `0 0 8px oklch(${hue} / 0.9)` : 'none',
+                  outline: selected ? '1.5px solid var(--neon-focus)' : 'none',
+                  outlineOffset: 1,
+                }}
+              />
+            );
+          })}
         {events.map((e) => {
           const startFrac = Math.max(0, Math.min(1, (e.ts - hourTs) / HOUR_S));
           const widthFrac = Math.max(0, Math.min(1 - startFrac, e.duration_s / HOUR_S));

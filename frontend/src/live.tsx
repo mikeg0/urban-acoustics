@@ -1,11 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
+  deleteAnnotation,
   deleteEvent,
   fetchDevice,
   fetchEventIndex,
   fetchEventsInRange,
   fetchSpectrogramHistory,
   fetchTelemetry,
+  listAnnotations,
   liveDeviceSocket,
   liveSocket,
 } from './api';
@@ -13,6 +15,7 @@ import { EventsList } from './events/EventsList';
 import { EventPlayer } from './events/EventPlayer';
 import { HourPlaybackViewer } from './events/HourPlayback';
 import { LabelPicker } from './events/LabelPicker';
+import { SelectionLabelPopup } from './events/SelectionLabelPopup';
 import {
   HistoryRibbon24h,
   HistorySpectrogram,
@@ -30,6 +33,8 @@ import type {
   EventIndexEntry,
   Gap,
   LiveMessage,
+  RecentEntry,
+  SpectrogramAnnotation,
 } from './types';
 
 const fmtTime = (m: number) =>
@@ -692,6 +697,14 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   const [hourEventsLoading, setHourEventsLoading] = useState(false);
   const [hourEventsError, setHourEventsError] = useState<string | null>(null);
   const [deletingUnlabeled, setDeletingUnlabeled] = useState(false);
+  // User-drawn spectrogram annotations for the past 24 h. Polled alongside
+  // events so the merged Recent-events feed and the overlays on the 4
+  // spectrogram surfaces stay in sync. `selectedAnnotationId` mirrors the
+  // event selection state so picking a band on any surface highlights the
+  // matching row in the events list and vice-versa.
+  const [annotations, setAnnotations] = useState<SpectrogramAnnotation[]>([]);
+  const [selectedAnnotationId, setSelectedAnnotationId] =
+    useState<number | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const spectRing = useRollingBands(SPECT_MAX_FRAMES);
   const historyRibbon = useHistoryRibbon(HISTORY_WINDOW_S, HISTORY_COLS);
@@ -809,6 +822,26 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
       window.alert(`Failed to delete ${failed} clip${failed === 1 ? '' : 's'}.`);
     }
   }, [deletingUnlabeled, hourEvents, refreshEvents]);
+
+  // Annotations: poll on the same cadence as events. The window mirrors the
+  // events feed (past 24 h) so the merged Recent-events list and the overlays
+  // on the 4 surfaces all see the same set. Failures are silent — the live
+  // ribbon doesn't break because we couldn't fetch a few violet bands.
+  const refreshAnnotations = useCallback(async () => {
+    try {
+      const now = Date.now() / 1000;
+      const r = await listAnnotations(deviceId, now - 86400, now);
+      setAnnotations(r);
+    } catch {
+      // ignore
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refreshAnnotations();
+    const id = setInterval(refreshAnnotations, EVENT_POLL_MS);
+    return () => clearInterval(id);
+  }, [refreshAnnotations]);
 
   // Event index: feeds the 24h ribbon's band overlay. Cheap enough to share
   // the events poll cadence — failures are silent so a backend hiccup just
@@ -929,6 +962,73 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     return i >= 0 && i + 1 < activeEvents.length ? activeEvents[i + 1] : null;
   }, [activeEvents, selectedEventId]);
 
+  // Annotations to surface in whichever events scope the user is looking at.
+  // Mirror the events filter: a single-band selection hides them; otherwise
+  // show all annotations whose [ts_start, ts_end) overlaps the active window.
+  const activeAnnotations = useMemo<SpectrogramAnnotation[]>(() => {
+    if (bandEvent) return [];
+    if (selectedHourTs != null) {
+      const lo = selectedHourTs;
+      const hi = selectedHourTs + 3600;
+      return annotations.filter((a) => a.ts_end > lo && a.ts_start < hi);
+    }
+    return annotations;
+  }, [annotations, bandEvent, selectedHourTs]);
+
+  // Merge events + annotations into a single Recent-events feed, sorted by
+  // start time (newest first) so freshly-painted annotations appear at the
+  // top alongside freshly-captured audio events.
+  const recentEntries = useMemo<RecentEntry[]>(() => {
+    const eventEntries: RecentEntry[] = activeEvents.map((e) => ({ kind: 'event', event: e }));
+    const annEntries: RecentEntry[] = activeAnnotations.map((a) => ({
+      kind: 'annotation', annotation: a,
+    }));
+    const merged = [...eventEntries, ...annEntries];
+    merged.sort((a, b) => {
+      const ats = a.kind === 'event' ? a.event.ts : a.annotation.ts_start;
+      const bts = b.kind === 'event' ? b.event.ts : b.annotation.ts_start;
+      return bts - ats;
+    });
+    return merged;
+  }, [activeEvents, activeAnnotations]);
+
+  const selectedAnnotation = useMemo(
+    () => annotations.find((a) => a.id === selectedAnnotationId) ?? null,
+    [annotations, selectedAnnotationId],
+  );
+
+  const handleAnnotationCreated = useCallback((ann: SpectrogramAnnotation) => {
+    setAnnotations((prev) => {
+      // De-dupe by id (POST returns the persisted row; in-flight refetches
+      // could race with us — last write wins on the same id).
+      const without = prev.filter((a) => a.id !== ann.id);
+      return [ann, ...without];
+    });
+    // Pull focus onto the new annotation so the user sees the row light up.
+    setSelectedAnnotationId(ann.id);
+    setSelectedEventId(null);
+    setBandEventId(null);
+  }, []);
+
+  const handleSelectAnnotation = useCallback((id: number) => {
+    setSelectedAnnotationId(id);
+    setSelectedEventId(null);
+    setBandEventId(null);
+  }, []);
+
+  const handleDeleteAnnotation = useCallback(async (id: number) => {
+    try {
+      await deleteAnnotation(id);
+    } catch {
+      // Network blip: re-fetch will eventually resync. Leaving the row
+      // in place is safer than ghosting it on a failed delete.
+      refreshAnnotations();
+      return;
+    }
+    setAnnotations((prev) => prev.filter((a) => a.id !== id));
+    setSelectedAnnotationId((prev) => (prev === id ? null : prev));
+  }, [refreshAnnotations]);
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 14, padding: 14,
@@ -984,6 +1084,10 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
         points={points}
         recentEvents={events}
         ribbonEvents={eventIndex}
+        annotations={annotations}
+        selectedAnnotationId={selectedAnnotationId}
+        onAnnotationCreated={handleAnnotationCreated}
+        onSelectAnnotation={handleSelectAnnotation}
         selectedHourTs={selectedHourTs}
         onHourClick={(h) => {
           // Hour click clears any band-level event filter — the panel switches
@@ -995,12 +1099,16 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
         onBandClick={(id) => {
           setBandEventId(id);
           setSelectedEventId(id);
+          setSelectedAnnotationId(null);
         }}
         hourEvents={hourEvents ?? []}
         hourEventsLoading={hourEventsLoading}
         hourEventsError={hourEventsError}
         selectedEventId={selectedEventId}
-        onSelectEvent={setSelectedEventId}
+        onSelectEvent={(id) => {
+          setSelectedEventId(id);
+          setSelectedAnnotationId(null);
+        }}
         onCloseHour={() => setSelectedHourTs(null)}
         onDeleteUnlabeled={handleDeleteUnlabeled}
         deletingUnlabeled={deletingUnlabeled}
@@ -1026,11 +1134,21 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
                 {bandEvent ? 'Selected event' : selectedHourTs != null ? 'Hour events' : 'Recent events'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-1)', marginTop: 2 }}>
-                {bandEvent
-                  ? `Pinned from 60-min timeline · click ✕ to return to ${selectedHourTs != null ? 'hour' : 'recent'} list`
-                  : selectedHourTs != null
-                  ? `${activeEvents.length} event${activeEvents.length === 1 ? '' : 's'} in ${fmtHourRange(selectedHourTs)} · pick one to play & label`
-                  : `${activeEvents.length} event${activeEvents.length === 1 ? '' : 's'} · pick one to play & label`}
+                {(() => {
+                  if (bandEvent) {
+                    return `Pinned from 60-min timeline · click ✕ to return to ${selectedHourTs != null ? 'hour' : 'recent'} list`;
+                  }
+                  const eventCount = activeEvents.length;
+                  const annCount = activeAnnotations.length;
+                  const eventPart = `${eventCount} event${eventCount === 1 ? '' : 's'}`;
+                  const annPart = annCount > 0
+                    ? ` + ${annCount} annotation${annCount === 1 ? '' : 's'}`
+                    : '';
+                  const scope = selectedHourTs != null
+                    ? ` in ${fmtHourRange(selectedHourTs)}`
+                    : '';
+                  return `${eventPart}${annPart}${scope} · pick one to play & label`;
+                })()}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1066,9 +1184,14 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
             </div>
           </div>
           <EventsList
-            events={activeEvents}
-            selectedId={selectedEventId}
-            onSelect={(e) => setSelectedEventId(e.event_id)}
+            entries={recentEntries}
+            selectedEventId={selectedEventId}
+            selectedAnnotationId={selectedAnnotationId}
+            onSelectEvent={(id) => {
+              setSelectedEventId(id);
+              setSelectedAnnotationId(null);
+            }}
+            onSelectAnnotation={handleSelectAnnotation}
             threshold={threshold}
           />
         </div>
@@ -1078,44 +1201,96 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
               Playback
             </div>
-            <EventPlayer
-              event={selectedEvent}
-              onNext={nextEvent ? () => setSelectedEventId(nextEvent.event_id) : undefined}
-              onDeleted={(id) => {
-                setEvents((prev) => prev.filter((e) => e.event_id !== id));
-                setHourEvents((prev) => prev?.filter((e) => e.event_id !== id) ?? null);
-                setSelectedEventId(null);
-                refreshEvents();
-              }}
-            />
+            {selectedAnnotation ? (
+              <AnnotationPlayback
+                annotation={selectedAnnotation}
+                onDelete={() => handleDeleteAnnotation(selectedAnnotation.id)}
+              />
+            ) : (
+              <EventPlayer
+                event={selectedEvent}
+                onNext={nextEvent ? () => setSelectedEventId(nextEvent.event_id) : undefined}
+                onDeleted={(id) => {
+                  setEvents((prev) => prev.filter((e) => e.event_id !== id));
+                  setHourEvents((prev) => prev?.filter((e) => e.event_id !== id) ?? null);
+                  setSelectedEventId(null);
+                  refreshEvents();
+                }}
+              />
+            )}
           </div>
           <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
               Label
             </div>
-            <LabelPicker
-              event={selectedEvent}
-              onLabelled={(eventId, label) => {
-                // Optimistically patch the label across every list that
-                // renders this event so the row text + ribbon band color
-                // flip instantly, without waiting for the next 10s poll.
-                const patch = (e: DeviceEvent) =>
-                  e.event_id === eventId ? { ...e, label } : e;
-                setEvents((prev) => prev.map(patch));
-                setHourEvents((prev) => prev?.map(patch) ?? null);
-                // The 24h ribbon's band overlay is keyed by ts (the index
-                // entries don't carry event_id), so flip `labeled` on the
-                // matching ts.
-                const evTs = (events.find((e) => e.event_id === eventId)
-                  ?? hourEvents?.find((e) => e.event_id === eventId))?.ts;
-                if (evTs != null) {
-                  setEventIndex((prev) =>
-                    prev.map((x) => (x.ts === evTs ? { ...x, labeled: true } : x)));
-                }
-              }}
-            />
+            {selectedAnnotation ? (
+              <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+                Annotation labeled <span style={{ color: 'var(--neon-ok)' }}>{selectedAnnotation.label}</span>.
+                Delete and re-draw to change the label.
+              </div>
+            ) : (
+              <LabelPicker
+                event={selectedEvent}
+                onLabelled={(eventId, label) => {
+                  // Optimistically patch the label across every list that
+                  // renders this event so the row text + ribbon band color
+                  // flip instantly, without waiting for the next 10s poll.
+                  const patch = (e: DeviceEvent) =>
+                    e.event_id === eventId ? { ...e, label } : e;
+                  setEvents((prev) => prev.map(patch));
+                  setHourEvents((prev) => prev?.map(patch) ?? null);
+                  // The 24h ribbon's band overlay is keyed by ts (the index
+                  // entries don't carry event_id), so flip `labeled` on the
+                  // matching ts.
+                  const evTs = (events.find((e) => e.event_id === eventId)
+                    ?? hourEvents?.find((e) => e.event_id === eventId))?.ts;
+                  if (evTs != null) {
+                    setEventIndex((prev) =>
+                      prev.map((x) => (x.ts === evTs ? { ...x, labeled: true } : x)));
+                  }
+                }}
+              />
+            )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AnnotationPlayback({
+  annotation, onDelete,
+}: {
+  annotation: SpectrogramAnnotation;
+  onDelete: () => void;
+}) {
+  const duration = annotation.ts_end - annotation.ts_start;
+  const start = new Date(annotation.ts_start * 1000);
+  const end = new Date(annotation.ts_end * 1000);
+  const fmt = (d: Date) =>
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+        Spectrogram annotation · no audio
+      </div>
+      <div className="mono" style={{ fontSize: 12, color: 'var(--ink-1)' }}>
+        {fmt(start)} → {fmt(end)} · {duration.toFixed(1)} s ·{' '}
+        <span style={{ color: 'var(--neon-ok)' }}>{annotation.label}</span>
+      </div>
+      <div>
+        <button
+          type="button"
+          onClick={onDelete}
+          style={{
+            fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+            textTransform: 'uppercase', padding: '5px 12px',
+            background: 'var(--bg-2)',
+            border: '1px solid var(--neon-hot)',
+            color: 'var(--neon-hot)',
+            borderRadius: 4, cursor: 'pointer',
+          }}
+        >🗑 Delete annotation</button>
       </div>
     </div>
   );
@@ -1180,6 +1355,7 @@ function DeviceBanner({
 function RealLiveSpectrogramPanel({
   deviceId, ring, ribbon, palette, threshold, points,
   recentEvents, ribbonEvents, bandEventId, onBandClick,
+  annotations, selectedAnnotationId, onAnnotationCreated, onSelectAnnotation,
   selectedHourTs, onHourClick, hourEvents, hourEventsLoading, hourEventsError,
   selectedEventId, onSelectEvent, onCloseHour,
   onDeleteUnlabeled, deletingUnlabeled,
@@ -1194,6 +1370,10 @@ function RealLiveSpectrogramPanel({
   ribbonEvents: EventIndexEntry[];
   bandEventId: string | null;
   onBandClick: (eventId: string) => void;
+  annotations: SpectrogramAnnotation[];
+  selectedAnnotationId: number | null;
+  onAnnotationCreated: (ann: SpectrogramAnnotation) => void;
+  onSelectAnnotation: (id: number) => void;
   selectedHourTs: number | null;
   onHourClick: (hourTs: number) => void;
   hourEvents: DeviceEvent[];
@@ -1267,13 +1447,25 @@ function RealLiveSpectrogramPanel({
             maxDb={OVERLAY_MAX_DB}
           />
         )}
-        {points.length > 0 && !waiting && (
-          <LiveSpectrogramHoverProbe
-            points={points}
-            currentCol={ring.currentCol}
-            maxFrames={ring.maxFrames}
-          />
-        )}
+        {/* Selection layer (drag-to-create) sits *below* the annotation
+            overlay so clicking an existing band selects it instead of
+            starting a new drag. The selection layer is full-bleed and
+            captures pointer events on empty regions; the annotation
+            buttons on top intercept clicks within their bounds. */}
+        <LiveSpectrogramSelectionLayer
+          deviceId={deviceId}
+          ring={ring}
+          points={points}
+          waiting={waiting}
+          onAnnotationCreated={onAnnotationCreated}
+        />
+        <LiveAnnotationsOverlay
+          annotations={annotations}
+          currentCol={ring.currentCol}
+          maxFrames={ring.maxFrames}
+          selectedAnnotationId={selectedAnnotationId}
+          onSelect={onSelectAnnotation}
+        />
         {waiting && (
           <div className="mono" style={{
             position: 'absolute', inset: 0,
@@ -1308,6 +1500,12 @@ function RealLiveSpectrogramPanel({
             selectedEventId={selectedEventId}
             bandEventId={bandEventId}
             onClick={onBandClick}
+          />
+          <AnnotationBandsRibbonOverlay
+            annotations={annotations}
+            ribbon={ribbon}
+            selectedAnnotationId={selectedAnnotationId}
+            onClick={onSelectAnnotation}
           />
           {ribbonWaiting && (
             <div className="mono" style={{
@@ -1351,6 +1549,9 @@ function RealLiveSpectrogramPanel({
           selectedHourTs={selectedHourTs}
           onHourClick={onHourClick}
           events={ribbonEvents}
+          annotations={annotations}
+          selectedAnnotationId={selectedAnnotationId}
+          onAnnotationClick={onSelectAnnotation}
         />
         <div className="mono" style={{
           display: 'grid',
@@ -1388,6 +1589,9 @@ function RealLiveSpectrogramPanel({
           deletingUnlabeled={deletingUnlabeled}
           deviceId={deviceId}
           palette={palette}
+          annotations={annotations}
+          selectedAnnotationId={selectedAnnotationId}
+          onSelectAnnotation={onSelectAnnotation}
         />
       )}
     </div>
@@ -1459,6 +1663,377 @@ function EventBandsOverlay({
           />
         );
       })}
+    </div>
+  );
+}
+
+// --- Annotation overlays ----------------------------------------------------
+
+// Violet hue distinguishes user-drawn annotations from audio-backed event
+// bands (green for labeled, amber for unlabeled). The dashed border reads as
+// "marked, not captured" — a deliberate visual asymmetry with the solid
+// event-band borders.
+const ANNOTATION_HUE = '82% 0.16 270';
+
+// Clickable bands overlaid on the **live spectrogram** for each saved
+// annotation visible in the rolling window. Time-anchored to ``ring.currentCol``
+// so the bands slide in lockstep with the scrolling bands underneath.
+function LiveAnnotationsOverlay({
+  annotations, currentCol, maxFrames, selectedAnnotationId, onSelect,
+}: {
+  annotations: SpectrogramAnnotation[];
+  currentCol: number;
+  maxFrames: number;
+  selectedAnnotationId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  const rightEdgeMs = currentCol * SPECTROGRAM_COLUMN_MS;
+  const totalMs = maxFrames * SPECTROGRAM_COLUMN_MS;
+  const leftEdgeMs = rightEdgeMs - totalMs;
+
+  const visible = annotations.filter((a) => {
+    const startMs = a.ts_start * 1000;
+    const endMs = a.ts_end * 1000;
+    return endMs > leftEdgeMs && startMs < rightEdgeMs;
+  });
+  if (!visible.length) return null;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {visible.map((a) => {
+        const startMs = a.ts_start * 1000;
+        const endMs = a.ts_end * 1000;
+        const xFrac = Math.max(0, (startMs - leftEdgeMs) / totalMs);
+        const widthFrac = Math.min(1 - xFrac, (endMs - startMs) / totalMs);
+        const selected = a.id === selectedAnnotationId;
+        const duration = a.ts_end - a.ts_start;
+        const ts = new Date(a.ts_start * 1000);
+        const title =
+          `${a.label} · ${duration.toFixed(1)} s · ` +
+          `${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())} · click to select`;
+        return (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => onSelect(a.id)}
+            title={title}
+            aria-label={title}
+            style={{
+              position: 'absolute',
+              left: `${xFrac * 100}%`,
+              width: `max(4px, ${widthFrac * 100}%)`,
+              top: 0, bottom: 0,
+              padding: 0,
+              background: selected
+                ? `oklch(${ANNOTATION_HUE} / 0.35)`
+                : `oklch(${ANNOTATION_HUE} / 0.20)`,
+              border: `1px dashed ${selected ? 'var(--neon-focus)' : `oklch(${ANNOTATION_HUE} / 0.75)`}`,
+              borderRadius: 2,
+              cursor: 'pointer',
+              pointerEvents: 'auto',
+              boxShadow: selected
+                ? `0 0 8px oklch(${ANNOTATION_HUE} / 0.75)`
+                : `0 0 4px oklch(${ANNOTATION_HUE} / 0.35)`,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// Parallel overlay on the **60-min history ribbon**. Mirrors EventBandsOverlay
+// math (same right/left edge derivation from the ribbon's bucket grid) so the
+// bands track the scrolling spectrogram tick-by-tick.
+function AnnotationBandsRibbonOverlay({
+  annotations, ribbon, selectedAnnotationId, onClick,
+}: {
+  annotations: SpectrogramAnnotation[];
+  ribbon: ReturnType<typeof useHistoryRibbon>;
+  selectedAnnotationId: number | null;
+  onClick: (id: number) => void;
+}) {
+  const rightEdgeMs = (ribbon.currentCol + 1) * ribbon.bucketMs;
+  const totalMs = ribbon.displayCols * ribbon.bucketMs;
+  const leftEdgeMs = rightEdgeMs - totalMs;
+
+  const visible = annotations.filter((a) => {
+    const startMs = a.ts_start * 1000;
+    const endMs = a.ts_end * 1000;
+    return endMs > leftEdgeMs && startMs < rightEdgeMs;
+  });
+  if (!visible.length) return null;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {visible.map((a) => {
+        const startMs = a.ts_start * 1000;
+        const endMs = a.ts_end * 1000;
+        const xFrac = Math.max(0, (startMs - leftEdgeMs) / totalMs);
+        const widthFrac = Math.min(1 - xFrac, (endMs - startMs) / totalMs);
+        const selected = a.id === selectedAnnotationId;
+        const duration = a.ts_end - a.ts_start;
+        const ts = new Date(a.ts_start * 1000);
+        const title =
+          `${a.label} · ${duration.toFixed(1)} s · ` +
+          `${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())} · click to select`;
+        return (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => onClick(a.id)}
+            title={title}
+            aria-label={title}
+            style={{
+              position: 'absolute',
+              left: `${xFrac * 100}%`,
+              width: `max(4px, ${widthFrac * 100}%)`,
+              top: -2, bottom: -2,
+              padding: 0,
+              background: selected
+                ? `oklch(${ANNOTATION_HUE} / 0.40)`
+                : `oklch(${ANNOTATION_HUE} / 0.20)`,
+              border: `1px dashed ${selected ? 'var(--neon-focus)' : `oklch(${ANNOTATION_HUE} / 0.75)`}`,
+              borderRadius: 2,
+              cursor: 'pointer',
+              pointerEvents: 'auto',
+              boxShadow: selected
+                ? `0 0 8px oklch(${ANNOTATION_HUE} / 0.75)`
+                : `0 0 4px oklch(${ANNOTATION_HUE} / 0.35)`,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// Drag-to-annotate capture layer over the live spectrogram. Sits *above*
+// LiveSpectrogramHoverProbe in z-order; while idle it's pointer-transparent
+// (the probe owns hover); while dragging it captures the pointer and draws
+// the selection rectangle. The frozen selection + popup live here too so
+// the rectangle and dialog stay siblings of the same canvas.
+function LiveSpectrogramSelectionLayer({
+  deviceId, ring, points, waiting, onAnnotationCreated,
+}: {
+  deviceId: string;
+  ring: ReturnType<typeof useRollingBands>;
+  points: DeviceTelemetryPoint[];
+  waiting: boolean;
+  onAnnotationCreated: (ann: SpectrogramAnnotation) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Drag start is anchored to a *timestamp* — the cell under the cursor at
+  // mousedown — so a stationary mouse over a scrolling spectrogram visibly
+  // grows the selection (the start drifts leftward with the bands). The
+  // current cursor x is tracked in pixel space so the right edge sticks to
+  // the cursor wherever it is right now.
+  const [drag, setDrag] = useState<{ tsStart: number; mouseX: number } | null>(null);
+  // Frozen selection — both ends in timestamps so the visible band keeps
+  // sliding with the bands underneath, but the popup's anchor is captured
+  // once at mouseup so the dialog itself doesn't migrate as time advances.
+  const [selection, setSelection] = useState<{
+    tsStart: number;
+    tsEnd: number;
+    popupLeftPx: number;
+    popupWidthPx: number;
+  } | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // The hover probe needs to keep working when no drag/selection is active —
+  // forward pointer events to it by sitting pointer-transparent at rest.
+  const interactive = drag !== null || selection !== null;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth));
+    ro.observe(el);
+    setContainerWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  // Map x-pixel → wall-clock seconds, using the same column math the canvas
+  // uses internally. Keeps the selection rectangle anchored to bands as the
+  // ring advances.
+  const xToTs = useCallback((xPx: number): number => {
+    if (containerWidth <= 0) return 0;
+    const leftCol = ring.currentCol - ring.maxFrames + 1;
+    const colFrac = xPx / containerWidth;
+    const col = leftCol + colFrac * (ring.maxFrames - 1);
+    return (col * SPECTROGRAM_COLUMN_MS) / 1000;
+  }, [containerWidth, ring.currentCol, ring.maxFrames]);
+
+  const tsToX = useCallback((ts: number): number => {
+    if (containerWidth <= 0) return 0;
+    const leftCol = ring.currentCol - ring.maxFrames + 1;
+    const col = (ts * 1000) / SPECTROGRAM_COLUMN_MS;
+    const frac = (col - leftCol) / (ring.maxFrames - 1);
+    return frac * containerWidth;
+  }, [containerWidth, ring.currentCol, ring.maxFrames]);
+
+  // Cancel an in-progress drag or close an open popup on Esc.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (drag) setDrag(null);
+      else if (selection) setSelection(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drag, selection]);
+
+  // Auto-close the popup when its selection has scrolled off the left edge.
+  useEffect(() => {
+    if (!selection) return;
+    const leftEdgeTs =
+      ((ring.currentCol - ring.maxFrames + 1) * SPECTROGRAM_COLUMN_MS) / 1000;
+    if (selection.tsEnd < leftEdgeTs) setSelection(null);
+  }, [selection, ring.currentCol, ring.maxFrames]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (waiting) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    setDrag({ tsStart: xToTs(x), mouseX: x });
+    // Clear any open selection so the next mouseup opens fresh.
+    setSelection(null);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!drag) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    setDrag({ ...drag, mouseX: x });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!drag) return;
+    const el = containerRef.current;
+    if (!el) {
+      setDrag(null);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const tsEnd = xToTs(x);
+    const tsStart = drag.tsStart;
+    setDrag(null);
+    // Order endpoints (drags right-to-left are valid; backend wants tsStart < tsEnd).
+    const finalStart = Math.min(tsStart, tsEnd);
+    const finalEnd = Math.max(tsStart, tsEnd);
+    // Skip ultra-short drags (stray clicks). Use the backend's minimum
+    // duration so any selection we open the popup for is one the backend
+    // will accept.
+    if (finalEnd - finalStart < 0.5) return;
+    // Freeze the popup's anchor to where the band is *at mouseup time* —
+    // the band itself continues to drift, but the dialog stays put.
+    const startPx = tsToX(finalStart);
+    const endPx = tsToX(finalEnd);
+    const popupLeftPx = Math.min(startPx, endPx);
+    const popupWidthPx = Math.max(2, Math.abs(endPx - startPx));
+    setSelection({
+      tsStart: finalStart,
+      tsEnd: finalEnd,
+      popupLeftPx,
+      popupWidthPx,
+    });
+  };
+
+  const handleMouseLeave = () => {
+    if (drag) setDrag(null);
+  };
+
+  // Mute the hover-probe cursor while a drag is in progress so it doesn't
+  // race with the selection rectangle.
+  const cursor = drag ? 'col-resize' : selection ? 'default' : 'crosshair';
+
+  return (
+    <div
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
+      style={{
+        position: 'absolute', inset: 0,
+        cursor,
+        // The drag layer always captures pointer events. The hover probe sits
+        // *inside* this div so its mousemove handler still runs (events
+        // bubble up to our handlers), and mousedown on the probe bubbles
+        // here to start a drag. While dragging the probe is unrendered to
+        // suppress the tooltip from racing the selection rectangle.
+        pointerEvents: waiting ? 'none' : 'auto',
+        zIndex: 4,
+      }}
+    >
+      {points.length > 0 && !waiting && !interactive && (
+        <LiveSpectrogramHoverProbe
+          points={points}
+          currentCol={ring.currentCol}
+          maxFrames={ring.maxFrames}
+        />
+      )}
+      <>
+        {drag && containerWidth > 0 && (() => {
+          // Left edge: timestamp-anchored — drifts left as the ring advances.
+          // Right edge: tracks the live cursor in pixel space.
+          const startPx = tsToX(drag.tsStart);
+          const left = Math.min(startPx, drag.mouseX);
+          const width = Math.abs(drag.mouseX - startPx);
+          return (
+            <div style={{
+              position: 'absolute',
+              left,
+              width,
+              top: 0, bottom: 0,
+              background: `oklch(${ANNOTATION_HUE} / 0.22)`,
+              border: `1px dashed oklch(${ANNOTATION_HUE} / 0.9)`,
+              borderRadius: 2,
+              pointerEvents: 'none',
+            }} />
+          );
+        })()}
+        {selection && containerWidth > 0 && (() => {
+          // Visible band — both ends anchored to timestamps, keeps sliding
+          // with the bands so the user can still see which data they marked.
+          const leftPx = tsToX(selection.tsStart);
+          const widthPx = Math.max(2, tsToX(selection.tsEnd) - leftPx);
+          return (
+            <>
+              <div style={{
+                position: 'absolute',
+                left: leftPx,
+                width: widthPx,
+                top: 0, bottom: 0,
+                background: `oklch(${ANNOTATION_HUE} / 0.30)`,
+                border: '1px dashed var(--neon-focus)',
+                borderRadius: 2,
+                boxShadow: `0 0 8px oklch(${ANNOTATION_HUE} / 0.6)`,
+                pointerEvents: 'none',
+              }} />
+              {/* Popup uses the FROZEN anchor captured at mouseup, not the
+                  drifting band — so the dialog stays at its open position. */}
+              <SelectionLabelPopup
+                deviceId={deviceId}
+                tsStart={selection.tsStart}
+                tsEnd={selection.tsEnd}
+                anchorLeftPx={selection.popupLeftPx}
+                anchorWidthPx={selection.popupWidthPx}
+                onSubmitted={(ann) => {
+                  setSelection(null);
+                  onAnnotationCreated(ann);
+                }}
+                onCancel={() => setSelection(null)}
+              />
+            </>
+          );
+        })()}
+      </>
     </div>
   );
 }

@@ -635,6 +635,19 @@ interface HistoryRibbon24hProps {
   selectedHourTs?: number | null;
   onHourClick?: (hourTs: number) => void;
   events?: EventIndexEntry[];
+  annotations?: SpectrogramAnnotationOverlay[];
+  selectedAnnotationId?: number | null;
+  onAnnotationClick?: (id: number) => void;
+}
+
+// Minimal shape needed for ribbon overlay rendering — kept local so this
+// module doesn't take a hard dep on the global types file (which already
+// imports from here).
+export interface SpectrogramAnnotationOverlay {
+  id: number;
+  ts_start: number;
+  ts_end: number;
+  label: string;
 }
 
 export function HistoryRibbon24h({
@@ -644,6 +657,9 @@ export function HistoryRibbon24h({
   selectedHourTs = null,
   onHourClick,
   events,
+  annotations,
+  selectedAnnotationId = null,
+  onAnnotationClick,
 }: HistoryRibbon24hProps) {
   const [manifest, setManifest] = useState<SpectrogramHistoryResponse | null>(null);
   const [currentTick, setCurrentTick] = useState(0);
@@ -710,6 +726,11 @@ export function HistoryRibbon24h({
               return endTs > ref.hour && e.ts < ref.hour + 3600;
             })
           : [];
+        const hourAnnotations = annotations
+          ? annotations.filter(
+              (a) => a.ts_end > ref.hour && a.ts_start < ref.hour + 3600,
+            )
+          : [];
         return (
           <button
             key={ref.hour}
@@ -757,6 +778,53 @@ export function HistoryRibbon24h({
                         bottom: 0,
                         background: `oklch(${hue} / 0.55)`,
                         boxShadow: `0 0 3px oklch(${hue} / 0.7)`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            {hourAnnotations.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  pointerEvents: 'none',
+                  overflow: 'hidden',
+                }}
+              >
+                {hourAnnotations.map((a) => {
+                  const startInHour = Math.max(0, a.ts_start - ref.hour);
+                  const endInHour = Math.min(3600, a.ts_end - ref.hour);
+                  const leftPct = (startInHour / 3600) * 100;
+                  const widthPct = ((endInHour - startInHour) / 3600) * 100;
+                  const selected = a.id === selectedAnnotationId;
+                  const hue = '82% 0.16 270';
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      title={`${a.label} · click to select`}
+                      onClick={(e) => {
+                        e.stopPropagation();  // don't trigger the hour-click
+                        onAnnotationClick?.(a.id);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        left: `${leftPct}%`,
+                        width: `max(2px, ${widthPct}%)`,
+                        top: 0, bottom: 0,
+                        padding: 0,
+                        background: selected
+                          ? `oklch(${hue} / 0.45)`
+                          : `oklch(${hue} / 0.25)`,
+                        border: `1px dashed ${selected ? 'var(--neon-focus)' : `oklch(${hue} / 0.85)`}`,
+                        borderRadius: 1,
+                        boxShadow: selected
+                          ? `0 0 6px oklch(${hue} / 0.9)`
+                          : `0 0 3px oklch(${hue} / 0.6)`,
+                        cursor: 'pointer',
+                        pointerEvents: 'auto',
                       }}
                     />
                   );
