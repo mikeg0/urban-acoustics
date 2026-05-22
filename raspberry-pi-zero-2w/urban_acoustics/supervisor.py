@@ -38,6 +38,7 @@ from .config import (
 from .detector import EventCandidate, EventDetector
 from .dsp import STFTBander, compute_telemetry
 from .encoder import FlacEncoderError, encode_flac
+from .gpio import LedController
 from .health import HealthPublisher
 from .queue_store import QueueStore
 from .ringbuffer import AudioRingBuffer
@@ -60,6 +61,10 @@ _MQTT_DRAIN_PERIOD_S = 2.0
 _UPLOADER_DRAIN_PERIOD_S = 5.0
 _WATCHDOG_PERIOD_S = 15.0
 _WATCHDOG_STALL_S = 30.0
+
+# BCM pin for the on-board "identify" LED. Toggled by the dashboard via the
+# `led` MQTT command.
+_LED_GPIO = 4
 
 
 class Supervisor:
@@ -93,6 +98,16 @@ class Supervisor:
             post_roll_s=cfg.event_post_roll_s,
             cooldown_s=cfg.event_cooldown_s,
         )
+
+        self.led = LedController(_LED_GPIO)
+        # LED mode is one of:
+        #   'auto' — follows the live breach state (default)
+        #   'on'   — held high regardless of LAFmax
+        #   'off'  — held low regardless of LAFmax
+        # ``_led_state`` mirrors the last physical write so we don't thrash
+        # sysfs every 1 s when the auto-mode value hasn't changed.
+        self._led_mode: str = "auto"
+        self._led_state: bool = False
 
         # Components needing the event loop are wired up in run().
         self.mqtt: MqttTransport | None = None
@@ -230,7 +245,65 @@ class Supervisor:
         if verb == "config":
             await self._apply_config_command(envelope.get("args") or {})
             return
+        if verb == "led":
+            await self._apply_led_command(envelope.get("args") or {})
+            return
         log.info("cmd: unsupported verb %r on %s — ignoring", verb, topic)
+
+    async def _apply_led_command(self, args: dict) -> None:
+        """Apply a ``led`` command — switch between auto/on/off modes.
+
+        ``auto`` releases the LED back to the capture loop's breach
+        indicator; ``on`` / ``off`` latch the LED and suspend auto updates
+        until the next ``auto`` command arrives. Malformed envelopes are
+        dropped so a stray retained payload can't wedge the supervisor.
+        """
+        if not isinstance(args, dict):
+            log.warning("cmd/led: args is not an object — dropping")
+            return
+        mode = args.get("mode")
+        if mode not in ("auto", "on", "off"):
+            log.warning("cmd/led: unsupported mode %r — dropping", mode)
+            return
+
+        self._led_mode = mode
+        log.info("cmd/led: mode=%s", mode)
+        if mode == "on":
+            await self._set_led_state(True)
+        elif mode == "off":
+            await self._set_led_state(False)
+        # 'auto' takes effect on the next capture block — no immediate
+        # write here so the auto-mode logic owns the decision.
+
+    async def _set_led_state(self, on: bool) -> None:
+        """Idempotent LED write; logs and swallows OSError so a transient
+        sysfs hiccup can't kill the capture loop."""
+        if on == self._led_state:
+            return
+        try:
+            await asyncio.to_thread(self.led.set_state, on)
+        except OSError as exc:
+            log.warning("led: gpio write failed: %s", exc)
+            return
+        self._led_state = on
+
+    async def _update_breach_led(self, lafmax_db: float) -> None:
+        """Auto-mode tick: drive the LED from the current LAFmax block.
+
+        Uses the same threshold + hysteresis pair as the event detector
+        so the visual state matches the dashboard's notion of a breach.
+        No-op when the operator has latched the LED into ``on``/``off``.
+        """
+        if self._led_mode != "auto":
+            return
+        threshold = self.cfg.event_threshold_db
+        close_db = threshold - self.cfg.event_hysteresis_db
+        if self._led_state:
+            if lafmax_db < close_db:
+                await self._set_led_state(False)
+        else:
+            if lafmax_db >= threshold:
+                await self._set_led_state(True)
 
     async def _apply_config_command(self, args: dict) -> None:
         """Apply a ``config`` command. The envelope's ``args`` carries the
@@ -257,6 +330,11 @@ class Supervisor:
                     log.warning("cmd/config: event_threshold_db %.2f out of range — dropping", v)
                     continue
                 updates[key] = v
+            elif key == "paused":
+                if not isinstance(value, bool):
+                    log.warning("cmd/config: paused %r is not boolean — dropping", value)
+                    continue
+                updates[key] = value
         if not updates:
             log.info("cmd/config: no applicable updates after filtering")
             return
@@ -321,6 +399,8 @@ class Supervisor:
         if self.spectrogram is not None:
             await self._emit_spectrogram_frames(block)
 
+        await self._update_breach_led(lafmax)
+
         candidate = self.detector.feed(ts=block.ts, lafmax_db=lafmax)
         if candidate is not None:
             self._pending_events.append(candidate)
@@ -361,6 +441,9 @@ class Supervisor:
         self._pending_events = remaining
 
     async def _materialise_event(self, cand: EventCandidate) -> None:
+        if self.cfg.paused:
+            log.debug("event %.3f: skipped (paused)", cand.triggered_ts)
+            return
         samples, actual_start = self.ringbuffer.extract(cand.start_ts, cand.end_ts)
         if samples.size == 0:
             log.warning("event %.3f: no audio available in ring buffer", cand.triggered_ts)

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchEventPlaybackUrl } from '../api';
+import { deleteEvent, fetchEventPlaybackUrl } from '../api';
 import { SpectrogramCanvas, computeEventSpectrogram } from '../spectrogram';
 import { useTweaks } from '../tweaks';
 import type { DeviceEvent } from '../types';
 
 interface Props {
   event: DeviceEvent | null;
+  onDeleted?: (eventId: string) => void;
+  onNext?: () => void;
 }
 
 interface SpectCache {
@@ -29,14 +31,19 @@ function formatClock(unixSec: number): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
-export function EventPlayer({ event }: Props) {
-  const { spectroColor } = useTweaks();
+export function EventPlayer({ event, onDeleted, onNext }: Props) {
+  const { spectroColor, clipAutoPlay } = useTweaks();
+  // Latch the latest value in a ref so onLoadedMetadata (memoised once) reads
+  // the current setting without re-binding the <audio> handler on every flip.
+  const clipAutoPlayRef = useRef(clipAutoPlay);
+  useEffect(() => { clipAutoPlayRef.current = clipAutoPlay; }, [clipAutoPlay]);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [spect, setSpect] = useState<SpectCache | null>(null);
   const [spectError, setSpectError] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Playback state mirrored out of the hidden <audio> element so the
   // custom controls and the spectrogram playhead render off the same
@@ -62,6 +69,10 @@ export function EventPlayer({ event }: Props) {
     setCurrent(0);
     setDuration(0);
     setPlaying(false);
+    // Reset the delete-in-flight flag whenever the selection changes — the
+    // parent keeps this component mounted across deletes, so without this
+    // the trash button would stay disabled after a successful delete.
+    setDeleting(false);
     if (!eventId) return;
     let cancelled = false;
     setLoading(true);
@@ -136,11 +147,17 @@ export function EventPlayer({ event }: Props) {
 
   // Force max volume on every metadata load; the contract is "always loud,"
   // not "loud by default" — so we re-apply if anything tries to mute us.
+  // Auto-play here so clicking an event in the list starts playback without
+  // a second click — the prior click counts as the user gesture. Gated by
+  // the clipAutoPlay tweak so the user can opt out.
   const onLoadedMetadata = useCallback(() => {
     const a = audioRef.current;
     if (!a) return;
     a.volume = 1;
     setDuration(Number.isFinite(a.duration) ? a.duration : 0);
+    if (clipAutoPlayRef.current) {
+      void a.play().catch(() => { /* autoplay blocked — user can hit play */ });
+    }
   }, []);
 
   const onVolumeChange = useCallback(() => {
@@ -164,6 +181,27 @@ export function EventPlayer({ event }: Props) {
     }
   }, []);
 
+  // Global spacebar toggle whenever this player is mounted with a loaded
+  // clip. Skip when the user is typing in a form field so labels/search
+  // boxes still get literal spaces.
+  useEffect(() => {
+    if (!url) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' && e.key !== ' ') return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (
+        tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+        || t?.isContentEditable
+      ) return;
+      e.preventDefault();
+      togglePlay();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [url, togglePlay]);
+
   const skipToStart = useCallback(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -171,16 +209,23 @@ export function EventPlayer({ event }: Props) {
     setCurrent(0);
   }, []);
 
-  const skipToEnd = useCallback(() => {
+  const handleDelete = useCallback(async () => {
+    if (!event || deleting) return;
+    const ok = window.confirm(
+      `Delete this event and its audio file? This cannot be undone.`,
+    );
+    if (!ok) return;
     const a = audioRef.current;
-    if (!a || !Number.isFinite(a.duration)) return;
-    // Pause first so the brief seek to the tail doesn't replay the tip
-    // of the clip on browsers that don't fire `ended` for programmatic
-    // seeks to exactly duration.
-    a.pause();
-    a.currentTime = a.duration;
-    setCurrent(a.duration);
-  }, []);
+    if (a) { try { a.pause(); } catch { /* ignore */ } }
+    setDeleting(true);
+    try {
+      await deleteEvent(event.event_id);
+      onDeleted?.(event.event_id);
+    } catch (e) {
+      setDeleting(false);
+      window.alert(`Failed to delete: ${(e as Error).message}`);
+    }
+  }, [event, deleting, onDeleted]);
 
   const seekTo = useCallback((sec: number) => {
     const a = audioRef.current;
@@ -218,7 +263,14 @@ export function EventPlayer({ event }: Props) {
   };
   const handleScrubPointerUp = (e: React.PointerEvent<HTMLElement>) => {
     const el = e.currentTarget as HTMLElement;
-    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    const wasScrubbing = el.hasPointerCapture(e.pointerId);
+    if (wasScrubbing) el.releasePointerCapture(e.pointerId);
+    // Auto-play from the new position on release. Skip on cancel (no
+    // capture) so an interrupted gesture doesn't start playback.
+    if (!wasScrubbing) return;
+    const a = audioRef.current;
+    if (!a || !duration) return;
+    void a.play();
   };
 
   // --- early returns -------------------------------------------------------
@@ -301,9 +353,11 @@ export function EventPlayer({ event }: Props) {
         </button>
 
         <button
-          onClick={skipToEnd}
-          aria-label="Skip to end"
-          style={iconBtn(false)}
+          onClick={onNext}
+          disabled={!onNext}
+          aria-label="Next clip"
+          title="Next clip"
+          style={iconBtn(!onNext)}
         >
           <svg width="11" height="11" viewBox="0 0 10 10">
             <path d="M3 2 L7 5 L3 8 Z M8 2 L8 8" stroke="currentColor" fill="currentColor" strokeWidth="1" />
@@ -346,10 +400,30 @@ export function EventPlayer({ event }: Props) {
           <span style={{ color: 'var(--ink-3)' }}>/ {formatTime(duration)}</span>
         </div>
 
-        {/* Static speaker icon — playback is always max volume, so no slider. */}
-        <svg width="14" height="14" viewBox="0 0 12 12" style={{ color: 'var(--ink-3)' }}>
-          <path d="M1 4 L4 4 L7 1 L7 11 L4 8 L1 8 Z" stroke="currentColor" strokeWidth="1" fill="none" />
-        </svg>
+        {/* Delete: removes the DB row and the FLAC object in storage. */}
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          aria-label="Delete event"
+          title="Delete event (audio + record)"
+          style={{
+            width: 28, height: 28, borderRadius: 6,
+            background: 'var(--bg-1)',
+            border: '1px solid var(--line)',
+            color: deleting ? 'var(--ink-3)' : 'var(--neon-hot)',
+            cursor: deleting ? 'wait' : 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            opacity: deleting ? 0.5 : 1,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2.5 4 L13.5 4" />
+            <path d="M6 4 V2.5 a1 1 0 0 1 1 -1 h2 a1 1 0 0 1 1 1 V4" />
+            <path d="M3.75 4 L4.5 13.5 a1 1 0 0 0 1 1 h5 a1 1 0 0 0 1 -1 L12.25 4" />
+            <path d="M6.5 7 V12" />
+            <path d="M9.5 7 V12" />
+          </svg>
+        </button>
 
         <a
           href={url}

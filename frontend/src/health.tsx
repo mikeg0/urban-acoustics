@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchHealth } from './api';
+import { fetchHealth, putLedMode, type LedMode } from './api';
 import { Pill } from './atoms';
 import type { DeviceHealthPoint, HealthResolution } from './types';
 
@@ -188,6 +188,8 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
         fresh={fresh}
       />
 
+      <LedToggle deviceId={deviceId} />
+
       <RangeBar
         range={state.range}
         onChange={load}
@@ -285,6 +287,103 @@ function HeaderStat({ label, value }: { label: string; value: string }) {
         fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.14em', textTransform: 'uppercase',
       }}>{label}</span>
       <span className="mono" style={{ fontSize: 12, color: 'var(--ink-0)' }}>{value}</span>
+    </div>
+  );
+}
+
+// The LED is wired to GPIO4 on the sensor. In `auto` mode the Pi drives
+// it from the live LAFmax vs. event_threshold_db check (with the detector's
+// hysteresis), so the LED is lit exactly while the device is in a breach.
+// `on` / `off` latch the LED for bring-up or to highlight a single sensor
+// on a bench; sending `auto` again releases the override.
+//
+// State is intent-only — the backend doesn't persist mode, and the dashboard
+// can't see the actual pin level, only what was last pushed.
+const LED_MODE_OPTIONS: readonly { mode: LedMode; label: string }[] = [
+  { mode: 'auto', label: 'Auto' },
+  { mode: 'on',   label: 'On'   },
+  { mode: 'off',  label: 'Off'  },
+];
+
+function LedToggle({ deviceId }: { deviceId: string }) {
+  const [mode, setMode] = useState<LedMode>('auto');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = useCallback(async (next: LedMode) => {
+    if (busy || next === mode) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await putLedMode(deviceId, next);
+      setMode(next);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, deviceId, mode]);
+
+  const dotColor = mode === 'on' ? 'var(--neon-hot)'
+    : mode === 'off' ? 'var(--ink-3)'
+    : 'var(--neon-cool)';
+  const dotGlow = mode === 'on' ? '0 0 6px var(--neon-hot)'
+    : mode === 'auto' ? '0 0 4px var(--neon-cool)'
+    : 'none';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '10px 14px',
+      background: 'var(--bg-1)', border: '1px solid var(--line)',
+      borderRadius: 8, flexWrap: 'wrap',
+    }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: 4,
+        background: dotColor, boxShadow: dotGlow,
+      }} />
+      <div className="mono" style={{
+        fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.14em', textTransform: 'uppercase',
+      }}>
+        Breach LED · GPIO4
+      </div>
+      <div style={{
+        display: 'flex', background: 'var(--bg-2)', border: '1px solid var(--line)',
+        borderRadius: 6, padding: 2,
+      }}>
+        {LED_MODE_OPTIONS.map(({ mode: m, label }) => (
+          <button
+            key={m}
+            onClick={() => choose(m)}
+            disabled={busy}
+            style={{
+              padding: '5px 12px',
+              fontSize: 11, fontFamily: 'var(--mono)',
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              background: mode === m ? 'var(--bg-3)' : 'transparent',
+              border: 'none', borderRadius: 4,
+              color: mode === m ? 'var(--ink-0)' : 'var(--ink-2)',
+              cursor: busy ? 'wait' : 'pointer',
+              fontWeight: mode === m ? 600 : 400,
+              opacity: busy && mode !== m ? 0.5 : 1,
+            }}
+          >{label}</button>
+        ))}
+      </div>
+      <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.06em' }}>
+        {mode === 'auto'
+          ? 'follows LAFmax ≥ threshold'
+          : `forced ${mode}`}
+      </span>
+      {busy && (
+        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em' }}>
+          SENDING…
+        </span>
+      )}
+      {error && (
+        <span className="mono" style={{ fontSize: 10, color: 'var(--neon-hot)', letterSpacing: '0.06em' }}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

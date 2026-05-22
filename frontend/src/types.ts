@@ -88,6 +88,7 @@ export type DrillState = {
 export type Tweaks = {
   spectroColor: 'heat' | 'ice' | 'mono' | 'neon';
   anomalySensitivity: number;
+  clipAutoPlay: boolean;
 };
 
 // Per-device tunables fetched from /api/v1/devices/{id}/runtime-config.
@@ -98,11 +99,18 @@ export type Tweaks = {
 export interface DeviceRuntimeConfig {
   device_id: string;
   event_threshold_db: number | null;
+  // `paused` suspends event recording + upload on the device while keeping
+  // spectrogram + telemetry live. Defaults to false when no override set.
+  paused: boolean;
   applied_config_version: string | null;
 }
 
+// Backend requires at least one field set; both are optional so partial
+// PUTs (toggle just `paused`, or just `event_threshold_db`) round-trip
+// cleanly.
 export interface DeviceRuntimeConfigUpdate {
-  event_threshold_db: number;
+  event_threshold_db?: number;
+  paused?: boolean;
 }
 
 // --- Phase 1 real-device contracts (mirror backend/app/contracts.py) ---------
@@ -195,23 +203,35 @@ export type DeviceEventStatus =
 export type EventLabel =
   | 'motorcycle'
   | 'car'
+  | 'truck'
   | 'construction'
   | 'helicopter'
   | 'airplane'
   | 'siren'
+  | 'horn'
   | 'dog'
   | 'voice'
+  | 'trash pickup'
+  | 'wind'
+  | 'rain'
+  | 'thunder'
   | 'other';
 
 export const EVENT_LABELS: readonly EventLabel[] = [
   'motorcycle',
   'car',
+  'truck',
   'construction',
   'helicopter',
   'airplane',
   'siren',
+  'horn',
   'dog',
   'voice',
+  'trash pickup',
+  'wind',
+  'rain',
+  'thunder',
   'other',
 ];
 
@@ -227,6 +247,7 @@ export interface DeviceEvent {
   classification: string | null;
   confidence: number | null;
   model_version: string | null;
+  label: EventLabel | null;
   playback_url: string | null;
   playback_url_expires_at: number | null;
 }
@@ -235,6 +256,19 @@ export interface PlaybackUrl {
   event_id: string;
   url: string;
   expires_at: number;
+}
+
+export interface EventIndexEntry {
+  ts: number;
+  duration_s: number;
+  labeled: boolean;
+}
+
+export interface EventIndexResponse {
+  device_id: string | null;
+  from_ts: number | null;
+  to_ts: number | null;
+  events: EventIndexEntry[];
 }
 
 export interface LabelSubmission {

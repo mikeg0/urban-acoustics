@@ -198,3 +198,57 @@ def test_threshold_validation_rejects_out_of_range() -> None:
         rc.RuntimeConfigUpdate(event_threshold_db=10.0)  # absurdly quiet
     with pytest.raises(ValidationError):
         rc.RuntimeConfigUpdate(event_threshold_db=200.0)  # above mic clip
+
+
+def test_update_requires_at_least_one_field() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        rc.RuntimeConfigUpdate()
+
+
+@pytest.mark.asyncio
+async def test_put_paused_only_publishes_full_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Start from an existing threshold override so we can verify that a
+    # paused-only PUT publishes the *merged* overlay (not just the diff) —
+    # that's the contract the Pi-side filter assumes.
+    device = _device_row({"event_threshold_db": 82.0})
+    session = _StubSession(device=device)
+    pub = MagicMock()
+    pub.connected = True
+    pub.publish_command = MagicMock()
+    monkeypatch.setattr(rc, "get_command_publisher", lambda: pub)
+
+    body = rc.RuntimeConfigUpdate(paused=True)
+    resp = await rc.put_runtime_config(
+        DEVICE_A, body=body, user=_admin(), session=session,  # type: ignore[arg-type]
+    )
+
+    assert resp.paused is True
+    assert resp.event_threshold_db == 82.0
+    assert device.runtime_config == {"event_threshold_db": 82.0, "paused": True}
+    assert pub.publish_command.call_args.kwargs["args"] == {
+        "event_threshold_db": 82.0,
+        "paused": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_returns_paused_from_overlay() -> None:
+    session = _StubSession(device=_device_row({"paused": True}))
+    resp = await rc.get_runtime_config(
+        DEVICE_A, _user=_admin(), session=session,  # type: ignore[arg-type]
+    )
+    assert resp.paused is True
+    assert resp.event_threshold_db is None
+
+
+@pytest.mark.asyncio
+async def test_get_paused_defaults_false() -> None:
+    session = _StubSession(device=_device_row({}))
+    resp = await rc.get_runtime_config(
+        DEVICE_A, _user=_admin(), session=session,  # type: ignore[arg-type]
+    )
+    assert resp.paused is False

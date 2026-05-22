@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth.device import ResolvedDevice, require_device
 from ...auth.user import ResolvedUser, require_user
 from ...contracts import (
+    EventIndexEntry,
+    EventIndexResponse,
     EventIntentRequest,
     EventIntentResponse,
     EventResponse,
@@ -21,7 +23,7 @@ from ...contracts import (
     is_valid_event_transition,
 )
 from ...db import get_session
-from ...models import Event
+from ...models import Event, Label
 from ...settings import Settings, get_settings
 from ...storage import Storage, get_storage
 
@@ -57,7 +59,12 @@ async def _verify_uploaded(row: Event, storage: Storage, session: AsyncSession) 
     await session.commit()
 
 
-def _to_response(row: Event, *, playback: tuple[str, float] | None = None) -> EventResponse:
+def _to_response(
+    row: Event,
+    *,
+    playback: tuple[str, float] | None = None,
+    label: str | None = None,
+) -> EventResponse:
     return EventResponse(
         event_id=row.event_id,
         device_id=row.device_id,
@@ -70,9 +77,27 @@ def _to_response(row: Event, *, playback: tuple[str, float] | None = None) -> Ev
         classification=row.classification,
         confidence=row.confidence,
         model_version=row.model_version,
+        label=label,
         playback_url=playback[0] if playback else None,
         playback_url_expires_at=playback[1] if playback else None,
     )
+
+
+async def _latest_labels(
+    session: AsyncSession, event_ids: list[UUID]
+) -> dict[UUID, str]:
+    """Return the most recent user label per event id."""
+    if not event_ids:
+        return {}
+    stmt = (
+        select(Label.event_id, Label.label)
+        .where(Label.event_id.in_(event_ids))
+        .order_by(Label.event_id, desc(Label.created_at))
+    )
+    out: dict[UUID, str] = {}
+    for event_id, label in (await session.execute(stmt)).all():
+        out.setdefault(event_id, label)
+    return out
 
 
 @router.post(
@@ -169,7 +194,56 @@ async def list_events(
     if to_ts is not None:
         stmt = stmt.where(Event.ts < datetime.fromtimestamp(to_ts, tz=timezone.utc))
     result = await session.execute(stmt)
-    return [_to_response(r) for r in result.scalars()]
+    rows = list(result.scalars())
+    labels = await _latest_labels(session, [r.event_id for r in rows])
+    return [_to_response(r, label=labels.get(r.event_id)) for r in rows]
+
+
+@router.get("/events/index", response_model=EventIndexResponse)
+async def list_event_index(
+    device_id: UUID | None = Query(default=None),
+    limit: int = Query(default=5000, ge=1, le=10000),
+    from_ts: float | None = Query(default=None, alias="from"),
+    to_ts: float | None = Query(default=None, alias="to"),
+    _user: ResolvedUser = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+) -> EventIndexResponse:
+    """Lightweight (ts, duration_s) listing for visual indicators.
+
+    Strips the full ``EventResponse`` envelope so a 24h ribbon overlay can
+    afford a much larger window — no labels lookup, no playback URLs, no
+    UUID/sha256 fields. Same auth + filter semantics as ``GET /events``.
+    """
+    stmt = (
+        select(Event.event_id, Event.ts, Event.duration_s)
+        .order_by(desc(Event.ts))
+        .limit(limit)
+    )
+    if device_id is not None:
+        stmt = stmt.where(Event.device_id == device_id)
+    if from_ts is not None:
+        stmt = stmt.where(Event.ts >= datetime.fromtimestamp(from_ts, tz=timezone.utc))
+    if to_ts is not None:
+        stmt = stmt.where(Event.ts < datetime.fromtimestamp(to_ts, tz=timezone.utc))
+    rows = (await session.execute(stmt)).all()
+    event_ids = [event_id for event_id, _ts, _duration in rows]
+    labeled_ids: set[UUID] = set()
+    if event_ids:
+        labeled_stmt = select(Label.event_id).where(Label.event_id.in_(event_ids)).distinct()
+        labeled_ids = {row for (row,) in (await session.execute(labeled_stmt)).all()}
+    return EventIndexResponse(
+        device_id=device_id,
+        from_ts=from_ts,
+        to_ts=to_ts,
+        events=[
+            EventIndexEntry(
+                ts=ts.timestamp(),
+                duration_s=duration_s,
+                labeled=event_id in labeled_ids,
+            )
+            for event_id, ts, duration_s in rows
+        ],
+    )
 
 
 @router.get("/events/{event_id}", response_model=EventResponse)
@@ -192,7 +266,8 @@ async def get_event(
             row.storage_key, ttl_seconds=settings.EVENT_PLAYBACK_URL_TTL_SECONDS
         )
         playback = (signed.url, signed.expires_at)
-    return _to_response(row, playback=playback)
+    labels = await _latest_labels(session, [row.event_id])
+    return _to_response(row, playback=playback, label=labels.get(row.event_id))
 
 
 class PlaybackUrlResponse(BaseModel):
@@ -219,3 +294,25 @@ async def get_event_playback_url(
         row.storage_key, ttl_seconds=settings.EVENT_PLAYBACK_URL_TTL_SECONDS
     )
     return PlaybackUrlResponse(event_id=event_id, url=signed.url, expires_at=signed.expires_at)
+
+
+@router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(
+    event_id: UUID,
+    _user: ResolvedUser = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    storage: Storage = Depends(get_storage),
+) -> Response:
+    """Delete an event row and its uploaded FLAC.
+
+    Storage delete runs before the DB delete so a failure there leaves the
+    row intact and the operation is retryable. Labels cascade off the FK.
+    """
+    row = await session.get(Event, event_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="event not found")
+    if row.storage_key:
+        await storage.delete_object(row.storage_key)
+    await session.delete(row)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

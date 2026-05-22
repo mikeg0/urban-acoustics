@@ -63,6 +63,11 @@ export interface SettingsDialogProps {
   deviceId: string | null;
   deviceThreshold: number;
   onDeviceThresholdChange: (v: number) => void;
+  // Pause toggle: when true, the Pi keeps streaming spectrogram +
+  // telemetry but skips audio clip recording + upload. Useful on windy
+  // days where mic wind noise would otherwise spam events.
+  devicePaused: boolean;
+  onDevicePausedChange: (v: boolean) => void;
   // Config version reported by the device's most recent Health message.
   // When it matches the version produced by our last PUT, we know the
   // device has applied the change; until then we render "Pending…".
@@ -79,6 +84,8 @@ export function SettingsDialog({
   deviceId,
   deviceThreshold,
   onDeviceThresholdChange,
+  devicePaused,
+  onDevicePausedChange,
   appliedConfigVersion,
 }: SettingsDialogProps) {
   const tweaks = useTweaks();
@@ -134,6 +141,21 @@ export function SettingsDialog({
           setPendingPut(false);
         });
     }, PUT_DEBOUNCE_MS);
+  };
+
+  // Pause is binary, so we fire the PUT immediately rather than debouncing.
+  // The optimistic local update keeps the checkbox snappy even before the
+  // device's next Health message confirms the change.
+  const handlePauseChange = (v: boolean) => {
+    onDevicePausedChange(v);
+    if (!deviceId) return;
+    setPutError(null);
+    setPendingPut(true);
+    putRuntimeConfig(deviceId, { paused: v })
+      .catch((e: Error) => {
+        setPutError(e.message);
+        setPendingPut(false);
+      });
   };
 
   return (
@@ -274,6 +296,32 @@ export function SettingsDialog({
           </section>
 
           <section>
+            <SectionHead label="Pause audio recording"
+              hint="Skip recording and uploading audio clips on this device. Spectrogram and live levels are unaffected — use this on very windy days when wind noise would otherwise spam events."
+              value={devicePaused ? 'ON' : 'OFF'} />
+            <label style={{
+              marginTop: 10,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+              cursor: deviceId ? 'pointer' : 'not-allowed',
+              opacity: deviceId ? 1 : 0.5,
+              fontSize: 12, color: 'var(--ink-1)',
+            }}>
+              <input
+                type="checkbox"
+                checked={devicePaused}
+                disabled={!deviceId}
+                onChange={(e) => handlePauseChange(e.target.checked)}
+                style={{ cursor: deviceId ? 'pointer' : 'not-allowed' }}
+              />
+              <span>Pause audio clip recording (keep spectrogram + telemetry)</span>
+            </label>
+          </section>
+
+          <section>
             <SectionHead label="Anomaly sensitivity"
               hint="Lower z-score surfaces more events; higher is stricter."
               value={`z ≥ ${tweaks.anomalySensitivity.toFixed(1)}`} />
@@ -295,6 +343,30 @@ export function SettingsDialog({
                 ))}
               </div>
             </div>
+          </section>
+
+          <section>
+            <SectionHead label="Clip auto-play"
+              hint="Start playback automatically when an event is selected from the list."
+              value={tweaks.clipAutoPlay ? 'ON' : 'OFF'} />
+            <label style={{
+              marginTop: 10,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 12, color: 'var(--ink-1)',
+            }}>
+              <input
+                type="checkbox"
+                checked={tweaks.clipAutoPlay}
+                onChange={(e) => update({ clipAutoPlay: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              <span>Auto-play clips on selection</span>
+            </label>
           </section>
         </div>
 

@@ -170,3 +170,32 @@ def test_apply_config_empty_args_noop(
     _run(sup._apply_config_command({}))
     assert sup.cfg.config_version == before
     assert sup.detector.threshold_db == 80.0
+
+
+def test_apply_config_paused_persists_and_propagates(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sup = _make_supervisor(tmp_path, monkeypatch)
+    assert sup.cfg.paused is False
+    before_version = sup.cfg.config_version
+
+    _run(sup._apply_config_command({"paused": True}))
+
+    assert sup.cfg.paused is True
+    assert sup.cfg.config_version != before_version
+    # Detector untouched: paused only gates downstream event materialisation.
+    assert sup.detector.threshold_db == 80.0
+
+    _run(sup._apply_config_command({"paused": False}))
+    assert sup.cfg.paused is False
+
+
+def test_apply_config_paused_rejects_non_boolean(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sup = _make_supervisor(tmp_path, monkeypatch)
+    # Strings, ints, and other truthy values must not flip paused — the
+    # backend always sends a real bool, so anything else is a wire bug.
+    for bad in ("true", 1, "yes", None):
+        _run(sup._apply_config_command({"paused": bad}))
+        assert sup.cfg.paused is False

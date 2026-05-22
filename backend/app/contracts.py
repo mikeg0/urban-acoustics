@@ -114,7 +114,7 @@ class LastWill(_Strict):
     ts: UnixTs
 
 
-CommandName = Literal["rotate-cert", "config", "reboot"]
+CommandName = Literal["rotate-cert", "config", "reboot", "led"]
 
 
 class CommandEnvelope(_Strict):
@@ -198,8 +198,22 @@ class EventResponse(BaseModel):
     classification: str | None = None
     confidence: float | None = None
     model_version: str | None = None
+    label: str | None = None
     playback_url: str | None = None
     playback_url_expires_at: UnixTs | None = None
+
+
+class EventIndexEntry(BaseModel):
+    ts: UnixTs
+    duration_s: float
+    labeled: bool = False
+
+
+class EventIndexResponse(BaseModel):
+    device_id: UUID | None = None
+    from_ts: UnixTs | None = None
+    to_ts: UnixTs | None = None
+    events: list[EventIndexEntry]
 
 
 # --- REST: telemetry read ----------------------------------------------------
@@ -395,12 +409,18 @@ class SourcesResponse(BaseModel):
 EventLabel = Literal[
     "motorcycle",
     "car",
+    "truck",
     "construction",
     "helicopter",
     "airplane",
     "siren",
+    "horn",
     "dog",
     "voice",
+    "trash pickup",
+    "wind",
+    "rain",
+    "thunder",
     "other",
 ]
 

@@ -50,12 +50,18 @@ const SOURCE_COLORS: readonly string[] = [
 const SOURCE_LABELS: Record<string, string> = {
   motorcycle: 'Motorcycles',
   car: 'Cars',
+  truck: 'Trucks',
   construction: 'Construction',
   helicopter: 'Helicopters',
   airplane: 'Airplanes',
   siren: 'Sirens',
+  horn: 'Horns',
   dog: 'Dog',
   voice: 'Voice',
+  'trash pickup': 'Trash pickup',
+  wind: 'Wind',
+  rain: 'Rain',
+  thunder: 'Thunder',
   other: 'Other',
 };
 

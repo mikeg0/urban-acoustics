@@ -3,7 +3,7 @@ import FFT from 'fft.js';
 import { mulberry32, normDb } from './utils';
 import { PALETTES, type PaletteKey } from './palettes';
 import { BAND_CENTERS_HZ, SPECTROGRAM_N_BANDS } from './types';
-import type { Day, SpectrogramHistoryResponse } from './types';
+import type { Day, EventIndexEntry, SpectrogramHistoryResponse } from './types';
 import {
   fetchSpectrogramHistory24h,
   fetchSpectrogramTile,
@@ -634,6 +634,7 @@ interface HistoryRibbon24hProps {
   height?: number;
   selectedHourTs?: number | null;
   onHourClick?: (hourTs: number) => void;
+  events?: EventIndexEntry[];
 }
 
 export function HistoryRibbon24h({
@@ -642,6 +643,7 @@ export function HistoryRibbon24h({
   height = 64,
   selectedHourTs = null,
   onHourClick,
+  events,
 }: HistoryRibbon24hProps) {
   const [manifest, setManifest] = useState<SpectrogramHistoryResponse | null>(null);
   const [currentTick, setCurrentTick] = useState(0);
@@ -702,6 +704,12 @@ export function HistoryRibbon24h({
         const hourLabel = new Date(ref.hour * 1000).toLocaleString('en-US', {
           hour: '2-digit', minute: '2-digit', hour12: false,
         });
+        const hourEvents = events
+          ? events.filter((e) => {
+              const endTs = e.ts + e.duration_s;
+              return endTs > ref.hour && e.ts < ref.hour + 3600;
+            })
+          : [];
         return (
           <button
             key={ref.hour}
@@ -722,6 +730,39 @@ export function HistoryRibbon24h({
               // their `useEffect` doesn't re-run — they stay rendered.
               refreshKey={i === lastIdx ? currentTick : 0}
             />
+            {hourEvents.length > 0 && (
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  pointerEvents: 'none',
+                  overflow: 'hidden',
+                }}
+              >
+                {hourEvents.map((e) => {
+                  const startInHour = Math.max(0, e.ts - ref.hour);
+                  const endInHour = Math.min(3600, e.ts + e.duration_s - ref.hour);
+                  const leftPct = (startInHour / 3600) * 100;
+                  const widthPct = ((endInHour - startInHour) / 3600) * 100;
+                  const hue = e.labeled ? '82% 0.14 160' : '88% 0.16 80';
+                  return (
+                    <div
+                      key={e.ts}
+                      style={{
+                        position: 'absolute',
+                        left: `${leftPct}%`,
+                        width: `max(1px, ${widthPct}%)`,
+                        top: 0,
+                        bottom: 0,
+                        background: `oklch(${hue} / 0.55)`,
+                        boxShadow: `0 0 3px oklch(${hue} / 0.7)`,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </button>
         );
       })}
@@ -790,6 +831,41 @@ export function RealHourTile({
         rows={TILE_ROWS_DEFAULT}
         cols={TILE_COLS_DEFAULT}
         refreshKey={0}
+      />
+    </div>
+  );
+}
+
+/** Single-hour spectrogram positioned to fill its `position: relative` parent.
+ *
+ *  Used as the visual backdrop under the Hour playback breach timeline so the
+ *  event bands are anchored against the actual frequency content of the hour.
+ *  Pointer events are disabled so the bands above remain clickable. */
+export function HourTileBackdrop({
+  deviceId,
+  hourTs,
+  palette = 'heat',
+  refreshKey = 0,
+}: {
+  deviceId: string;
+  hourTs: number;
+  palette?: PaletteKey;
+  refreshKey?: number;
+}) {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      display: 'flex',
+      pointerEvents: 'none',
+    }}>
+      <HistoryTile
+        url={spectrogramTileUrl(deviceId, hourTs)}
+        palette={palette}
+        minDb={TILE_DB_MIN_DEFAULT}
+        maxDb={TILE_DB_MAX_DEFAULT}
+        rows={TILE_ROWS_DEFAULT}
+        cols={TILE_COLS_DEFAULT}
+        refreshKey={refreshKey}
       />
     </div>
   );

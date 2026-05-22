@@ -8,7 +8,7 @@ Wants=network-online.target sound.target
 Type=simple
 User=urban-acoustics
 Group=urban-acoustics
-SupplementaryGroups=audio
+SupplementaryGroups=audio gpio
 
 # Audio stack often needs a beat after boot before the I2S card is usable.
 ExecStartPre=/bin/sleep 5
@@ -38,7 +38,9 @@ ProtectSystem=strict
 # /var/lib/urban-acoustics holds: SQLite queue, spooled FLAC events, and the
 # cloud-pushed config overlay (config-overrides.json). /etc/urban-acoustics
 # stays read-only — bootstrap config lives there and is never mutated.
-ReadWritePaths=/var/lib/urban-acoustics
+# /sys/class/gpio is the sysfs surface used by the identify-LED command;
+# ReadWritePaths punches a hole through ProtectKernelTunables for it only.
+ReadWritePaths=/var/lib/urban-acoustics /sys/class/gpio
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true

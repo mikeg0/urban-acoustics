@@ -47,8 +47,6 @@ const VITE_DEVICE_ID = import.meta.env.VITE_DEVICE_ID;
 const VITE_DEMO_MODE = import.meta.env.VITE_DEMO_MODE;
 const REAL_MODE = VITE_DEMO_MODE === 'false' && !!VITE_DEVICE_ID;
 
-type FlowKey = 'breadcrumb' | 'stacked' | 'zoom';
-
 type PageKey = 'live' | 'dashboard' | 'health';
 
 function TopBar({
@@ -138,7 +136,7 @@ function TopBar({
   );
 }
 
-function NowCard({ palette }: { palette: keyof typeof PALETTES }) {
+function NowCard({ palette, onOpenLive }: { palette: keyof typeof PALETTES; onOpenLive: () => void }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const i = setInterval(() => setTick((x) => x + 1), 1500);
@@ -156,7 +154,14 @@ function NowCard({ palette }: { palette: keyof typeof PALETTES }) {
           </div>
           <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>dB(A) · L<sub>eq,1min</sub></div>
         </div>
-        <div style={{ flex: 1, height: 70, borderRadius: 4, overflow: 'hidden' }}>
+        <div
+          onClick={onOpenLive}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLive(); } }}
+          title="Open Live view"
+          style={{ flex: 1, height: 70, borderRadius: 4, overflow: 'hidden', cursor: 'pointer' }}
+        >
           <SpectrogramCanvas data={data} palette={palette} height={70} />
         </div>
       </div>
@@ -169,7 +174,7 @@ const NOW_CARD_WINDOW_S = 15 * 60;
 // (~12 Hz) so each column is wide enough to read at the smaller height.
 const NOW_CARD_SPECT_FRAMES = 240;
 
-function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: number }) {
+function RealNowCard({ deviceId, threshold, onOpenLive }: { deviceId: string; threshold: number; onOpenLive: () => void }) {
   const { spectroColor } = useTweaks();
   const [lastTick, setLastTick] = useState<{ ts: number; laeq: number } | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
@@ -247,7 +252,14 @@ function RealNowCard({ deviceId, threshold }: { deviceId: string; threshold: num
               : 'no data'}
           </div>
         </div>
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div
+          onClick={onOpenLive}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLive(); } }}
+          title="Open Live view"
+          style={{ flex: 1, position: 'relative', cursor: 'pointer' }}
+        >
           <LiveSpectrogram
             ring={spectRing}
             palette={spectroColor}
@@ -328,32 +340,77 @@ interface DrillProps {
   deviceId?: string | null;
 }
 
-function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, yearDays, deviceId = null }: DrillProps) {
+function DrillFlow({ state, setState, threshold, palette, months, yearDays, deviceId = null }: DrillProps) {
   const { month, dayKey, hour } = state;
-  const monthObj = month != null ? months[month] : null;
+  const monthObj = month != null ? months.find((m) => m.index === month) ?? null : null;
   const dayObj = dayKey ? yearDays.find((d) => d.key === dayKey) ?? null : null;
+  const level = month == null ? 0 : !dayKey ? 1 : hour == null ? 2 : 3;
+  const [animKey, setAnimKey] = useState(0);
+  useEffect(() => { setAnimKey((k) => k + 1); }, [level]);
+
+  const yearLabel = (() => {
+    if (monthObj && monthObj.days.length > 0) {
+      return monthObj.days[monthObj.days.length - 1].date.slice(0, 4);
+    }
+    if (yearDays.length === 0) return String(new Date().getFullYear());
+    const first = yearDays[0].date.slice(0, 4);
+    const last = yearDays[yearDays.length - 1].date.slice(0, 4);
+    return first === last ? first : `${first}/${last.slice(2)}`;
+  })();
 
   const crumbs = [
-    { label: '2025', upper: true, mono: true },
+    { label: yearLabel, upper: true, mono: true },
     { label: monthObj ? monthObj.name : '—', upper: true },
     { label: dayObj ? new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—', mono: true },
     { label: hour != null ? `${String(hour).padStart(2, '0')}:00` : '—', mono: true },
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Crumb items={crumbs} onNav={(i) => {
-          if (i === 0) setState({ month: null, dayKey: null, hour: null });
-          else if (i === 1) setState({ ...state, dayKey: null, hour: null });
-          else if (i === 2) setState({ ...state, hour: null });
-        }} />
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-          {month == null ? 'Year' : !dayKey ? 'Month' : hour == null ? 'Day' : 'Hour · Timeline'}
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {(['YEAR', 'MONTH', 'DAY', 'HOUR'] as const).map((lbl, i) => (
+          <Fragment key={i}>
+            <div
+              onClick={() => {
+                if (i === 0) setState({ month: null, dayKey: null, hour: null });
+                if (i === 1 && month != null) setState({ ...state, dayKey: null, hour: null });
+                if (i === 2 && dayKey) setState({ ...state, hour: null });
+              }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 4,
+                fontSize: 10,
+                letterSpacing: '0.12em',
+                fontFamily: 'var(--mono)',
+                background: i === level ? 'var(--neon-focus)' : i < level ? 'var(--bg-3)' : 'var(--bg-2)',
+                color: i === level ? '#0a0a0a' : i < level ? 'var(--ink-0)' : 'var(--ink-3)',
+                cursor: i <= level ? 'pointer' : 'default',
+                border: '1px solid var(--line)',
+                transition: 'all 200ms',
+              }}
+            >
+              {lbl}
+            </div>
+            {i < 3 && <div style={{ flex: i < level ? 0.2 : 1, height: 1, background: i < level ? 'var(--neon-focus)' : 'var(--line)', transition: 'all 300ms' }} />}
+          </Fragment>
+        ))}
       </div>
+      <div key={animKey} style={{
+        flex: 1, minHeight: 0, overflow: 'auto',
+        animation: 'zoom-in 380ms cubic-bezier(.2,.8,.2,1)',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Crumb items={crumbs} onNav={(i) => {
+            if (i === 0) setState({ month: null, dayKey: null, hour: null });
+            else if (i === 1) setState({ ...state, dayKey: null, hour: null });
+            else if (i === 2) setState({ ...state, hour: null });
+          }} />
+          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            {month == null ? 'Year' : !dayKey ? 'Month' : hour == null ? 'Day' : 'Hour · Timeline'}
+          </div>
+        </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {month == null && (
           <div>
             <YearView months={months} threshold={threshold}
@@ -364,8 +421,9 @@ function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, year
           </div>
         )}
         {month != null && !dayKey && monthObj && (
-          <MonthView month={monthObj} threshold={threshold}
-            onPick={(d) => setState({ ...state, dayKey: d.key })} />
+          <MonthView month={monthObj} months={months} threshold={threshold}
+            onPick={(d) => setState({ ...state, dayKey: d.key })}
+            onPickMonth={(m) => setState({ ...state, month: m, dayKey: null, hour: null })} />
         )}
         {dayObj && hour == null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -414,112 +472,6 @@ function DrillFlowBreadcrumb({ state, setState, threshold, palette, months, year
   );
 }
 
-function DrillFlowStacked(props: DrillProps) {
-  const { state, setState, threshold, palette, months, yearDays, deviceId = null } = props;
-  const { month, dayKey, hour } = state;
-  const monthObj = month != null ? months[month] : null;
-  const dayObj = dayKey ? yearDays.find((d) => d.key === dayKey) ?? null : null;
-
-  const Section = ({ title, right, children, depth }: { title: string; right?: React.ReactNode; children?: React.ReactNode; depth: 0 | 1 | 2 | 3 }) => (
-    <div style={{
-      borderLeft: `2px solid ${depth === 0 ? 'var(--line)' : depth === 1 ? 'oklch(45% 0.04 180)' : depth === 2 ? 'oklch(55% 0.08 200)' : 'var(--neon-focus)'}`,
-      paddingLeft: 14,
-      marginBottom: 14,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <div className="mono" style={{ fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>{title}</div>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
-
-  return (
-    <div style={{ height: '100%', overflow: 'auto' }}>
-      <Section title="YEAR · 2025" depth={0}
-        right={<span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>pick a month ↓</span>}>
-        <YearView months={months} threshold={threshold}
-          onPick={(m) => setState({ ...state, month: m, dayKey: null, hour: null })} selectedMonth={month} />
-        <YearHeatmap days={yearDays} threshold={threshold} selectedDay={dayKey}
-          onPickDay={(d) => setState({ ...state, month: new Date(d.date + 'T00:00:00').getMonth(), dayKey: d.key, hour: null })} />
-      </Section>
-      {monthObj && (
-        <Section title={`MONTH · ${monthObj.name}`} depth={1}
-          right={<span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>pick a day ↓</span>}>
-          <MonthView month={monthObj} threshold={threshold}
-            onPick={(d) => setState({ ...state, dayKey: d.key, hour: null })} selectedDay={dayKey} />
-        </Section>
-      )}
-      {dayObj && (
-        <Section title={`DAY · ${new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`}
-          depth={2}
-          right={<span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>pick an hour ↓</span>}>
-          <DayView day={dayObj} threshold={threshold}
-            onPickHour={(h) => setState({ ...state, hour: h })} selectedHour={hour} />
-          <div style={{ marginTop: 12 }}>
-            <TimelineSpectrogram day={dayObj} palette={palette} threshold={threshold} hourFocus={hour}
-              showBars onHourClick={(h) => setState({ ...state, hour: h })} deviceId={deviceId} />
-          </div>
-        </Section>
-      )}
-      {dayObj && hour != null && (
-        <Section title={`HOUR · ${String(hour).padStart(2, '0')}:00–${String((hour + 1) % 24).padStart(2, '0')}:00 · SPECTROGRAM`}
-          depth={3}
-          right={<span className="mono" style={{ fontSize: 10, color: 'var(--neon-focus)' }}>deepest level</span>}>
-          <HourView day={dayObj} hour={hour} palette={palette} threshold={threshold} deviceId={deviceId} />
-        </Section>
-      )}
-    </div>
-  );
-}
-
-function DrillFlowZoom(props: DrillProps) {
-  const { state, setState } = props;
-  const { month, dayKey, hour } = state;
-  const level = month == null ? 0 : !dayKey ? 1 : hour == null ? 2 : 3;
-  const [animKey, setAnimKey] = useState(0);
-  useEffect(() => { setAnimKey((k) => k + 1); }, [level]);
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {(['YEAR', 'MONTH', 'DAY', 'HOUR'] as const).map((lbl, i) => (
-          <Fragment key={i}>
-            <div
-              onClick={() => {
-                if (i === 0) setState({ month: null, dayKey: null, hour: null });
-                if (i === 1 && month != null) setState({ ...state, dayKey: null, hour: null });
-                if (i === 2 && dayKey) setState({ ...state, hour: null });
-              }}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 4,
-                fontSize: 10,
-                letterSpacing: '0.12em',
-                fontFamily: 'var(--mono)',
-                background: i === level ? 'var(--neon-focus)' : i < level ? 'var(--bg-3)' : 'var(--bg-2)',
-                color: i === level ? '#0a0a0a' : i < level ? 'var(--ink-0)' : 'var(--ink-3)',
-                cursor: i <= level ? 'pointer' : 'default',
-                border: '1px solid var(--line)',
-                transition: 'all 200ms',
-              }}
-            >
-              {lbl}
-            </div>
-            {i < 3 && <div style={{ flex: i < level ? 0.2 : 1, height: 1, background: i < level ? 'var(--neon-focus)' : 'var(--line)', transition: 'all 300ms' }} />}
-          </Fragment>
-        ))}
-      </div>
-      <div key={animKey} style={{
-        flex: 1, minHeight: 0, overflow: 'auto',
-        animation: 'zoom-in 380ms cubic-bezier(.2,.8,.2,1)',
-      }}>
-        <DrillFlowBreadcrumb {...props} />
-      </div>
-    </div>
-  );
-}
-
 export function App() {
   return <DashboardApp deviceId={REAL_MODE ? VITE_DEVICE_ID : null} />;
 }
@@ -551,6 +503,7 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
   // to /api/v1/devices/{id}/runtime-config. We keep the variable name
   // ``dbThreshold`` so the ~20 consumers below stay untouched.
   const [dbThreshold, setDbThreshold] = useState<number>(DEFAULT_DB_THRESHOLD);
+  const [devicePaused, setDevicePaused] = useState<boolean>(false);
   const [appliedConfigVersion, setAppliedConfigVersion] = useState<string | null>(null);
   useEffect(() => {
     if (!deviceId) return;
@@ -559,6 +512,7 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
       .then((r) => {
         if (cancelled) return;
         if (r.event_threshold_db !== null) setDbThreshold(r.event_threshold_db);
+        setDevicePaused(r.paused);
         setAppliedConfigVersion(r.applied_config_version);
       })
       .catch(() => { /* keep default; UI still renders */ });
@@ -623,9 +577,6 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
     } catch { return { month: null, dayKey: null, hour: null }; }
   });
   useEffect(() => { try { localStorage.setItem('drillState', JSON.stringify(drillState)); } catch { /* ignore */ } }, [drillState]);
-
-  const [flow, setFlow] = useState<FlowKey>(() => (localStorage.getItem('drillFlow') as FlowKey) || 'breadcrumb');
-  useEffect(() => { try { localStorage.setItem('drillFlow', flow); } catch { /* ignore */ } }, [flow]);
 
   const [page, setPage] = useState<PageKey>(() => {
     const saved = localStorage.getItem('page');
@@ -701,7 +652,6 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
   const sources: Source[] = deviceId
     ? (realSources ?? [])
     : (bundle?.sources ?? []);
-  const DrillComp = flow === 'breadcrumb' ? DrillFlowBreadcrumb : flow === 'stacked' ? DrillFlowStacked : DrillFlowZoom;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -739,8 +689,8 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
               {deviceId
-                ? <RealNowCard deviceId={deviceId} threshold={dbThreshold} />
-                : <NowCard palette={spectroColor} />}
+                ? <RealNowCard deviceId={deviceId} threshold={dbThreshold} onOpenLive={() => setPage('live')} />
+                : <NowCard palette={spectroColor} onOpenLive={() => setPage('live')} />}
               <Card
                 title="ANOMALIES FEED"
                 subtitle={`${visibleAnomalies.length} events · past 365 days`}
@@ -754,28 +704,8 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
               </Card>
             </div>
 
-            <Card
-              title="DRILL · YEAR → HOUR → SPECTROGRAM"
-              right={
-                <div style={{ display: 'flex', gap: 4 }}>
-                  {([['breadcrumb', 'Crumbs'], ['stacked', 'Stacked'], ['zoom', 'Zoom']] as const).map(([k, lbl]) => (
-                    <div key={k} onClick={() => setFlow(k)} style={{
-                      padding: '3px 8px',
-                      fontSize: 10,
-                      fontFamily: 'var(--mono)',
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase',
-                      background: flow === k ? 'var(--bg-3)' : 'var(--bg-2)',
-                      border: `1px solid ${flow === k ? 'var(--line-strong)' : 'var(--line)'}`,
-                      borderRadius: 4,
-                      color: flow === k ? 'var(--ink-0)' : 'var(--ink-2)',
-                      cursor: 'pointer',
-                    }}>{lbl}</div>
-                  ))}
-                </div>
-              }
-            >
-              <DrillComp state={drillState} setState={setDrillState} threshold={dbThreshold}
+            <Card title="DRILL · YEAR → HOUR → SPECTROGRAM">
+              <DrillFlow state={drillState} setState={setDrillState} threshold={dbThreshold}
                 palette={spectroColor} months={months} yearDays={days} deviceId={deviceId} />
             </Card>
 
@@ -788,7 +718,7 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
                 </div>
               </Card>
 
-              <Card title="PEAK HOURS" subtitle="mean dB by hour-of-day · 2025" padding={14}>
+              <Card title="PEAK HOURS" subtitle="mean dB by hour-of-day · past 365 days" padding={14}>
                 <PeakHoursChart hours={peakHours} />
               </Card>
 
@@ -841,6 +771,8 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
         deviceId={deviceId}
         deviceThreshold={dbThreshold}
         onDeviceThresholdChange={setDbThreshold}
+        devicePaused={devicePaused}
+        onDevicePausedChange={setDevicePaused}
         appliedConfigVersion={appliedConfigVersion}
       />
     </div>

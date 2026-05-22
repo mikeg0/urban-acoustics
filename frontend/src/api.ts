@@ -6,6 +6,7 @@ import type {
   DeviceInfo,
   DeviceRuntimeConfig,
   DeviceRuntimeConfigUpdate,
+  EventIndexResponse,
   EventLabel,
   ForecastResponse,
   HealthReadResponse,
@@ -79,6 +80,20 @@ export const putRuntimeConfig = (
     body,
   );
 
+// Switch the device LED between `auto` (follows breach), `on`, or `off`.
+// The backend doesn't persist this — the dashboard tracks the intended
+// mode locally. On a Pi restart the mode defaults to `auto`.
+export type LedMode = 'auto' | 'on' | 'off';
+
+export const putLedMode = (
+  deviceId: string,
+  mode: LedMode,
+): Promise<{ device_id: string; mode: LedMode }> =>
+  putJson<{ device_id: string; mode: LedMode }>(
+    `/api/v1/devices/${deviceId}/led`,
+    { mode },
+  );
+
 export const fetchTelemetry = (
   deviceId: string,
   fromTs: number,
@@ -122,9 +137,6 @@ export const fetchHealth = (
     `/api/v1/devices/${deviceId}/health?from=${fromTs}&to=${toTs}&res=${res}`,
   );
 
-export const fetchEvents = (deviceId: string, limit = 50): Promise<DeviceEvent[]> =>
-  getJson<DeviceEvent[]>(`/api/v1/events?device_id=${deviceId}&limit=${limit}`);
-
 export const fetchEventsInRange = (
   deviceId: string,
   fromTs: number,
@@ -136,8 +148,28 @@ export const fetchEventsInRange = (
       `&from=${fromTs}&to=${toTs}`,
   );
 
+// Lightweight `(ts, duration_s)` listing for visual indicators (e.g. event
+// bands on the 24h ribbon). Strips labels / playback URLs / UUIDs so the
+// limit can safely go much higher than fetchEventsInRange.
+export const fetchEventIndex = (
+  deviceId: string,
+  fromTs: number,
+  toTs: number,
+  limit = 5000,
+): Promise<EventIndexResponse> =>
+  getJson<EventIndexResponse>(
+    `/api/v1/events/index?device_id=${deviceId}&limit=${limit}` +
+      `&from=${fromTs}&to=${toTs}`,
+  );
+
 export const fetchEventPlaybackUrl = (eventId: string): Promise<PlaybackUrl> =>
   getJson<PlaybackUrl>(`/api/v1/events/${eventId}/playback-url`);
+
+export const deleteEvent = async (eventId: string): Promise<void> => {
+  const url = `/api/v1/events/${eventId}`;
+  const r = await fetch(url, { method: 'DELETE' });
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+};
 
 export const submitEventLabel = (
   eventId: string,

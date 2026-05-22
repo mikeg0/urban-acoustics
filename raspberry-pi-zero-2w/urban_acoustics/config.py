@@ -33,7 +33,7 @@ DEFAULT_OVERLAY_PATH = DEFAULT_DATA_DIR / "config-overrides.json"
 # else in the bootstrap config is identity/calibration/transport — flipping
 # those over MQTT is out of scope for v1. Adding to this set is the only
 # change required to let the dashboard tune additional knobs later.
-MUTABLE_FIELDS: frozenset[str] = frozenset({"event_threshold_db"})
+MUTABLE_FIELDS: frozenset[str] = frozenset({"event_threshold_db", "paused"})
 
 
 @dataclass(frozen=True)
@@ -64,6 +64,11 @@ class Config:
     event_pre_roll_s: float = 3.0
     event_post_roll_s: float = 5.0
     event_cooldown_s: float = 10.0        # min gap between events
+    # When true, the supervisor skips event encode + upload entirely.
+    # Spectrogram and 1 Hz telemetry are unaffected. Intended for very
+    # windy days when wind noise would otherwise spam the server with
+    # false events.
+    paused: bool = False
 
     # --- MQTT ---
     mqtt_broker_host: str = "mqtt.urban-acoustics.conexed.com"

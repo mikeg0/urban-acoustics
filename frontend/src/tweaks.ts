@@ -6,6 +6,7 @@ const STORAGE_KEY = 'urban-acoustics:tweaks';
 const DEFAULTS: Tweaks = {
   spectroColor: 'ice',
   anomalySensitivity: 2.9,
+  clipAutoPlay: true,
 };
 
 function load(): Tweaks {

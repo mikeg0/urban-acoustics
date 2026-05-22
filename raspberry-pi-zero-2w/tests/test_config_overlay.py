@@ -103,7 +103,7 @@ def test_mutable_fields_is_narrow() -> None:
     """Regression: if someone widens MUTABLE_FIELDS, the matching
     backend/UI plumbing has to land in the same change. This guard catches
     drift before the device starts honouring fields the cloud can't see."""
-    assert MUTABLE_FIELDS == frozenset({"event_threshold_db"})
+    assert MUTABLE_FIELDS == frozenset({"event_threshold_db", "paused"})
 
 
 # ---- load_config overlay merge ---------------------------------------------

@@ -20,6 +20,7 @@ from . import seed as seed_mod
 from .api.v1 import anomalies as anomalies_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
+from .api.v1 import device_led as device_led_router
 from .api.v1 import device_runtime_config as device_runtime_config_router
 from .api.v1 import devices as devices_router
 from .api.v1 import events as events_router
@@ -157,6 +158,7 @@ app.include_router(sources_router.router, prefix=V1, tags=["sources"])
 app.include_router(
     device_runtime_config_router.router, prefix=V1, tags=["runtime-config"]
 )
+app.include_router(device_led_router.router, prefix=V1, tags=["led"])
 
 # --- legacy /api/health (kept per acceptance criteria) ----------------------
 

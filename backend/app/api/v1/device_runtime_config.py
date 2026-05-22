@@ -7,9 +7,11 @@ publish a retained ``config`` command to ``dev/{id}/cmd/config``, and the Pi
 applies + persists it locally. The retained flag means a Pi that is offline
 right now will converge on next reconnect.
 
-Scope is intentionally narrow in v1: ``event_threshold_db`` only. The JSONB
-column and the whitelist below are structured so adding fields later is
-mechanical — no schema or contract changes required.
+Tunables exposed today: ``event_threshold_db`` and ``paused`` (the latter
+suspends event encode + upload on windy days while leaving spectrogram +
+telemetry untouched). The JSONB column and the whitelist below are
+structured so adding more fields later is mechanical — no schema or
+contract changes required.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +46,9 @@ class RuntimeConfigResponse(BaseModel):
     device_id: UUID
     # ``None`` means "no override — device uses its bootstrap default".
     event_threshold_db: float | None
+    # When true the device skips event encode + upload; spectrogram and
+    # telemetry continue. Defaults to false when no override has been set.
+    paused: bool = False
     # SHA-derived hash from the most recent Health message. Lets the UI show
     # "Applied" once the device's reported version matches the value we
     # pushed; before then the UI displays "Pending…".
@@ -51,11 +56,24 @@ class RuntimeConfigResponse(BaseModel):
 
 
 class RuntimeConfigUpdate(BaseModel):
-    event_threshold_db: float = Field(
+    event_threshold_db: float | None = Field(
+        default=None,
         ge=_THRESHOLD_MIN_DB,
         le=_THRESHOLD_MAX_DB,
         description="LAFmax dB above which the device opens an event",
     )
+    paused: bool | None = Field(
+        default=None,
+        description="Suspend audio clip recording + upload while keeping spectrogram + telemetry live",
+    )
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> "RuntimeConfigUpdate":
+        if self.event_threshold_db is None and self.paused is None:
+            raise ValueError(
+                "at least one of event_threshold_db or paused must be provided"
+            )
+        return self
 
 
 async def _latest_config_version(session: AsyncSession, device_id: UUID) -> str | None:
@@ -86,6 +104,7 @@ async def get_runtime_config(
     return RuntimeConfigResponse(
         device_id=device_id,
         event_threshold_db=float(threshold) if threshold is not None else None,
+        paused=bool(cfg.get("paused", False)),
         applied_config_version=await _latest_config_version(session, device_id),
     )
 
@@ -117,7 +136,10 @@ async def put_runtime_config(
         )
 
     new_cfg = dict(row.runtime_config or {})
-    new_cfg["event_threshold_db"] = float(body.event_threshold_db)
+    if body.event_threshold_db is not None:
+        new_cfg["event_threshold_db"] = float(body.event_threshold_db)
+    if body.paused is not None:
+        new_cfg["paused"] = bool(body.paused)
     row.runtime_config = new_cfg
     # Flag the JSONB mutation so SQLAlchemy treats it as a change. (Mapped
     # dict columns don't auto-detect in-place mutation; replacing the value
@@ -137,14 +159,16 @@ async def put_runtime_config(
 
     await session.commit()
     log.info(
-        "runtime-config: applied event_threshold_db=%.1f for device=%s (user=%s)",
-        body.event_threshold_db,
+        "runtime-config: applied %s for device=%s (user=%s)",
+        {k: new_cfg[k] for k in ("event_threshold_db", "paused") if k in new_cfg},
         device_id,
         user.user_id,
     )
+    threshold = new_cfg.get("event_threshold_db")
     return RuntimeConfigResponse(
         device_id=device_id,
-        event_threshold_db=float(body.event_threshold_db),
+        event_threshold_db=float(threshold) if threshold is not None else None,
+        paused=bool(new_cfg.get("paused", False)),
         applied_config_version=await _latest_config_version(session, device_id),
     )
 

@@ -4,7 +4,7 @@ import { EVENT_LABELS, type DeviceEvent, type EventLabel } from '../types';
 
 interface Props {
   event: DeviceEvent | null;
-  onLabelled?: (label: EventLabel) => void;
+  onLabelled?: (eventId: string, label: EventLabel) => void;
 }
 
 export function LabelPicker({ event, onLabelled }: Props) {
@@ -13,9 +13,9 @@ export function LabelPicker({ event, onLabelled }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setApplied(null);
+    setApplied(event?.label ?? null);
     setError(null);
-  }, [event?.event_id]);
+  }, [event?.event_id, event?.label]);
 
   if (!event) {
     return (
@@ -31,7 +31,7 @@ export function LabelPicker({ event, onLabelled }: Props) {
     try {
       await submitEventLabel(event.event_id, label);
       setApplied(label);
-      onLabelled?.(label);
+      onLabelled?.(event.event_id, label);
     } catch (e) {
       setError((e as Error).message);
     } finally {

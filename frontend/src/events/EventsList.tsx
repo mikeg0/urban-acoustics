@@ -62,7 +62,12 @@ export function EventsList({ events, selectedId, onSelect, threshold }: Props) {
                 {fmtTs(e.ts)}
               </span>
               <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
-                {e.duration_s.toFixed(1)}s · {e.classification ?? 'unclassified'}
+                {e.duration_s.toFixed(1)}s ·{' '}
+                {e.label ? (
+                  <span style={{ color: 'var(--neon-ok)' }}>{e.label}</span>
+                ) : (
+                  e.classification ?? 'unclassified'
+                )}
                 {e.confidence != null ? ` · ${(e.confidence * 100).toFixed(0)}%` : ''}
               </span>
             </div>

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
+  deleteEvent,
   fetchDevice,
-  fetchEvents,
+  fetchEventIndex,
+  fetchEventsInRange,
   fetchSpectrogramHistory,
   fetchTelemetry,
   liveDeviceSocket,
@@ -25,12 +27,21 @@ import type {
   DeviceInfo,
   DeviceLiveMessage,
   DeviceTelemetryPoint,
+  EventIndexEntry,
   Gap,
   LiveMessage,
 } from './types';
 
 const fmtTime = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function fmtHourRange(unixSec: number): string {
+  const start = new Date(unixSec * 1000);
+  const end = new Date((unixSec + 3600) * 1000);
+  return `${pad2(start.getHours())}:${pad2(start.getMinutes())} → ${pad2(end.getHours())}:${pad2(end.getMinutes())}`;
+}
 
 interface LiveSnapshot {
   date: string;
@@ -668,7 +679,19 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
   const [events, setEvents] = useState<DeviceEvent[]>([]);
   const [eventsError, setEventsError] = useState<string | null>(null);
+  // Lightweight (ts, duration_s) listing for the 24h ribbon overlay. Polled
+  // separately from `events` so we can keep that one capped at 50 for the
+  // panel while still drawing every event as a band on the ribbon.
+  const [eventIndex, setEventIndex] = useState<EventIndexEntry[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedHourTs, setSelectedHourTs] = useState<number | null>(null);
+  // Set by clicking an event band on the 60-min ribbon — narrows the events
+  // panel to just that one clip without touching the 24h hour selection.
+  const [bandEventId, setBandEventId] = useState<string | null>(null);
+  const [hourEvents, setHourEvents] = useState<DeviceEvent[] | null>(null);
+  const [hourEventsLoading, setHourEventsLoading] = useState(false);
+  const [hourEventsError, setHourEventsError] = useState<string | null>(null);
+  const [deletingUnlabeled, setDeletingUnlabeled] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const spectRing = useRollingBands(SPECT_MAX_FRAMES);
   const historyRibbon = useHistoryRibbon(HISTORY_WINDOW_S, HISTORY_COLS);
@@ -739,10 +762,12 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     return () => clearInterval(id);
   }, [refreshTelemetry, wsConnected]);
 
-  // Events: poll every 10s.
+  // Events: poll every 10s. Default (unfiltered) view shows up to 50 most-recent
+  // events from the past 24h — older clips only surface via the hour ribbon.
   const refreshEvents = useCallback(async () => {
     try {
-      const r = await fetchEvents(deviceId, 50);
+      const now = Date.now() / 1000;
+      const r = await fetchEventsInRange(deviceId, now - 86400, now, 50);
       setEvents(r);
       setEventsError(null);
     } catch (e) {
@@ -755,6 +780,81 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     const id = setInterval(refreshEvents, EVENT_POLL_MS);
     return () => clearInterval(id);
   }, [refreshEvents]);
+
+  const handleDeleteUnlabeled = useCallback(async () => {
+    if (deletingUnlabeled) return;
+    const targets = (hourEvents ?? []).filter((e) => e.label == null);
+    if (targets.length === 0) return;
+    const ok = window.confirm(
+      `Delete ${targets.length} unlabeled clip${targets.length === 1 ? '' : 's'} ` +
+      `(audio + record) from this hour? This cannot be undone.`,
+    );
+    if (!ok) return;
+    setDeletingUnlabeled(true);
+    const results = await Promise.allSettled(
+      targets.map((e) => deleteEvent(e.event_id)),
+    );
+    const deletedIds = new Set(
+      results
+        .map((r, i) => (r.status === 'fulfilled' ? targets[i].event_id : null))
+        .filter((id): id is string => id != null),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    setEvents((prev) => prev.filter((e) => !deletedIds.has(e.event_id)));
+    setHourEvents((prev) => prev?.filter((e) => !deletedIds.has(e.event_id)) ?? null);
+    setSelectedEventId((prev) => (prev != null && deletedIds.has(prev) ? null : prev));
+    setDeletingUnlabeled(false);
+    refreshEvents();
+    if (failed > 0) {
+      window.alert(`Failed to delete ${failed} clip${failed === 1 ? '' : 's'}.`);
+    }
+  }, [deletingUnlabeled, hourEvents, refreshEvents]);
+
+  // Event index: feeds the 24h ribbon's band overlay. Cheap enough to share
+  // the events poll cadence — failures are silent so a backend hiccup just
+  // freezes the bands instead of showing an error in the events panel.
+  const refreshEventIndex = useCallback(async () => {
+    try {
+      const now = Date.now() / 1000;
+      const r = await fetchEventIndex(deviceId, now - 86400, now);
+      setEventIndex(r.events);
+    } catch {
+      // ignore — bands will simply stop updating
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    refreshEventIndex();
+    const id = setInterval(refreshEventIndex, EVENT_POLL_MS);
+    return () => clearInterval(id);
+  }, [refreshEventIndex]);
+
+  // Hour-scoped events: when the user clicks a tile in the 24h ribbon, swap the
+  // events list to that hour's clips (events older than the recent-50 may not
+  // be in `events`, so a plain filter would miss them).
+  useEffect(() => {
+    if (selectedHourTs == null) {
+      setHourEvents(null);
+      setHourEventsError(null);
+      setHourEventsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setHourEventsLoading(true);
+    setHourEventsError(null);
+    setSelectedEventId(null);
+    fetchEventsInRange(deviceId, selectedHourTs, selectedHourTs + 3600)
+      .then((rows) => {
+        if (cancelled) return;
+        setHourEvents(rows);
+        // Pre-select earliest event so the breach-timeline highlights one.
+        const asc = [...rows].sort((a, b) => a.ts - b.ts);
+        if (asc.length) setSelectedEventId(asc[0].event_id);
+      })
+      .catch((e: Error) => { if (!cancelled) setHourEventsError(e.message); })
+      .finally(() => { if (!cancelled) setHourEventsLoading(false); });
+    return () => { cancelled = true; };
+  }, [deviceId, selectedHourTs]);
 
   // Forward-compatible live WS: tick messages append to telemetry. If the
   // endpoint isn't wired up yet (close on connect), polling still drives the
@@ -811,10 +911,23 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   const breaches = points.filter((p) => p.laeq >= threshold).length;
   const lastSampleAge = lastPoint ? Math.max(0, Date.now() / 1000 - lastPoint.ts) : null;
 
-  const selectedEvent = useMemo(
-    () => events.find((e) => e.event_id === selectedEventId) ?? null,
-    [events, selectedEventId],
+  // Band click takes precedence over the hour filter: it pins the panel to
+  // a single event. If the chosen event has rolled off `events` (poll churn),
+  // fall back to whatever the active filter would otherwise show.
+  const bandEvent = useMemo(
+    () => (bandEventId ? events.find((e) => e.event_id === bandEventId) ?? null : null),
+    [bandEventId, events],
   );
+  const activeEvents = bandEvent ? [bandEvent] : hourEvents ?? events;
+  const selectedEvent = useMemo(
+    () => activeEvents.find((e) => e.event_id === selectedEventId) ?? null,
+    [activeEvents, selectedEventId],
+  );
+  const nextEvent = useMemo(() => {
+    if (!selectedEventId) return null;
+    const i = activeEvents.findIndex((e) => e.event_id === selectedEventId);
+    return i >= 0 && i + 1 < activeEvents.length ? activeEvents[i + 1] : null;
+  }, [activeEvents, selectedEventId]);
 
   return (
     <div style={{
@@ -869,6 +982,28 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
         palette={spectroColor}
         threshold={threshold}
         points={points}
+        recentEvents={events}
+        ribbonEvents={eventIndex}
+        selectedHourTs={selectedHourTs}
+        onHourClick={(h) => {
+          // Hour click clears any band-level event filter — the panel switches
+          // to "events in that hour" instead of "events for this one clip".
+          setBandEventId(null);
+          setSelectedHourTs((prev) => (prev === h ? null : h));
+        }}
+        bandEventId={bandEventId}
+        onBandClick={(id) => {
+          setBandEventId(id);
+          setSelectedEventId(id);
+        }}
+        hourEvents={hourEvents ?? []}
+        hourEventsLoading={hourEventsLoading}
+        hourEventsError={hourEventsError}
+        selectedEventId={selectedEventId}
+        onSelectEvent={setSelectedEventId}
+        onCloseHour={() => setSelectedHourTs(null)}
+        onDeleteUnlabeled={handleDeleteUnlabeled}
+        deletingUnlabeled={deletingUnlabeled}
       />
 
       {telemetryError && (
@@ -888,20 +1023,50 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
           }}>
             <div>
               <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>
-                Recent events
+                {bandEvent ? 'Selected event' : selectedHourTs != null ? 'Hour events' : 'Recent events'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-1)', marginTop: 2 }}>
-                {events.length} event{events.length === 1 ? '' : 's'} · pick one to play & label
+                {bandEvent
+                  ? `Pinned from 60-min timeline · click ✕ to return to ${selectedHourTs != null ? 'hour' : 'recent'} list`
+                  : selectedHourTs != null
+                  ? `${activeEvents.length} event${activeEvents.length === 1 ? '' : 's'} in ${fmtHourRange(selectedHourTs)} · pick one to play & label`
+                  : `${activeEvents.length} event${activeEvents.length === 1 ? '' : 's'} · pick one to play & label`}
               </div>
             </div>
-            {eventsError && (
-              <span className="mono" style={{ fontSize: 10, color: 'var(--neon-hot)' }}>
-                {eventsError}
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {bandEvent && (
+                <button
+                  type="button"
+                  onClick={() => setBandEventId(null)}
+                  style={{
+                    fontSize: 9, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+                    textTransform: 'uppercase', padding: '3px 8px',
+                    background: 'var(--bg-2)', border: '1px solid var(--line)',
+                    color: 'var(--ink-2)', borderRadius: 3, cursor: 'pointer',
+                  }}
+                >✕ Clear event</button>
+              )}
+              {selectedHourTs != null && !bandEvent && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedHourTs(null)}
+                  style={{
+                    fontSize: 9, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+                    textTransform: 'uppercase', padding: '3px 8px',
+                    background: 'var(--bg-2)', border: '1px solid var(--line)',
+                    color: 'var(--ink-2)', borderRadius: 3, cursor: 'pointer',
+                  }}
+                >✕ Clear filter</button>
+              )}
+              {(eventsError || hourEventsError) && (
+                <span className="mono" style={{ fontSize: 10, color: 'var(--neon-hot)' }}>
+                  {hourEventsError ?? eventsError}
+                </span>
+              )}
+            </div>
           </div>
           <EventsList
-            events={events}
+            events={activeEvents}
             selectedId={selectedEventId}
             onSelect={(e) => setSelectedEventId(e.event_id)}
             threshold={threshold}
@@ -913,7 +1078,16 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
               Playback
             </div>
-            <EventPlayer event={selectedEvent} />
+            <EventPlayer
+              event={selectedEvent}
+              onNext={nextEvent ? () => setSelectedEventId(nextEvent.event_id) : undefined}
+              onDeleted={(id) => {
+                setEvents((prev) => prev.filter((e) => e.event_id !== id));
+                setHourEvents((prev) => prev?.filter((e) => e.event_id !== id) ?? null);
+                setSelectedEventId(null);
+                refreshEvents();
+              }}
+            />
           </div>
           <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 14 }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-2)', marginBottom: 8 }}>
@@ -921,7 +1095,24 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
             </div>
             <LabelPicker
               event={selectedEvent}
-              onLabelled={() => { refreshEvents(); }}
+              onLabelled={(eventId, label) => {
+                // Optimistically patch the label across every list that
+                // renders this event so the row text + ribbon band color
+                // flip instantly, without waiting for the next 10s poll.
+                const patch = (e: DeviceEvent) =>
+                  e.event_id === eventId ? { ...e, label } : e;
+                setEvents((prev) => prev.map(patch));
+                setHourEvents((prev) => prev?.map(patch) ?? null);
+                // The 24h ribbon's band overlay is keyed by ts (the index
+                // entries don't carry event_id), so flip `labeled` on the
+                // matching ts.
+                const evTs = (events.find((e) => e.event_id === eventId)
+                  ?? hourEvents?.find((e) => e.event_id === eventId))?.ts;
+                if (evTs != null) {
+                  setEventIndex((prev) =>
+                    prev.map((x) => (x.ts === evTs ? { ...x, labeled: true } : x)));
+                }
+              }}
             />
           </div>
         </div>
@@ -988,6 +1179,10 @@ function DeviceBanner({
 
 function RealLiveSpectrogramPanel({
   deviceId, ring, ribbon, palette, threshold, points,
+  recentEvents, ribbonEvents, bandEventId, onBandClick,
+  selectedHourTs, onHourClick, hourEvents, hourEventsLoading, hourEventsError,
+  selectedEventId, onSelectEvent, onCloseHour,
+  onDeleteUnlabeled, deletingUnlabeled,
 }: {
   deviceId: string;
   ring: ReturnType<typeof useRollingBands>;
@@ -995,8 +1190,21 @@ function RealLiveSpectrogramPanel({
   palette: ReturnType<typeof useTweaks>['spectroColor'];
   threshold: number;
   points: DeviceTelemetryPoint[];
+  recentEvents: DeviceEvent[];
+  ribbonEvents: EventIndexEntry[];
+  bandEventId: string | null;
+  onBandClick: (eventId: string) => void;
+  selectedHourTs: number | null;
+  onHourClick: (hourTs: number) => void;
+  hourEvents: DeviceEvent[];
+  hourEventsLoading: boolean;
+  hourEventsError: string | null;
+  selectedEventId: string | null;
+  onSelectEvent: (id: string) => void;
+  onCloseHour: () => void;
+  onDeleteUnlabeled: () => void;
+  deletingUnlabeled: boolean;
 }) {
-  const [selectedHourTs, setSelectedHourTs] = useState<number | null>(null);
   const [showOverlay, setShowOverlay] = useState(true);
   const waiting = !ring.hasData;
   const ribbonWaiting = !ribbon.hasData;
@@ -1059,6 +1267,13 @@ function RealLiveSpectrogramPanel({
             maxDb={OVERLAY_MAX_DB}
           />
         )}
+        {points.length > 0 && !waiting && (
+          <LiveSpectrogramHoverProbe
+            points={points}
+            currentCol={ring.currentCol}
+            maxFrames={ring.maxFrames}
+          />
+        )}
         {waiting && (
           <div className="mono" style={{
             position: 'absolute', inset: 0,
@@ -1086,6 +1301,13 @@ function RealLiveSpectrogramPanel({
             height={56}
             minDb={20}
             maxDb={110}
+          />
+          <EventBandsOverlay
+            events={recentEvents}
+            ribbon={ribbon}
+            selectedEventId={selectedEventId}
+            bandEventId={bandEventId}
+            onClick={onBandClick}
           />
           {ribbonWaiting && (
             <div className="mono" style={{
@@ -1127,7 +1349,8 @@ function RealLiveSpectrogramPanel({
           palette={palette}
           height={56}
           selectedHourTs={selectedHourTs}
-          onHourClick={(h) => setSelectedHourTs((prev) => (prev === h ? null : h))}
+          onHourClick={onHourClick}
+          events={ribbonEvents}
         />
         <div className="mono" style={{
           display: 'grid',
@@ -1153,12 +1376,89 @@ function RealLiveSpectrogramPanel({
 
       {selectedHourTs != null && (
         <HourPlaybackViewer
-          deviceId={deviceId}
           hourTs={selectedHourTs}
           threshold={threshold}
-          onClose={() => setSelectedHourTs(null)}
+          events={hourEvents}
+          loading={hourEventsLoading}
+          error={hourEventsError}
+          selectedId={selectedEventId}
+          onSelect={onSelectEvent}
+          onClose={onCloseHour}
+          onDeleteUnlabeled={onDeleteUnlabeled}
+          deletingUnlabeled={deletingUnlabeled}
+          deviceId={deviceId}
+          palette={palette}
         />
       )}
+    </div>
+  );
+}
+
+// Clickable bands overlaid on the 60-min history ribbon — one per event in
+// the visible window. Anchored to the ribbon's bucket grid so the bands slide
+// in lockstep with the spectrogram. Events shorter than ~3 buckets render at
+// a 4 px minimum so they stay clickable; the selected band glows hot.
+function EventBandsOverlay({
+  events, ribbon, selectedEventId, bandEventId, onClick,
+}: {
+  events: DeviceEvent[];
+  ribbon: ReturnType<typeof useHistoryRibbon>;
+  selectedEventId: string | null;
+  bandEventId: string | null;
+  onClick: (eventId: string) => void;
+}) {
+  // Right edge of the ribbon = end of the current bucket; left edge follows
+  // from window width. Using the ribbon's own anchor (not Date.now()) keeps
+  // bands aligned with the painted columns even between scroll ticks.
+  const rightEdgeMs = (ribbon.currentCol + 1) * ribbon.bucketMs;
+  const totalMs = ribbon.displayCols * ribbon.bucketMs;
+  const leftEdgeMs = rightEdgeMs - totalMs;
+
+  const visible = events.filter((e) => {
+    const startMs = e.ts * 1000;
+    const endMs = startMs + e.duration_s * 1000;
+    return endMs > leftEdgeMs && startMs < rightEdgeMs;
+  });
+  if (!visible.length) return null;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {visible.map((e) => {
+        const startMs = e.ts * 1000;
+        const xFrac = Math.max(0, (startMs - leftEdgeMs) / totalMs);
+        const widthFrac = Math.min(1 - xFrac, (e.duration_s * 1000) / totalMs);
+        const selected = e.event_id === bandEventId || e.event_id === selectedEventId;
+        const labeled = e.label != null;
+        const ts = new Date(e.ts * 1000);
+        const label = `${e.peak_db.toFixed(1)} dB · ${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())} · ${e.label ?? e.classification ?? 'unclassified'} · click to play`;
+        const baseHue = labeled ? '82% 0.14 160' : '88% 0.16 80';
+        return (
+          <button
+            key={e.event_id}
+            type="button"
+            onClick={() => onClick(e.event_id)}
+            title={label}
+            aria-label={label}
+            style={{
+              position: 'absolute',
+              left: `${xFrac * 100}%`,
+              width: `max(4px, ${widthFrac * 100}%)`,
+              top: -2, bottom: -2,
+              padding: 0,
+              background: selected
+                ? 'oklch(82% 0.18 310 / 0.35)'
+                : `oklch(${baseHue} / 0.18)`,
+              border: `1px solid ${selected ? 'var(--neon-focus)' : `oklch(${baseHue} / 0.75)`}`,
+              borderRadius: 2,
+              cursor: 'pointer',
+              pointerEvents: 'auto',
+              boxShadow: selected
+                ? '0 0 8px oklch(82% 0.18 310 / 0.75)'
+                : `0 0 4px oklch(${baseHue} / 0.45)`,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1282,6 +1582,114 @@ function LiveMetricsOverlay({
         ))}
       </div>
     </>
+  );
+}
+
+/** Transparent capture layer over the live spectrogram. On hover, draws a
+ *  vertical line at the cursor and a tooltip showing LAeq/LAFmax/LCpeak from
+ *  the nearest telemetry point. Uses the same wall-clock → x mapping as
+ *  ``LiveMetricsOverlay`` so the line and the overlay paths stay aligned. */
+function LiveSpectrogramHoverProbe({
+  points, currentCol, maxFrames,
+}: {
+  points: DeviceTelemetryPoint[];
+  currentCol: number;
+  maxFrames: number;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  // Only the cursor position lives in state. The nearest point is recomputed
+  // on every render so the tooltip refreshes as the spectrogram scrolls under
+  // a stationary cursor (parent re-renders at the column-advance cadence).
+  const [xFrac, setXFrac] = useState<number | null>(null);
+
+  const rightEdgeMs = currentCol * SPECTROGRAM_COLUMN_MS;
+  const totalMs = maxFrames * SPECTROGRAM_COLUMN_MS;
+  const leftEdgeMs = rightEdgeMs - totalMs;
+
+  const handleMove = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setXFrac(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+  };
+
+  let point: DeviceTelemetryPoint | null = null;
+  if (xFrac != null && points.length > 0) {
+    const targetSec = (leftEdgeMs + xFrac * totalMs) / 1000;
+    let bestDiff = Infinity;
+    for (const p of points) {
+      const diff = Math.abs(p.ts - targetSec);
+      if (diff < bestDiff) { bestDiff = diff; point = p; }
+    }
+    // Hide tooltip if the nearest point is far from the cursor (gap in data).
+    if (bestDiff > 3) point = null;
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseMove={handleMove}
+      onMouseLeave={() => setXFrac(null)}
+      style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }}
+    >
+      {xFrac != null && point && (
+        <>
+          <div style={{
+            position: 'absolute',
+            left: `${xFrac * 100}%`,
+            top: 0, bottom: 0,
+            width: 0,
+            borderLeft: '1px solid rgba(255,255,255,0.7)',
+            boxShadow: '0 0 4px rgba(255,255,255,0.4)',
+            pointerEvents: 'none',
+          }} />
+          <HoverTooltip xFrac={xFrac} point={point} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function HoverTooltip({ xFrac, point }: { xFrac: number; point: DeviceTelemetryPoint }) {
+  const flip = xFrac > 0.7;
+  const date = new Date(point.ts * 1000);
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+  const rows = [
+    { label: 'LAeq', value: point.laeq, color: LAEQ_STROKE },
+    { label: 'LAFmax', value: point.lafmax, color: LAFMAX_STROKE },
+    { label: 'LCpeak', value: point.lcpeak, color: LCPEAK_STROKE },
+  ].sort((a, b) => b.value - a.value);
+  return (
+    <div
+      className="mono"
+      style={{
+        position: 'absolute',
+        left: `${xFrac * 100}%`,
+        top: 6,
+        transform: flip ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
+        background: 'rgba(8,8,12,0.92)',
+        border: '1px solid var(--line)',
+        borderRadius: 3,
+        padding: '6px 8px',
+        fontSize: 10,
+        color: 'var(--ink-1)',
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+      }}
+    >
+      <div style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 4 }}>
+        {time}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '2px 10px' }}>
+        {rows.map((r) => (
+          <Fragment key={r.label}>
+            <span style={{ color: r.color }}>{r.label}</span>
+            <span style={{ textAlign: 'right' }}>{r.value.toFixed(1)} dB</span>
+          </Fragment>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -200,6 +200,16 @@ class Storage:
 
         await asyncio.to_thread(_put)
 
+    async def delete_object(self, key: str) -> None:
+        """Delete an object. S3 DELETE is idempotent — a missing key is not
+        an error, so the caller can safely invoke this when the storage
+        side may already be gone."""
+
+        def _del() -> None:
+            self._client.delete_object(Bucket=self._settings.S3_BUCKET, Key=key)
+
+        await asyncio.to_thread(_del)
+
 
 def _now_unix() -> float:
     return datetime.now(timezone.utc).timestamp()

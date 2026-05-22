@@ -181,7 +181,9 @@ export function YearView({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <div style={{ fontSize: 12, color: 'var(--ink-2)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{m.short}</div>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>2025</div>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+                {m.days[m.days.length - 1]?.date.slice(0, 4) ?? ''}
+              </div>
             </div>
             <div className="mono" style={{ fontSize: 22, marginTop: 6, color: 'var(--ink-0)', letterSpacing: '-0.02em' }}>
               {m.mean.toFixed(1)}
@@ -208,29 +210,120 @@ export function YearView({
 
 // ---- MONTH view: calendar grid with day cells colored by breach intensity ----
 export function MonthView({
-  month, threshold, onPick, selectedDay,
+  month, months, threshold, onPick, onPickMonth, selectedDay,
 }: {
   month: MonthHydrated;
+  /** All hydrated months in the current dataset — drives the JAN…DEC tab strip
+   *  so the user can pivot without bouncing back to the year view. */
+  months?: MonthHydrated[];
   threshold: number;
   onPick: (d: Day) => void;
+  onPickMonth?: (m: number) => void;
   selectedDay?: string | null;
 }) {
-  const firstDow = new Date(2025, month.index, 1).getDay();
-  const cells: (Day | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  month.days.forEach((d) => cells.push(d));
-  while (cells.length % 7 !== 0) cells.push(null);
+  // `month.days` can span multiple years (the rolling 365-day window puts e.g.
+  // May 2025 + May 2026 into the same month-of-year bucket). Pick the most
+  // recent year present so the calendar grid is unambiguous, and filter days
+  // to that year for the lookup.
+  const years = month.days.map((d) => Number(d.date.slice(0, 4)));
+  const monthYear = years.length ? Math.max(...years) : new Date().getFullYear();
+  const yearDays = month.days.filter((d) => d.date.startsWith(String(monthYear)));
+  const byDayNum = new Map<number, Day>(
+    yearDays.map((d) => [Number(d.date.slice(8, 10)), d]),
+  );
+
+  const firstDow = new Date(monthYear, month.index, 1).getDay();
+  const daysInMonth = new Date(monthYear, month.index + 1, 0).getDate();
+
+  type Cell = { kind: 'pad' } | { kind: 'data'; day: Day } | { kind: 'empty'; dayNum: number };
+  const cells: Cell[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push({ kind: 'pad' });
+  for (let n = 1; n <= daysInMonth; n++) {
+    const d = byDayNum.get(n);
+    cells.push(d ? { kind: 'data', day: d } : { kind: 'empty', dayNum: n });
+  }
+  while (cells.length % 7 !== 0) cells.push({ kind: 'pad' });
+
+  const availableMonths = new Set((months ?? []).map((m) => m.index));
 
   return (
     <div>
+      <div className="mono" style={{
+        fontSize: 11, color: 'var(--ink-2)', letterSpacing: '0.08em',
+        marginBottom: 8,
+      }}>
+        {MONTH_LABELS[month.index]} {monthYear}
+      </div>
+      {onPickMonth && (
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4,
+          marginBottom: 12,
+        }}>
+          {MONTH_LABELS.map((lbl, i) => {
+            const active = i === month.index;
+            const hasData = availableMonths.has(i);
+            return (
+              <button
+                key={i}
+                onClick={() => hasData && onPickMonth(i)}
+                disabled={!hasData}
+                title={hasData ? `${lbl}` : `${lbl} · no data`}
+                style={{
+                  padding: '5px 0',
+                  fontFamily: 'var(--mono)',
+                  fontSize: 10,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  background: active ? 'var(--neon-focus)' : 'var(--bg-2)',
+                  color: active ? '#0a0a0a' : hasData ? 'var(--ink-1)' : 'var(--ink-3)',
+                  border: `1px solid ${active ? 'var(--neon-focus)' : 'var(--line)'}`,
+                  borderRadius: 4,
+                  cursor: hasData && !active ? 'pointer' : 'default',
+                  opacity: hasData ? 1 : 0.4,
+                  transition: 'all 120ms',
+                }}
+              >
+                {lbl.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 6 }}>
         {DOW_LABELS.map((d, i) => (
           <div key={i} className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', textAlign: 'center' }}>{d}</div>
         ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-        {cells.map((d, i) => {
-          if (!d) return <div key={i} style={{ aspectRatio: '1 / 1' }} />;
+        {cells.map((c, i) => {
+          if (c.kind === 'pad') return <div key={i} style={{ aspectRatio: '1 / 1' }} />;
+          if (c.kind === 'empty') {
+            return (
+              <div
+                key={i}
+                title={`${monthYear}-${String(month.index + 1).padStart(2, '0')}-${String(c.dayNum).padStart(2, '0')} · no data`}
+                style={{
+                  aspectRatio: '1 / 1',
+                  background: 'var(--bg-1)',
+                  border: '1px dashed var(--line)',
+                  borderRadius: 4,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  padding: 4,
+                  opacity: 0.55,
+                }}
+              >
+                <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', fontWeight: 500 }}>
+                  {c.dayNum}
+                </div>
+                <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', textAlign: 'right', letterSpacing: '0.08em' }}>
+                  —
+                </div>
+              </div>
+            );
+          }
+          const d = c.day;
           const isSel = selectedDay === d.key;
           const color = dbColor(d.peak, threshold);
           const dayDate = new Date(d.date + 'T00:00:00');
