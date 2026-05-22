@@ -368,6 +368,39 @@ export function SettingsDialog({
               <span>Auto-play clips on selection</span>
             </label>
           </section>
+
+          <section>
+            <SectionHead label="Glossary"
+              hint="The three sound-level metrics shown across the dashboard."
+              value="dB" />
+            <dl style={{
+              marginTop: 10,
+              display: 'flex', flexDirection: 'column', gap: 10,
+              padding: '12px 12px',
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+            }}>
+              <GlossaryEntry term="LAeq">
+                A-weighted <em>equivalent continuous</em> sound level — the energy-average dB(A)
+                over the window, using a frequency weighting that matches how the ear hears
+                loudness. This is the standard "how loud was it overall?" number and what most
+                noise ordinances reference for sustained exposure.
+              </GlossaryEntry>
+              <GlossaryEntry term="LAFmax">
+                Maximum A-weighted level with <em>Fast</em> (125 ms) time-weighting — the loudest
+                short-term reading inside the window. Catches brief events like a car horn or
+                slammed door that an average would smooth away. The dashboard's event threshold
+                is checked against LAFmax.
+              </GlossaryEntry>
+              <GlossaryEntry term="LCpeak">
+                <em>Peak</em> C-weighted sound pressure level — the absolute instantaneous peak
+                of the unsmoothed waveform, with C-weighting (much flatter than A, so low
+                frequencies count). Used to gauge impulsive sounds capable of hearing damage
+                (gunshots, fireworks); OSHA caps it at 140 dB.
+              </GlossaryEntry>
+            </dl>
+          </section>
         </div>
 
         <div style={{
@@ -419,6 +452,20 @@ function SectionHead({ label, hint, value }: { label: string; hint?: string; val
       {hint && (
         <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 3, lineHeight: 1.4 }}>{hint}</div>
       )}
+    </div>
+  );
+}
+
+function GlossaryEntry({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: 12, alignItems: 'baseline' }}>
+      <dt className="mono" style={{
+        fontSize: 11, color: 'var(--neon-cool)',
+        letterSpacing: '0.05em', fontWeight: 600,
+      }}>{term}</dt>
+      <dd style={{ margin: 0, fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+        {children}
+      </dd>
     </div>
   );
 }
