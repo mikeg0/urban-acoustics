@@ -25,6 +25,7 @@ import {
   useRollingBands,
 } from './spectrogram';
 import { useTweaks } from './tweaks';
+import { formatClock, formatHour, formatHourTick, type TimeFormat } from './utils';
 import type {
   DeviceEvent,
   DeviceInfo,
@@ -37,15 +38,22 @@ import type {
   SpectrogramAnnotation,
 } from './types';
 
-const fmtTime = (m: number) =>
-  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+/** Format minutes-since-midnight as HH:MM (24h) or h:mm AM/PM (12h). */
+const fmtTime = (m: number, format: TimeFormat = '24h') => {
+  const h = Math.floor(m / 60) % 24;
+  const mm = String(m % 60).padStart(2, '0');
+  if (format === '12h') {
+    const hh = h % 12 === 0 ? 12 : h % 12;
+    const ap = h < 12 ? 'AM' : 'PM';
+    return `${hh}:${mm} ${ap}`;
+  }
+  return `${String(h).padStart(2, '0')}:${mm}`;
+};
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-function fmtHourRange(unixSec: number): string {
-  const start = new Date(unixSec * 1000);
-  const end = new Date((unixSec + 3600) * 1000);
-  return `${pad2(start.getHours())}:${pad2(start.getMinutes())} → ${pad2(end.getHours())}:${pad2(end.getMinutes())}`;
+function fmtHourRange(unixSec: number, format: TimeFormat): string {
+  return `${formatClock(unixSec, format)} → ${formatClock(unixSec + 3600, format)}`;
 }
 
 interface LiveSnapshot {
@@ -138,6 +146,7 @@ interface LiveViewProps { threshold: number }
 
 export function LiveView({ threshold }: LiveViewProps) {
   const { state, toggle } = useLiveStream(true);
+  const { timeFormat } = useTweaks();
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
   const [actualNow, setActualNow] = useState(0);
 
@@ -193,11 +202,11 @@ export function LiveView({ threshold }: LiveViewProps) {
         <BigLiveStat label="Right now" value={lastDb != null ? lastDb.toFixed(1) : '—'} unit="dB"
           tone={lastDb != null && lastDb >= threshold ? 'hot' : lastDb != null && lastDb >= threshold - 8 ? 'warn' : 'default'}
           pulse={state.streaming} />
-        <BigLiveStat label="Today's peak" value={peak.toFixed(1)} unit={`dB · ${fmtTime(peakIdx >= 0 ? peakIdx : 0)}`} tone="hot" />
+        <BigLiveStat label="Today's peak" value={peak.toFixed(1)} unit={`dB · ${fmtTime(peakIdx >= 0 ? peakIdx : 0, timeFormat)}`} tone="hot" />
         <BigLiveStat label="Today's avg" value={mean.toFixed(1)} unit="dB" />
         <BigLiveStat label="Breach minutes" value={String(breaches)} unit={`min ≥ ${threshold} dB`}
           tone={breaches > 0 ? 'warn' : 'default'} />
-        <BigLiveStat label="Local time" value={fmtTime(actualNow)} unit={state.date} />
+        <BigLiveStat label="Local time" value={fmtTime(actualNow, timeFormat)} unit={state.date} />
       </div>
 
       <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: 16 }}>
@@ -205,7 +214,7 @@ export function LiveView({ threshold }: LiveViewProps) {
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
               <div style={{ fontSize: 13, color: 'var(--ink-0)', fontWeight: 500 }}>
-                {selectedHour == null ? 'Current hour · minute-resolution' : `Hour ${String(selectedHour).padStart(2, '0')}:00 · minute-resolution`}
+                {selectedHour == null ? 'Current hour · minute-resolution' : `Hour ${formatHour(selectedHour, timeFormat)} · minute-resolution`}
               </div>
               {selectedHour != null && (
                 <button
@@ -223,7 +232,7 @@ export function LiveView({ threshold }: LiveViewProps) {
               {(() => {
                 const h = selectedHour != null ? selectedHour : Math.floor(lastStreamMin / 60);
                 const endMin = selectedHour != null ? Math.min(h * 60 + 59, lastStreamMin) : lastStreamMin;
-                return `${state.date} · ${fmtTime(h * 60)} → ${fmtTime(endMin)} · 60-min canvas`;
+                return `${state.date} · ${fmtTime(h * 60, timeFormat)} → ${fmtTime(endMin, timeFormat)} · 60-min canvas`;
               })()}
             </div>
           </div>
@@ -274,7 +283,7 @@ export function LiveView({ threshold }: LiveViewProps) {
                 <div
                   key={i}
                   onClick={() => setSelectedHour(isCurrent ? null : i)}
-                  title={`${String(i).padStart(2, '0')}:00 · avg ${h.mean.toFixed(1)} dB · peak ${h.peak.toFixed(1)} · ${(h.coverage * 100).toFixed(0)}% covered${isCurrent ? ' · CURRENT HOUR' : ' · click to view'}`}
+                  title={`${formatHour(i, timeFormat)} · avg ${h.mean.toFixed(1)} dB · peak ${h.peak.toFixed(1)} · ${(h.coverage * 100).toFixed(0)}% covered${isCurrent ? ' · CURRENT HOUR' : ' · click to view'}`}
                   style={{
                     background: fill,
                     borderRadius: 3,
@@ -306,7 +315,7 @@ export function LiveView({ threshold }: LiveViewProps) {
           </div>
           <div className="mono" style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
             {Array.from({ length: 24 }).map((_, h) => (
-              <div key={h} style={{ textAlign: 'center', opacity: h % 3 === 0 ? 1 : 0.4 }}>{String(h).padStart(2, '0')}</div>
+              <div key={h} style={{ textAlign: 'center', opacity: h % 3 === 0 ? 1 : 0.4 }}>{formatHourTick(h, timeFormat)}</div>
             ))}
           </div>
         </div>
@@ -328,6 +337,7 @@ function StatusBanner({
 }: {
   streaming: boolean; lastStreamMin: number; actualNow: number; coverage: number; onToggle: () => void; date: string;
 }) {
+  const { timeFormat } = useTweaks();
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -357,7 +367,7 @@ function StatusBanner({
         </span>
         {!streaming && (
           <span className="mono" style={{ fontSize: 11, color: 'oklch(85% 0.16 35)' }}>
-            · last sample {fmtTime(lastStreamMin)} · {Math.max(0, actualNow - lastStreamMin)} min ago
+            · last sample {fmtTime(lastStreamMin, timeFormat)} · {Math.max(0, actualNow - lastStreamMin)} min ago
           </span>
         )}
         {date && (
@@ -448,6 +458,7 @@ function GapLog({ gaps, lastStreamMin, actualNow, streaming, totalGapMin }: {
 function GapRow({ start, end, reason, ongoing }: {
   start: number; end: number; reason: string; ongoing?: boolean;
 }) {
+  const { timeFormat } = useTweaks();
   const duration = Math.max(0, end - start);
   return (
     <div style={{
@@ -461,7 +472,7 @@ function GapRow({ start, end, reason, ongoing }: {
       borderLeft: `2px solid ${ongoing ? 'var(--neon-hot)' : 'oklch(60% 0.12 35)'}`,
     }}>
       <span className="mono" style={{ fontSize: 11, color: 'var(--ink-1)' }}>
-        {fmtTime(start)} → {ongoing ? `${fmtTime(end)} (now)` : fmtTime(end)}
+        {fmtTime(start, timeFormat)} → {ongoing ? `${fmtTime(end, timeFormat)} (now)` : fmtTime(end, timeFormat)}
       </span>
       <div style={{ height: 6, background: 'var(--bg-3)', borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
         <div style={{
@@ -530,6 +541,7 @@ function CurrentHourTimeline({
   minutes: (number | null)[]; gaps: Gap[]; nowMin: number; lastStreamMin: number;
   streaming: boolean; threshold: number; selectedHour: number | null;
 }) {
+  const { timeFormat } = useTweaks();
   const isLive = selectedHour == null;
   const hourStart = isLive ? Math.floor(lastStreamMin / 60) * 60 : selectedHour * 60;
   const localLast = isLive
@@ -632,12 +644,12 @@ function CurrentHourTimeline({
           pos={(localLast + 1) / 60}
           color={streaming ? 'var(--neon-cool)' : 'oklch(78% 0.18 35)'}
           label={streaming ? '● LIVE' : '● LAST SAMPLE'}
-          time={fmtTime(lastStreamMin)}
+          time={fmtTime(lastStreamMin, timeFormat)}
           pulse={streaming}
         />
       )}
       {!streaming && isLive && nowMin > lastStreamMin && nowMin < hourStart + 60 && (
-        <Marker pos={(nowMin - hourStart + 1) / 60} color="var(--ink-2)" label="NOW" time={fmtTime(nowMin)} dashed />
+        <Marker pos={(nowMin - hourStart + 1) / 60} color="var(--ink-2)" label="NOW" time={fmtTime(nowMin, timeFormat)} dashed />
       )}
       <div className="mono" style={{
         display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)',
@@ -645,7 +657,7 @@ function CurrentHourTimeline({
       }}>
         {Array.from({ length: 12 }).map((_, i) => (
           <div key={i} style={{ textAlign: i === 0 ? 'left' : i === 11 ? 'right' : 'center' }}>
-            {fmtTime(hourStart + i * 5)}
+            {fmtTime(hourStart + i * 5, timeFormat)}
           </div>
         ))}
       </div>
@@ -677,7 +689,7 @@ interface RealLiveViewProps {
 }
 
 export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
-  const { spectroColor } = useTweaks();
+  const { spectroColor, timeFormat } = useTweaks();
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [points, setPoints] = useState<DeviceTelemetryPoint[]>([]);
@@ -696,6 +708,11 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   const [hourEvents, setHourEvents] = useState<DeviceEvent[] | null>(null);
   const [hourEventsLoading, setHourEventsLoading] = useState(false);
   const [hourEventsError, setHourEventsError] = useState<string | null>(null);
+  // Sort direction for the Recent / Hour events list. Hour view defaults to
+  // ascending (chronological); recent view defaults to descending (newest
+  // first). The auto-default is applied on entry/exit of hour mode below;
+  // the user can override either via the toggle in the panel header.
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [deletingUnlabeled, setDeletingUnlabeled] = useState(false);
   // User-drawn spectrogram annotations for the past 24 h. Polled alongside
   // events so the merged Recent-events feed and the overlays on the 4
@@ -866,6 +883,10 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
   // events list to that hour's clips (events older than the recent-50 may not
   // be in `events`, so a plain filter would miss them).
   useEffect(() => {
+    setSortDir(selectedHourTs != null ? 'asc' : 'desc');
+  }, [selectedHourTs]);
+
+  useEffect(() => {
     if (selectedHourTs == null) {
       setHourEvents(null);
       setHourEventsError(null);
@@ -956,11 +977,6 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     () => activeEvents.find((e) => e.event_id === selectedEventId) ?? null,
     [activeEvents, selectedEventId],
   );
-  const nextEvent = useMemo(() => {
-    if (!selectedEventId) return null;
-    const i = activeEvents.findIndex((e) => e.event_id === selectedEventId);
-    return i >= 0 && i + 1 < activeEvents.length ? activeEvents[i + 1] : null;
-  }, [activeEvents, selectedEventId]);
 
   // Annotations to surface in whichever events scope the user is looking at.
   // Mirror the events filter: a single-band selection hides them; otherwise
@@ -975,9 +991,9 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     return annotations;
   }, [annotations, bandEvent, selectedHourTs]);
 
-  // Merge events + annotations into a single Recent-events feed, sorted by
-  // start time (newest first) so freshly-painted annotations appear at the
-  // top alongside freshly-captured audio events.
+  // Merge events + annotations into a single Recent-events feed. Sort
+  // direction is controlled by `sortDir` (see toggle in the panel header);
+  // it defaults to descending in the Recent view and ascending in Hour view.
   const recentEntries = useMemo<RecentEntry[]>(() => {
     const eventEntries: RecentEntry[] = activeEvents.map((e) => ({ kind: 'event', event: e }));
     const annEntries: RecentEntry[] = activeAnnotations.map((a) => ({
@@ -987,10 +1003,24 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     merged.sort((a, b) => {
       const ats = a.kind === 'event' ? a.event.ts : a.annotation.ts_start;
       const bts = b.kind === 'event' ? b.event.ts : b.annotation.ts_start;
-      return bts - ats;
+      return sortDir === 'asc' ? ats - bts : bts - ats;
     });
     return merged;
-  }, [activeEvents, activeAnnotations]);
+  }, [activeEvents, activeAnnotations, sortDir]);
+
+  // Prev/Next walk the events in the same order they're displayed in the
+  // Recent-events list (annotations are skipped — they have their own
+  // playback surface).
+  const [prevEvent, nextEvent] = useMemo(() => {
+    if (!selectedEventId) return [null, null] as const;
+    const sortedEvents = recentEntries.flatMap((e) => (e.kind === 'event' ? [e.event] : []));
+    const i = sortedEvents.findIndex((e) => e.event_id === selectedEventId);
+    if (i < 0) return [null, null] as const;
+    return [
+      i > 0 ? sortedEvents[i - 1] : null,
+      i + 1 < sortedEvents.length ? sortedEvents[i + 1] : null,
+    ] as const;
+  }, [recentEntries, selectedEventId]);
 
   const selectedAnnotation = useMemo(
     () => annotations.find((a) => a.id === selectedAnnotationId) ?? null,
@@ -1145,13 +1175,30 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
                     ? ` + ${annCount} annotation${annCount === 1 ? '' : 's'}`
                     : '';
                   const scope = selectedHourTs != null
-                    ? ` in ${fmtHourRange(selectedHourTs)}`
+                    ? ` in ${fmtHourRange(selectedHourTs, timeFormat)}`
                     : '';
                   return `${eventPart}${annPart}${scope} · pick one to play & label`;
                 })()}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {!bandEvent && (
+                <button
+                  type="button"
+                  onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                  title={`Sort ${sortDir === 'asc' ? 'ascending (oldest → newest)' : 'descending (newest → oldest)'} · click to flip`}
+                  style={{
+                    fontSize: 9, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+                    textTransform: 'uppercase', padding: '3px 8px',
+                    background: 'var(--bg-2)', border: '1px solid var(--line)',
+                    color: 'var(--ink-2)', borderRadius: 3, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <span>Sort {sortDir === 'asc' ? 'oldest first' : 'newest first'}</span>
+                  <span style={{ color: 'var(--ink-1)' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+                </button>
+              )}
               {bandEvent && (
                 <button
                   type="button"
@@ -1210,6 +1257,7 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
               <EventPlayer
                 event={selectedEvent}
                 onNext={nextEvent ? () => setSelectedEventId(nextEvent.event_id) : undefined}
+                onPrev={prevEvent ? () => setSelectedEventId(prevEvent.event_id) : undefined}
                 onDeleted={(id) => {
                   setEvents((prev) => prev.filter((e) => e.event_id !== id));
                   setHourEvents((prev) => prev?.filter((e) => e.event_id !== id) ?? null);
@@ -1248,6 +1296,14 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
                     setEventIndex((prev) =>
                       prev.map((x) => (x.ts === evTs ? { ...x, labeled: true } : x)));
                   }
+                  // Advance to the next clip in display order. EventPlayer
+                  // honors the clipAutoPlay tweak when a new event is loaded,
+                  // so labelling becomes a one-click "label + go".
+                  if (nextEvent && nextEvent.event_id !== eventId) {
+                    setSelectedEventId(nextEvent.event_id);
+                    setSelectedAnnotationId(null);
+                    setBandEventId(null);
+                  }
                 }}
               />
             )}
@@ -1264,18 +1320,15 @@ function AnnotationPlayback({
   annotation: SpectrogramAnnotation;
   onDelete: () => void;
 }) {
+  const { timeFormat } = useTweaks();
   const duration = annotation.ts_end - annotation.ts_start;
-  const start = new Date(annotation.ts_start * 1000);
-  const end = new Date(annotation.ts_end * 1000);
-  const fmt = (d: Date) =>
-    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
         Spectrogram annotation · no audio
       </div>
       <div className="mono" style={{ fontSize: 12, color: 'var(--ink-1)' }}>
-        {fmt(start)} → {fmt(end)} · {duration.toFixed(1)} s ·{' '}
+        {formatClock(annotation.ts_start, timeFormat, { withSeconds: true })} → {formatClock(annotation.ts_end, timeFormat, { withSeconds: true })} · {duration.toFixed(1)} s ·{' '}
         <span style={{ color: 'var(--neon-ok)' }}>{annotation.label}</span>
       </div>
       <div>
@@ -1386,6 +1439,7 @@ function RealLiveSpectrogramPanel({
   deletingUnlabeled: boolean;
 }) {
   const [showOverlay, setShowOverlay] = useState(true);
+  const { timeFormat } = useTweaks();
   const waiting = !ring.hasData;
   const ribbonWaiting = !ribbon.hasData;
   const windowMin = Math.round((ribbon.displayCols * ribbon.bucketMs) / 1000 / 60);
@@ -1452,6 +1506,11 @@ function RealLiveSpectrogramPanel({
             starting a new drag. The selection layer is full-bleed and
             captures pointer events on empty regions; the annotation
             buttons on top intercept clicks within their bounds. */}
+        <LiveEventBandsOverlay
+          events={recentEvents}
+          currentCol={ring.currentCol}
+          maxFrames={ring.maxFrames}
+        />
         <LiveSpectrogramSelectionLayer
           deviceId={deviceId}
           ring={ring}
@@ -1563,12 +1622,9 @@ function RealLiveSpectrogramPanel({
             // Label every 4th tick to avoid crowding.
             const show = hoursAgo === 0 || hoursAgo % 4 === 0;
             const d = new Date(Date.now() - hoursAgo * 3600 * 1000);
-            const h = d.getHours();
-            const hour12 = h % 12 === 0 ? 12 : h % 12;
-            const ampm = h < 12 ? 'am' : 'pm';
             return (
               <div key={i} style={{ textAlign: 'center' }}>
-                {show ? `${hour12}${ampm}` : ''}
+                {show ? formatHourTick(d.getHours(), timeFormat) : ''}
               </div>
             );
           })}
@@ -1611,6 +1667,7 @@ function EventBandsOverlay({
   bandEventId: string | null;
   onClick: (eventId: string) => void;
 }) {
+  const { timeFormat } = useTweaks();
   // Right edge of the ribbon = end of the current bucket; left edge follows
   // from window width. Using the ribbon's own anchor (not Date.now()) keeps
   // bands aligned with the painted columns even between scroll ticks.
@@ -1633,8 +1690,7 @@ function EventBandsOverlay({
         const widthFrac = Math.min(1 - xFrac, (e.duration_s * 1000) / totalMs);
         const selected = e.event_id === bandEventId || e.event_id === selectedEventId;
         const labeled = e.label != null;
-        const ts = new Date(e.ts * 1000);
-        const label = `${e.peak_db.toFixed(1)} dB · ${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())} · ${e.label ?? e.classification ?? 'unclassified'} · click to play`;
+        const label = `${e.peak_db.toFixed(1)} dB · ${formatClock(e.ts, timeFormat, { withSeconds: true })} · ${e.label ?? e.classification ?? 'unclassified'} · click to play`;
         const baseHue = labeled ? '82% 0.14 160' : '88% 0.16 80';
         return (
           <button
@@ -1675,6 +1731,57 @@ function EventBandsOverlay({
 // event-band borders.
 const ANNOTATION_HUE = '82% 0.16 270';
 
+// Non-interactive overlay marking each triggered noise event as a vertical
+// band on the **live spectrogram**. Same time-anchor math as
+// ``LiveAnnotationsOverlay`` so bands track the scrolling columns. Uses the
+// labeled/unlabeled hue scheme from the 60-min ribbon's EventBandsOverlay for
+// visual continuity. ``pointerEvents: 'none'`` keeps drag-to-create
+// annotations working through the band region.
+function LiveEventBandsOverlay({
+  events, currentCol, maxFrames,
+}: {
+  events: DeviceEvent[];
+  currentCol: number;
+  maxFrames: number;
+}) {
+  const rightEdgeMs = currentCol * SPECTROGRAM_COLUMN_MS;
+  const totalMs = maxFrames * SPECTROGRAM_COLUMN_MS;
+  const leftEdgeMs = rightEdgeMs - totalMs;
+
+  const visible = events.filter((e) => {
+    const startMs = e.ts * 1000;
+    const endMs = startMs + e.duration_s * 1000;
+    return endMs > leftEdgeMs && startMs < rightEdgeMs;
+  });
+  if (!visible.length) return null;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {visible.map((e) => {
+        const startMs = e.ts * 1000;
+        const xFrac = Math.max(0, (startMs - leftEdgeMs) / totalMs);
+        const widthFrac = Math.min(1 - xFrac, (e.duration_s * 1000) / totalMs);
+        const baseHue = e.label != null ? '82% 0.14 160' : '88% 0.16 80';
+        return (
+          <div
+            key={e.event_id}
+            style={{
+              position: 'absolute',
+              left: `${xFrac * 100}%`,
+              width: `max(2px, ${widthFrac * 100}%)`,
+              top: 0, bottom: 0,
+              background: `oklch(${baseHue} / 0.14)`,
+              borderLeft: `1px solid oklch(${baseHue} / 0.85)`,
+              borderRight: `1px solid oklch(${baseHue} / 0.85)`,
+              boxShadow: `0 0 4px oklch(${baseHue} / 0.45)`,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 // Clickable bands overlaid on the **live spectrogram** for each saved
 // annotation visible in the rolling window. Time-anchored to ``ring.currentCol``
 // so the bands slide in lockstep with the scrolling bands underneath.
@@ -1687,6 +1794,7 @@ function LiveAnnotationsOverlay({
   selectedAnnotationId: number | null;
   onSelect: (id: number) => void;
 }) {
+  const { timeFormat } = useTweaks();
   const rightEdgeMs = currentCol * SPECTROGRAM_COLUMN_MS;
   const totalMs = maxFrames * SPECTROGRAM_COLUMN_MS;
   const leftEdgeMs = rightEdgeMs - totalMs;
@@ -1707,10 +1815,9 @@ function LiveAnnotationsOverlay({
         const widthFrac = Math.min(1 - xFrac, (endMs - startMs) / totalMs);
         const selected = a.id === selectedAnnotationId;
         const duration = a.ts_end - a.ts_start;
-        const ts = new Date(a.ts_start * 1000);
         const title =
           `${a.label} · ${duration.toFixed(1)} s · ` +
-          `${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())} · click to select`;
+          `${formatClock(a.ts_start, timeFormat, { withSeconds: true })} · click to select`;
         return (
           <button
             key={a.id}
@@ -1753,6 +1860,7 @@ function AnnotationBandsRibbonOverlay({
   selectedAnnotationId: number | null;
   onClick: (id: number) => void;
 }) {
+  const { timeFormat } = useTweaks();
   const rightEdgeMs = (ribbon.currentCol + 1) * ribbon.bucketMs;
   const totalMs = ribbon.displayCols * ribbon.bucketMs;
   const leftEdgeMs = rightEdgeMs - totalMs;
@@ -1773,10 +1881,9 @@ function AnnotationBandsRibbonOverlay({
         const widthFrac = Math.min(1 - xFrac, (endMs - startMs) / totalMs);
         const selected = a.id === selectedAnnotationId;
         const duration = a.ts_end - a.ts_start;
-        const ts = new Date(a.ts_start * 1000);
         const title =
           `${a.label} · ${duration.toFixed(1)} s · ` +
-          `${pad2(ts.getHours())}:${pad2(ts.getMinutes())}:${pad2(ts.getSeconds())} · click to select`;
+          `${formatClock(a.ts_start, timeFormat, { withSeconds: true })} · click to select`;
         return (
           <button
             key={a.id}
@@ -2226,9 +2333,9 @@ function LiveSpectrogramHoverProbe({
 }
 
 function HoverTooltip({ xFrac, point }: { xFrac: number; point: DeviceTelemetryPoint }) {
+  const { timeFormat } = useTweaks();
   const flip = xFrac > 0.7;
-  const date = new Date(point.ts * 1000);
-  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+  const time = formatClock(point.ts, timeFormat, { withSeconds: true });
   const rows = [
     { label: 'LAeq', value: point.laeq, color: LAEQ_STROKE },
     { label: 'LAFmax', value: point.lafmax, color: LAFMAX_STROKE },

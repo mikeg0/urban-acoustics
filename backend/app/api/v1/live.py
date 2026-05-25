@@ -47,6 +47,14 @@ CATCHUP_SECONDS = 5.0
 # the WS sender. At ~10 Hz spect this is ~100 s of buffering — plenty of
 # headroom if the WS briefly stalls, while still bounding memory.
 NOTIFY_QUEUE_MAX = 1024
+# Soft cap: when the queue grows past this, shed the oldest items as
+# new spect frames arrive. The hard cap above only sheds at 100 s, by
+# which point the frontend's scrolling canvas has been multi-second
+# stale for a long time — and worse, the lag never recovers because
+# producer and consumer run at the same rate once steady-state. The
+# soft cap keeps the live canvas within a few seconds of real-time
+# regardless of transient backpressure. ~2.7 s at 12 Hz.
+SPECT_QUEUE_SOFTCAP = 32
 
 # Sentinel object meaning "telemetry needs a SELECT". Using a dedicated
 # object (rather than None) makes the queue's contents self-describing.
@@ -118,12 +126,25 @@ async def live_telemetry_ws(websocket: WebSocket, device_id: UUID) -> None:
         bands = data.get("bands")
         if not isinstance(ts, (int, float)) or not isinstance(bands, list):
             return
+        # Drop the oldest queued items when the soft cap is exceeded so a
+        # transient backpressure spike (slow WS send, asyncpg read pause)
+        # can't build a multi-second backlog that the frontend never
+        # recovers from — producer and consumer run at the same average
+        # rate, so any backlog persists until the queue is forcibly
+        # drained. _TLM_WAKE entries are safe to drop since the next
+        # NOTIFY will regenerate one and ``_push_new_rows`` uses
+        # ``last_ts`` to catch up.
+        while notify_queue.qsize() >= SPECT_QUEUE_SOFTCAP:
+            try:
+                notify_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         # Mirror the frontend's DeviceLiveMessage shape.
         try:
             notify_queue.put_nowait({"type": "spect", "ts": ts, "bands": bands})
         except asyncio.QueueFull:
-            # Frame drops here mean the WS is slower than 10 Hz — visible
-            # as a brief gap in the scrolling spectrogram, acceptable.
+            # Should be unreachable given the soft cap above, but keep the
+            # guard so a put never raises.
             pass
 
     try:

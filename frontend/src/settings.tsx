@@ -4,6 +4,21 @@ import { applyTweaks, getDefaults, useTweaks } from './tweaks';
 import { PALETTES } from './palettes';
 import type { Tweaks } from './types';
 
+const NARROW_QUERY = '(max-width: 640px)';
+
+function useIsNarrow() {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(NARROW_QUERY);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 function GearIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
@@ -89,6 +104,7 @@ export function SettingsDialog({
   appliedConfigVersion,
 }: SettingsDialogProps) {
   const tweaks = useTweaks();
+  const isNarrow = useIsNarrow();
   const [pendingPut, setPendingPut] = useState(false);
   const [putError, setPutError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -168,9 +184,9 @@ export function SettingsDialog({
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: isNarrow ? 'flex-end' : 'flex-start',
         justifyContent: 'center',
-        paddingTop: '8vh',
+        paddingTop: isNarrow ? 0 : '5vh',
         zIndex: 2000,
         animation: 'settings-fade 180ms ease-out',
       }}
@@ -180,16 +196,23 @@ export function SettingsDialog({
         role="dialog"
         aria-label="Settings"
         style={{
-          width: 520, maxWidth: '92vw',
+          width: isNarrow ? '100%' : 520,
+          maxWidth: isNarrow ? 'none' : '92vw',
+          maxHeight: isNarrow ? '92vh' : '90vh',
+          display: 'flex',
+          flexDirection: 'column',
           background: 'var(--bg-1)',
           border: '1px solid var(--line-strong)',
-          borderRadius: 12,
+          borderRadius: isNarrow ? '14px 14px 0 0' : 12,
           boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px oklch(28% 0.008 60 / 0.6)',
           overflow: 'hidden',
-          animation: 'settings-pop 220ms cubic-bezier(.2,.8,.2,1)',
+          animation: isNarrow
+            ? 'settings-slide-up 260ms cubic-bezier(.2,.8,.2,1)'
+            : 'settings-pop 220ms cubic-bezier(.2,.8,.2,1)',
         }}
       >
         <div style={{
+          flex: '0 0 auto',
           padding: '14px 18px',
           borderBottom: '1px solid var(--line)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -209,7 +232,9 @@ export function SettingsDialog({
             onClick={onClose}
             aria-label="Close"
             style={{
-              width: 28, height: 28, borderRadius: 6,
+              width: isNarrow ? 36 : 28,
+              height: isNarrow ? 36 : 28,
+              borderRadius: 6,
               background: 'var(--bg-2)', border: '1px solid var(--line)',
               color: 'var(--ink-2)', cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -219,12 +244,53 @@ export function SettingsDialog({
           </button>
         </div>
 
-        <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 22 }}>
+        <div style={{
+          flex: '1 1 auto',
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: isNarrow ? 14 : 18,
+          display: 'flex', flexDirection: 'column',
+          gap: isNarrow ? 18 : 22,
+        }}>
+          <section>
+            <SectionHead label="Time format"
+              hint="Applied to every clock and hour label across the dashboard."
+              value={tweaks.timeFormat === '24h' ? '24-hour · HH:MM' : '12-hour · h:mm AM/PM'} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+              {([
+                { key: '24h' as const, label: '24-hour', sample: '14:30' },
+                { key: '12h' as const, label: '12-hour', sample: '2:30 PM' },
+              ]).map((opt) => {
+                const active = tweaks.timeFormat === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    onClick={() => update({ timeFormat: opt.key })}
+                    style={{
+                      padding: '10px 12px',
+                      background: active ? 'var(--bg-3)' : 'var(--bg-2)',
+                      border: `1px solid ${active ? 'var(--neon-focus)' : 'var(--line)'}`,
+                      borderRadius: 6,
+                      color: 'var(--ink-1)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      boxShadow: active ? '0 0 0 2px oklch(82% 0.18 310 / 0.25)' : 'none',
+                      transition: 'all 120ms',
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: 'var(--ink-0)', fontWeight: 500 }}>{opt.label}</div>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--neon-cool)', marginTop: 2 }}>{opt.sample}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           <section>
             <SectionHead label="Spectrogram palette"
               hint="Heat ramp reads most intuitively; Ice emphasises sub-bass; Mono is print-safe."
               value={PALETTES[tweaks.spectroColor]?.label} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8, marginTop: 10 }}>
               {(Object.entries(PALETTES) as [Tweaks['spectroColor'], typeof PALETTES[keyof typeof PALETTES]][]).map(([k, p]) => {
                 const active = tweaks.spectroColor === k;
                 return (
@@ -276,7 +342,7 @@ export function SettingsDialog({
                 <span>WHO · 85 dB</span>
                 <span>100 dB · jackhammer</span>
               </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
                 {[70, 75, 80, 85, 90].map((v) => (
                   <Preset
                     key={v}
@@ -335,7 +401,7 @@ export function SettingsDialog({
                 <span>balanced · 2.3</span>
                 <span>strict · 4.0</span>
               </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
                 {[1.8, 2.3, 2.9, 3.5].map((v) => (
                   <Preset key={v} active={Math.abs(tweaks.anomalySensitivity - v) < 0.05} onClick={() => update({ anomalySensitivity: v })}>
                     z ≥ {v.toFixed(1)}
@@ -404,19 +470,25 @@ export function SettingsDialog({
         </div>
 
         <div style={{
+          flex: '0 0 auto',
           padding: '12px 18px',
           borderTop: '1px solid var(--line)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 10,
           background: 'var(--bg-0)',
         }}>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>
+          <div className="mono" style={{
+            fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em',
+            minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
             {deviceId
               ? (pendingPut
-                ? 'PENDING · WAITING FOR DEVICE HEALTH'
+                ? (isNarrow ? 'PENDING' : 'PENDING · WAITING FOR DEVICE HEALTH')
                 : appliedConfigVersion
-                  ? `APPLIED · CONFIG ${appliedConfigVersion.slice(0, 8)}`
-                  : 'APPLIED · DISPLAY ONLY UNTIL FIRST HEALTH')
-              : 'DEMO MODE · NO DEVICE TO SAVE TO'}
+                  ? (isNarrow ? 'APPLIED' : `APPLIED · CONFIG ${appliedConfigVersion.slice(0, 8)}`)
+                  : (isNarrow ? 'APPLIED' : 'APPLIED · DISPLAY ONLY UNTIL FIRST HEALTH'))
+              : (isNarrow ? 'DEMO MODE' : 'DEMO MODE · NO DEVICE TO SAVE TO')}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={resetAll}
@@ -457,8 +529,14 @@ function SectionHead({ label, hint, value }: { label: string; hint?: string; val
 }
 
 function GlossaryEntry({ term, children }: { term: string; children: ReactNode }) {
+  const isNarrow = useIsNarrow();
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: 12, alignItems: 'baseline' }}>
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isNarrow ? '1fr' : '72px 1fr',
+      gap: isNarrow ? 4 : 12,
+      alignItems: 'baseline',
+    }}>
       <dt className="mono" style={{
         fontSize: 11, color: 'var(--neon-cool)',
         letterSpacing: '0.05em', fontWeight: 600,

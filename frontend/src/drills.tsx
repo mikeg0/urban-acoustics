@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Sparkline } from './atoms';
 import { dbColor, type PaletteKey } from './palettes';
 import { RealHourTile, SpectrogramCanvas, buildSpectrogram } from './spectrogram';
-import { mulberry32, normDb } from './utils';
+import { useTweaks } from './tweaks';
+import { formatHourRange, formatHourTick, mulberry32, normDb } from './utils';
 import { WavPlayer } from './wavplayer';
 import type { Day, MonthHydrated } from './types';
 
@@ -369,6 +370,7 @@ export function DayView({
   onPickHour: (h: number) => void;
   selectedHour?: number | null;
 }) {
+  const { timeFormat } = useTweaks();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
@@ -397,7 +399,7 @@ export function DayView({
         </div>
         <div className="mono" style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
           {Array.from({ length: 24 }).map((_, h) => (
-            <div key={h} style={{ textAlign: 'center', opacity: h % 3 === 0 ? 1 : 0.35 }}>{String(h).padStart(2, '0')}</div>
+            <div key={h} style={{ textAlign: 'center', opacity: h % 3 === 0 ? 1 : 0.35 }}>{formatHourTick(h, timeFormat)}</div>
           ))}
         </div>
       </div>
@@ -463,7 +465,8 @@ export function HourView({
   const [playProgress, setPlayProgress] = useState(0);
   useEffect(() => { setSegIndex(defaultSeg); }, [defaultSeg]);
 
-  const hourLabelStr = (h: number) => `${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00`;
+  const { timeFormat } = useTweaks();
+  const hourLabelStr = (h: number) => formatHourRange(h, timeFormat);
   const segLeftPct = (segIndex / 12) * 100;
   const segWidthPct = 100 / 12;
   const byKey = Object.fromEntries(SOURCE_DEFS.map((s) => [s.key, s])) as Record<SourceKey, typeof SOURCE_DEFS[number]>;

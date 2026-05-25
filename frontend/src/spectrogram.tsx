@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FFT from 'fft.js';
-import { mulberry32, normDb } from './utils';
+import { formatClock, formatHourTick, mulberry32, normDb } from './utils';
 import { PALETTES, type PaletteKey } from './palettes';
+import { useTweaks } from './tweaks';
 import { BAND_CENTERS_HZ, SPECTROGRAM_N_BANDS } from './types';
 import type { Day, EventIndexEntry, SpectrogramHistoryResponse } from './types';
 import {
@@ -148,6 +149,7 @@ export function TimelineSpectrogram({
   showBars = false,
   deviceId = null,
 }: TimelineSpectrogramProps) {
+  const { timeFormat } = useTweaks();
   const height = 200;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -278,7 +280,7 @@ export function TimelineSpectrogram({
       }}>
         {Array.from({ length: 24 }).map((_, h) => (
           <div key={h} style={{ textAlign: 'center', opacity: h % 3 === 0 ? 1 : 0.4 }}>
-            {String(h).padStart(2, '0')}
+            {formatHourTick(h, timeFormat)}
           </div>
         ))}
       </div>
@@ -296,43 +298,18 @@ const LUT_SIZE = 256;
 // Pi's emit cadence: STFT hop_size (2048) × decimate (2) / sample_rate
 // (48 kHz) = 85.33 ms. If the Pi config changes either knob, update here.
 export const SPECTROGRAM_COLUMN_MS = (2 * 2048 / 48000) * 1000;
-// Playback delay floor — how far the right edge of the canvas lags real-
-// time when conditions are good. Big enough to absorb the Pi's per-second
-// burst pattern plus typical network jitter, but small enough that the
-// user-perceived latency is acceptable. Under worse conditions the buffer
-// grows adaptively (see ``useRollingBands``).
-const SPECTROGRAM_BUFFER_MS = 1500;
-// Hard cap on the adaptive buffer. If lag exceeds this we'd rather show a
-// visible gap than push latency past a couple of seconds.
-const SPECTROGRAM_MAX_BUFFER_MS = 5000;
-// Headroom added above the highest observed lag. Absorbs sub-frame jitter
-// without re-triggering buffer growth on every push.
-const SPECTROGRAM_LAG_HEADROOM_MS = 300;
-// How fast the buffer relaxes back toward its floor once lag improves.
-// Must be *slower* than the per-second buffer regrowth that the Pi's
-// burst pattern causes: each burst's earliest frame re-sets ``needBuffer``
-// to roughly ``block_duration + network_lag + headroom``. If decay
-// outpaces that, every burst triggers a small regrowth — and a regrowth
-// is a brief scroll stall (the monotonic guard refuses to rewind), which
-// looks like once-per-second judder. At 0.1 ms/tick (~6 ms/s) the decay
-// is well under the regrowth, so the buffer settles at the steady-state
-// worst-case lag. Recovery from a 5 s spike back to the 1.5 s floor still
-// finishes in ~10 min, which is fine.
-const SPECTROGRAM_BUFFER_DECAY_MS_PER_TICK = 0.1;
-// Tick interval. ~60 Hz keeps the canvas redraw smooth without doing more
-// work than necessary — most ticks advance 0 columns.
-const SPECTROGRAM_TICK_MS = 16;
 
 interface RollingBands {
   /** Map of global column index → band vector. Columns without data are
    *  simply absent from the map and render as the palette's floor color. */
   frames: Map<number, number[]>;
-  /** Right-edge column index — `Date.now() - SPECTROGRAM_BUFFER_MS`
-   *  converted to a column index. Increments monotonically with wall
-   *  clock; the canvas always shows columns
-   *  ``[currentCol - maxFrames + 1, currentCol]``. */
+  /** Right-edge column index — derived from the newest frame timestamp
+   *  seen. The canvas always shows columns
+   *  ``[currentCol - maxFrames + 1, currentCol]`` so the freshest data
+   *  sits flush against the right edge of the rendered area regardless
+   *  of how far behind wall-clock the pipeline is running. */
   currentCol: number;
-  /** Re-renders bump this on every tick that moves ``currentCol``. */
+  /** Re-renders bump this on every frame that advances ``currentCol``. */
   version: number;
   maxFrames: number;
   nBands: number;
@@ -346,68 +323,46 @@ function colForTs(ts: number): number {
   return Math.floor((ts * 1000) / SPECTROGRAM_COLUMN_MS);
 }
 
-/** Time-anchored rolling spectrogram buffer.
+/** Data-anchored rolling spectrogram buffer with smooth playback.
  *
- *  The canvas window is driven by wall-clock time, not by data arrival —
- *  ``currentCol`` advances at a steady rate set by ``Date.now()`` lagged
- *  by an *adaptive* buffer. Incoming frames are filed in a map keyed by
- *  their own timestamp's column index. When the canvas reaches a column,
- *  whichever frame matches that slot is rendered; if none arrived in time,
- *  the slot renders as a blank (palette floor color).
+ *  Two cursors:
+ *    - ``latestTsRef``: newest frame timestamp seen — the "live" data edge.
+ *      Jumps forward whenever a frame arrives (often in bursts).
+ *    - ``currentColRef``: the visible right-edge column. Advances at a
+ *      constant ~12 Hz via a setInterval so the canvas scrolls smoothly
+ *      regardless of how bursty frame arrivals are. Bounded above by
+ *      ``latestTsRef`` so it never paints past the freshest data — if
+ *      frames stop arriving, scrolling pauses at the last known frame.
  *
- *  Result: the scroll cadence is independent of the Pi's bursty emit
- *  pattern. Glitches become small visible gaps instead of jitter.
- *
- *  Adaptive buffer: starts at ``SPECTROGRAM_BUFFER_MS``. If a frame arrives
- *  with lag exceeding the current buffer (it would land left of the right
- *  edge), the buffer ratchets up to ``lag + headroom`` so the *next* frame
- *  at that lag lands at the right edge. The buffer decays slowly back
- *  toward the floor once lag improves. This trades a bit of user-perceived
- *  latency for keeping the right edge filled when the WS pipeline is slow
- *  (busy CPU, slow network, etc.). */
+ *  Effect: a burst of N frames fills the next N ticks (~N × 85 ms) of
+ *  smooth scroll instead of a single big jump. Steady-state gap between
+ *  the visible edge and the live edge is whatever buffer the WS upstream
+ *  introduces (~1 s under normal load). */
 export function useRollingBands(
   maxFrames: number,
   nBands: number = SPECTROGRAM_N_BANDS,
 ): RollingBands {
   const framesRef = useRef<Map<number, number[]>>(new Map());
-  const bufferMsRef = useRef<number>(SPECTROGRAM_BUFFER_MS);
-  const currentColRef = useRef<number>(
-    colForTs((Date.now() - bufferMsRef.current) / 1000),
-  );
+  const currentColRef = useRef<number>(0);
+  const latestTsRef = useRef<number>(0);
   const hasDataRef = useRef(false);
   const [version, setVersion] = useState(0);
 
-  // Reset map if the consuming component remounts with a different shape.
   if (framesRef.current === null) framesRef.current = new Map();
 
-  // Advance currentCol toward the wall-clock target each tick. Most ticks
-  // are no-ops; once per column interval (~85 ms) currentCol moves by 1
-  // and we re-render. Prunes map entries that have scrolled off-canvas.
   useEffect(() => {
     const id = setInterval(() => {
-      // Relax buffer toward the floor. ``push`` ratchets it back up on the
-      // next high-lag frame, so this never undershoots actual lag for
-      // long. Skip the math when already at the floor.
-      if (bufferMsRef.current > SPECTROGRAM_BUFFER_MS) {
-        bufferMsRef.current = Math.max(
-          SPECTROGRAM_BUFFER_MS,
-          bufferMsRef.current - SPECTROGRAM_BUFFER_DECAY_MS_PER_TICK,
-        );
-      }
-      const playbackMs = Date.now() - bufferMsRef.current;
-      const targetCol = Math.floor(playbackMs / SPECTROGRAM_COLUMN_MS);
-      // Monotonic: never let the right edge slide backward, even if the
-      // buffer just grew enough to drop ``targetCol`` below ``currentCol``.
-      // Pausing for a beat is fine; rewinding is jarring.
-      if (targetCol <= currentColRef.current) return;
-      currentColRef.current = targetCol;
-      const leftEdge = targetCol - maxFrames + 1;
+      const target = colForTs(latestTsRef.current);
+      const cur = currentColRef.current;
+      if (target === 0 || cur >= target) return;
+      currentColRef.current = cur + 1;
+      const leftEdge = currentColRef.current - maxFrames + 1;
       const frames = framesRef.current;
       for (const k of frames.keys()) {
         if (k < leftEdge) frames.delete(k);
       }
       setVersion((v) => v + 1);
-    }, SPECTROGRAM_TICK_MS);
+    }, SPECTROGRAM_COLUMN_MS);
     return () => clearInterval(id);
   }, [maxFrames]);
 
@@ -415,21 +370,19 @@ export function useRollingBands(
     if (bands.length !== nBands) return;
     const col = colForTs(ts);
     const cur = currentColRef.current;
-    if (col <= cur - maxFrames) return;       // already scrolled past
-    // If this frame's end-to-end lag exceeds the current buffer, future
-    // frames at the same lag would land left of the right edge — that's
-    // the persistent-right-edge-gap symptom. Grow the buffer so the next
-    // frame at this lag arrives at the right edge instead.
-    const lagMs = Date.now() - ts * 1000;
-    const needBuffer = lagMs + SPECTROGRAM_LAG_HEADROOM_MS;
-    if (needBuffer > bufferMsRef.current) {
-      bufferMsRef.current = Math.min(SPECTROGRAM_MAX_BUFFER_MS, needBuffer);
-    }
+    if (cur > 0 && col <= cur - maxFrames) return;  // scrolled past
     const copy = bands instanceof Float32Array
       ? Array.from(bands)
       : bands.slice();
     framesRef.current.set(col, copy);
-    hasDataRef.current = true;
+    if (ts > latestTsRef.current) latestTsRef.current = ts;
+    if (!hasDataRef.current) {
+      // Snap the right edge to the first frame so the user sees data
+      // immediately instead of an empty canvas slowly filling in.
+      hasDataRef.current = true;
+      currentColRef.current = col;
+      setVersion((v) => v + 1);
+    }
   }, [nBands, maxFrames]);
 
   return {
@@ -663,6 +616,7 @@ export function HistoryRibbon24h({
 }: HistoryRibbon24hProps) {
   const [manifest, setManifest] = useState<SpectrogramHistoryResponse | null>(null);
   const [currentTick, setCurrentTick] = useState(0);
+  const { timeFormat } = useTweaks();
 
   useEffect(() => {
     let alive = true;
@@ -717,9 +671,7 @@ export function HistoryRibbon24h({
     >
       {manifest.hours.map((ref, i) => {
         const isSelected = selectedHourTs === ref.hour;
-        const hourLabel = new Date(ref.hour * 1000).toLocaleString('en-US', {
-          hour: '2-digit', minute: '2-digit', hour12: false,
-        });
+        const hourLabel = formatClock(ref.hour, timeFormat);
         const hourEvents = events
           ? events.filter((e) => {
               const endTs = e.ts + e.duration_s;
@@ -732,12 +684,20 @@ export function HistoryRibbon24h({
             )
           : [];
         return (
-          <button
+          <div
             key={ref.hour}
-            type="button"
+            role="button"
+            tabIndex={0}
+            aria-label={`${hourLabel} — open hour playback`}
             className={`history-tile-button${isSelected ? ' selected' : ''}`}
             title={`${hourLabel} — click to open hour playback`}
             onClick={() => onHourClick?.(ref.hour)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onHourClick?.(ref.hour);
+              }
+            }}
           >
             <HistoryTile
               url={ref.tile_url}
@@ -831,7 +791,7 @@ export function HistoryRibbon24h({
                 })}
               </div>
             )}
-          </button>
+          </div>
         );
       })}
     </div>

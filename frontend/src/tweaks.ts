@@ -7,6 +7,7 @@ const DEFAULTS: Tweaks = {
   spectroColor: 'ice',
   anomalySensitivity: 2.9,
   clipAutoPlay: true,
+  timeFormat: '24h',
 };
 
 function load(): Tweaks {

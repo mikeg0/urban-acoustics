@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchHealth, putLedMode, type LedMode } from './api';
 import { Pill } from './atoms';
+import { useTweaks } from './tweaks';
+import { formatClock } from './utils';
 import type { DeviceHealthPoint, HealthResolution } from './types';
 
 type RangeKey = '1h' | '24h' | '7d' | '30d';
@@ -599,6 +601,7 @@ function MetricChart({
 }
 
 function VersionChangeLog({ changes }: { changes: VersionChange[] }) {
+  const { timeFormat } = useTweaks();
   return (
     <div style={{
       background: 'var(--bg-1)', border: '1px solid var(--line)',
@@ -617,9 +620,7 @@ function VersionChangeLog({ changes }: { changes: VersionChange[] }) {
             fontSize: 11, color: 'var(--ink-1)', gap: 8,
           }}>
             <span style={{ color: 'var(--ink-2)' }}>
-              {new Date(c.ts * 1000).toLocaleString(undefined, {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-              })}
+              {formatClock(c.ts, timeFormat, { withDate: true })}
             </span>
             <span style={{
               color: c.field === 'fw_version' ? 'oklch(78% 0.16 290)' : 'oklch(78% 0.16 150)',

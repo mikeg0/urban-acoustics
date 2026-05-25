@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { mulberry32 } from './utils';
+import { useTweaks } from './tweaks';
+import { formatHour, mulberry32, type TimeFormat } from './utils';
 import type { Day } from './types';
 
 const SEGMENT_MINUTES = 5;
@@ -7,10 +8,15 @@ const SEGMENTS_PER_HOUR = 12;
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-function formatSegTime(h: number, segIndex: number, offsetSec = 0) {
+function formatSegTime(h: number, segIndex: number, offsetSec: number, format: TimeFormat) {
   const totalSec = segIndex * SEGMENT_MINUTES * 60 + offsetSec;
   const mm = Math.floor(totalSec / 60);
   const ss = Math.floor(totalSec % 60);
+  if (format === '12h') {
+    const hh = h % 12 === 0 ? 12 : h % 12;
+    const ap = h < 12 ? 'AM' : 'PM';
+    return `${hh}:${pad2(mm)}:${pad2(ss)} ${ap}`;
+  }
   return `${pad2(h)}:${pad2(mm)}:${pad2(ss)}`;
 }
 
@@ -105,6 +111,7 @@ export function WavPlayer({
   segIndex: segProp, onSegIndex,
   onPlayingChange, onProgressChange,
 }: WavPlayerProps) {
+  const { timeFormat } = useTweaks();
   const [segLocal, setSegLocal] = useState<number>(() => {
     const seed = (day.key.charCodeAt(4) * 31 + hour * 2731 + day.hours[hour] * 100) | 0;
     return ((seed >>> 0) % SEGMENTS_PER_HOUR);
@@ -261,7 +268,7 @@ export function WavPlayer({
               <button
                 key={s.i}
                 onClick={() => setSegIndex(s.i)}
-                title={`${formatSegTime(hour, s.i)} · ${s.db} dB`}
+                title={`${formatSegTime(hour, s.i, 0, timeFormat)} · ${s.db} dB`}
                 style={{
                   height: 26,
                   background: s.breach
@@ -284,7 +291,7 @@ export function WavPlayer({
           })}
         </div>
         <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
-          <span>{pad2(hour)}:00</span><span>:15</span><span>:30</span><span>:45</span><span>{pad2((hour + 1) % 24)}:00</span>
+          <span>{formatHour(hour, timeFormat)}</span><span>:15</span><span>:30</span><span>:45</span><span>{formatHour((hour + 1) % 24, timeFormat)}</span>
         </div>
       </div>
 
@@ -345,7 +352,7 @@ export function WavPlayer({
       </div>
 
       <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.05em' }}>
-        PREVIEW · 10s of {SEGMENT_MINUTES}-min segment · starts at {formatSegTime(hour, segIndex)}
+        PREVIEW · 10s of {SEGMENT_MINUTES}-min segment · starts at {formatSegTime(hour, segIndex, 0, timeFormat)}
       </div>
     </div>
   );

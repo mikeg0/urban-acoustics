@@ -89,6 +89,7 @@ export type Tweaks = {
   spectroColor: 'heat' | 'ice' | 'mono' | 'neon';
   anomalySensitivity: number;
   clipAutoPlay: boolean;
+  timeFormat: '24h' | '12h';
 };
 
 // Per-device tunables fetched from /api/v1/devices/{id}/runtime-config.

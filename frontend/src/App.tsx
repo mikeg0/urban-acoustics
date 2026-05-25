@@ -33,7 +33,7 @@ import {
   useRollingBands,
 } from './spectrogram';
 import { useTweaks } from './tweaks';
-import { hydrateMonths } from './utils';
+import { formatClock, formatHour, hydrateMonths } from './utils';
 import type {
   Anomaly, Day, DeviceInfo, DeviceLiveMessage,
   DrillState, ForecastPoint, MonthHydrated, Source, YearBundle,
@@ -59,6 +59,7 @@ function TopBar({
   device: DeviceInfo | null;
 }) {
   const [t, setT] = useState(() => new Date());
+  const { timeFormat } = useTweaks();
   useEffect(() => {
     const i = setInterval(() => setT(new Date()), 1000);
     return () => clearInterval(i);
@@ -128,7 +129,7 @@ function TopBar({
           THRESHOLD <span style={{ color: 'var(--neon-hot)' }}>≥ {threshold} dB</span>
         </div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--ink-1)', padding: '6px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6 }}>
-          {t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+          {formatClock(t.getTime() / 1000, timeFormat, { withSeconds: true })}
         </div>
         <SettingsButton onClick={onOpenSettings} />
       </div>
@@ -288,6 +289,7 @@ function HeadlineStats({
 }: {
   year: Day[]; threshold: number; sensitivity: number; anomaliesCount: number;
 }) {
+  const { timeFormat } = useTweaks();
   const wrap = (children: React.ReactNode) => (
     <div style={{
       display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14,
@@ -321,7 +323,7 @@ function HeadlineStats({
       <StatBig label="Threshold breaches" value={totalBreaches.toLocaleString()} unit={`hrs ≥ ${threshold}dB`} tone="hot" />
       <StatBig label="Loudest day"        value={loudestDay.peak.toFixed(1)} unit="dB"
         delta={loudestDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + (loudestDay.event ? ` · ${loudestDay.event}` : '')} />
-      <StatBig label="Modal peak hour"    value={`${String(modalPeak).padStart(2, '0')}:00`} delta="weekday rush + nightlife bleed" />
+      <StatBig label="Modal peak hour"    value={formatHour(modalPeak, timeFormat)} delta="weekday rush + nightlife bleed" />
       <StatBig label="Anomalies flagged"  value={anomaliesCount}             unit={`z≥${sensitivity.toFixed(1)}`} delta="past 365 days" />
     </>,
   );
@@ -341,6 +343,7 @@ interface DrillProps {
 }
 
 function DrillFlow({ state, setState, threshold, palette, months, yearDays, deviceId = null }: DrillProps) {
+  const { timeFormat } = useTweaks();
   const { month, dayKey, hour } = state;
   const monthObj = month != null ? months.find((m) => m.index === month) ?? null : null;
   const dayObj = dayKey ? yearDays.find((d) => d.key === dayKey) ?? null : null;
@@ -362,7 +365,7 @@ function DrillFlow({ state, setState, threshold, palette, months, yearDays, devi
     { label: yearLabel, upper: true, mono: true },
     { label: monthObj ? monthObj.name : '—', upper: true },
     { label: dayObj ? new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—', mono: true },
-    { label: hour != null ? `${String(hour).padStart(2, '0')}:00` : '—', mono: true },
+    { label: hour != null ? formatHour(hour, timeFormat) : '—', mono: true },
   ];
 
   return (
@@ -451,7 +454,7 @@ function DrillFlow({ state, setState, threshold, palette, months, yearDays, devi
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <div>
                 <div style={{ fontSize: 16 }}>
-                  {new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {String(hour).padStart(2, '0')}:00
+                  {new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {formatHour(hour, timeFormat)}
                 </div>
                 <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>60-minute window · 64 freq bins</div>
               </div>

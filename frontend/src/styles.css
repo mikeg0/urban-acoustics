@@ -75,6 +75,10 @@ input[type=range]::-webkit-slider-thumb {
   from { transform: translateY(-12px) scale(0.98); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
+@keyframes settings-slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
 @keyframes zoom-in {
   from { transform: scale(0.92); opacity: 0; }
   to { transform: scale(1); opacity: 1; }

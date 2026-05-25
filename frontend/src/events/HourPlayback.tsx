@@ -1,6 +1,8 @@
 import type { DeviceEvent, SpectrogramAnnotation } from '../types';
 import type { PaletteKey } from '../palettes';
 import { HourTileBackdrop } from '../spectrogram';
+import { useTweaks } from '../tweaks';
+import { formatClock } from '../utils';
 
 interface HourPlaybackViewerProps {
   hourTs: number;            // unix seconds, top of hour
@@ -22,24 +24,15 @@ interface HourPlaybackViewerProps {
 
 const HOUR_S = 3600;
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
-function fmtClock(unixSec: number): string {
-  const d = new Date(unixSec * 1000);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-function fmtClockSec(unixSec: number): string {
-  const d = new Date(unixSec * 1000);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-}
-
 export function HourPlaybackViewer({
   hourTs, threshold, events, loading, error, selectedId, onSelect, onClose,
   onDeleteUnlabeled, deletingUnlabeled,
   deviceId, palette,
   annotations, selectedAnnotationId, onSelectAnnotation,
 }: HourPlaybackViewerProps) {
+  const { timeFormat } = useTweaks();
+  const fmtClock = (ts: number) => formatClock(ts, timeFormat);
+  const fmtClockSec = (ts: number) => formatClock(ts, timeFormat, { withSeconds: true });
   const totalBreaches = events.filter((e) => e.peak_db >= threshold).length;
   const unlabeledCount = events.filter((e) => e.label == null).length;
   const canDeleteUnlabeled = unlabeledCount > 0 && !deletingUnlabeled && !loading;
@@ -139,6 +132,9 @@ function BreachTimeline({
   selectedAnnotationId: number | null;
   onSelectAnnotation?: (id: number) => void;
 }) {
+  const { timeFormat } = useTweaks();
+  const fmtClock = (ts: number) => formatClock(ts, timeFormat);
+  const fmtClockSec = (ts: number) => formatClock(ts, timeFormat, { withSeconds: true });
   // Render each event as a positioned band over a 1-hour-wide track.
   // Bands narrower than 0.5% of the track widen visually so single-second
   // clips stay clickable; their hit-target stays exact via the timestamp.

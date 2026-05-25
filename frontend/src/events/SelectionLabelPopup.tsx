@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import { AnnotationApiError, submitAnnotation } from '../api';
+import { useTweaks } from '../tweaks';
+import { formatClock } from '../utils';
 import { EVENT_LABELS, type EventLabel, type SpectrogramAnnotation } from '../types';
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
-function fmtClockSec(unixSec: number): string {
-  const d = new Date(unixSec * 1000);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-}
 
 interface Props {
   deviceId: string;
@@ -27,6 +22,8 @@ export function SelectionLabelPopup({
   deviceId, tsStart, tsEnd, anchorLeftPx, anchorWidthPx,
   onSubmitted, onCancel,
 }: Props) {
+  const { timeFormat } = useTweaks();
+  const fmtClockSec = (ts: number) => formatClock(ts, timeFormat, { withSeconds: true });
   const [pending, setPending] = useState<EventLabel | null>(null);
   const [error, setError] = useState<string | null>(null);
 

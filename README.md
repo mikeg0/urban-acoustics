@@ -204,3 +204,5 @@ The WebSocket needs the backend running. Check `docker compose logs backend` for
 ## Origin
 
 Bootstrapped from a [Claude Design](https://claude.ai/design) HTML/JSX prototype, then migrated to this Vite + FastAPI + Docker setup. The original prototype is preserved in [`.legacy/`](.legacy/) for reference.
+
+

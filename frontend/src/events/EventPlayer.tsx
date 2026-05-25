@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteEvent, fetchEventPlaybackUrl } from '../api';
 import { SpectrogramCanvas, computeEventSpectrogram } from '../spectrogram';
 import { useTweaks } from '../tweaks';
+import { formatClock } from '../utils';
 import type { DeviceEvent } from '../types';
 
 interface Props {
   event: DeviceEvent | null;
   onDeleted?: (eventId: string) => void;
   onNext?: () => void;
+  onPrev?: () => void;
 }
 
 interface SpectCache {
@@ -26,13 +28,8 @@ function formatTime(sec: number): string {
   return `${m}:${pad2(s)}`;
 }
 
-function formatClock(unixSec: number): string {
-  const d = new Date(unixSec * 1000);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-}
-
-export function EventPlayer({ event, onDeleted, onNext }: Props) {
-  const { spectroColor, clipAutoPlay } = useTweaks();
+export function EventPlayer({ event, onDeleted, onNext, onPrev }: Props) {
+  const { spectroColor, clipAutoPlay, timeFormat } = useTweaks();
   // Latch the latest value in a ref so onLoadedMetadata (memoised once) reads
   // the current setting without re-binding the <audio> handler on every flip.
   const clipAutoPlayRef = useRef(clipAutoPlay);
@@ -319,8 +316,9 @@ export function EventPlayer({ event, onDeleted, onNext }: Props) {
       {/* Playback controls — mirrors the reference WavPlayer layout. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <button
-          onClick={skipToStart}
-          aria-label="Skip to start"
+          onClick={onPrev ?? skipToStart}
+          aria-label={onPrev ? 'Previous clip' : 'Skip to start'}
+          title={onPrev ? 'Previous clip' : 'Skip to start of clip'}
           style={iconBtn(false)}
         >
           <svg width="11" height="11" viewBox="0 0 10 10">
@@ -450,7 +448,7 @@ export function EventPlayer({ event, onDeleted, onNext }: Props) {
       <div className="mono" style={{
         fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.05em', marginBottom: 10,
       }}>
-        {event.duration_s.toFixed(0)}s clip · starts at {formatClock(event.ts)}
+        {event.duration_s.toFixed(0)}s clip · starts at {formatClock(event.ts, timeFormat, { withSeconds: true })}
       </div>
 
       <div>

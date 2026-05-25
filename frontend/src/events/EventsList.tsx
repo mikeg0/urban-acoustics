@@ -1,3 +1,5 @@
+import { useTweaks } from '../tweaks';
+import { formatClock } from '../utils';
 import type { RecentEntry } from '../types';
 
 interface Props {
@@ -8,16 +10,6 @@ interface Props {
   onSelectAnnotation: (annotationId: number) => void;
   threshold: number;
 }
-
-const fmtTs = (ts: number) =>
-  new Date(ts * 1000).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
 
 export function EventsList({
   entries, selectedEventId, selectedAnnotationId,
@@ -62,6 +54,7 @@ function EventRow({
   threshold: number;
   onSelect: () => void;
 }) {
+  const { timeFormat } = useTweaks();
   const breach = e.peak_db >= threshold;
   return (
     <button
@@ -91,7 +84,7 @@ function EventRow({
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <span className="mono" style={{ fontSize: 11, color: 'var(--ink-0)' }}>
-          {fmtTs(e.ts)}
+          {formatClock(e.ts, timeFormat, { withSeconds: true, withDate: true })}
         </span>
         <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
           {e.duration_s.toFixed(1)}s ·{' '}
@@ -129,6 +122,7 @@ function AnnotationRow({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const { timeFormat } = useTweaks();
   const duration = a.ts_end - a.ts_start;
   return (
     <button
@@ -167,7 +161,7 @@ function AnnotationRow({
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <span className="mono" style={{ fontSize: 11, color: 'var(--ink-0)' }}>
-          {fmtTs(a.ts_start)}
+          {formatClock(a.ts_start, timeFormat, { withSeconds: true, withDate: true })}
         </span>
         <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
           {duration.toFixed(1)}s · <span style={{ color: 'var(--neon-ok)' }}>{a.label}</span>

@@ -1,14 +1,10 @@
 import { Pill } from './atoms';
+import { useTweaks } from './tweaks';
+import { formatHour, formatHourTick } from './utils';
 import type { Anomaly, Day, ForecastPoint, Source } from './types';
 
 const SEV_LABEL = (z: number) => z >= 4 ? 'CRITICAL' : z >= 3 ? 'HIGH' : z >= 2.6 ? 'ELEVATED' : 'NOTABLE';
 const SEV_TONE = (z: number): 'hot' | 'warn' | 'cool' => z >= 3 ? 'hot' : z >= 2.6 ? 'warn' : 'cool';
-
-const hourLabel = (h: number) => {
-  const ap = h < 12 ? 'AM' : 'PM';
-  const hh = h % 12 === 0 ? 12 : h % 12;
-  return `${hh}:00 ${ap}`;
-};
 
 export function AnomaliesFeed({
   anomalies,
@@ -21,6 +17,7 @@ export function AnomaliesFeed({
   sensitivity?: number;
   focusKey?: string | null;
 }) {
+  const { timeFormat } = useTweaks();
   const filtered = anomalies.filter((a) => a.z >= sensitivity).slice(0, 40);
 
   return (
@@ -53,7 +50,7 @@ export function AnomaliesFeed({
             </div>
             <div className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
               {date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })}<br />
-              <span style={{ color: 'var(--ink-3)' }}>{hourLabel(a.hour)}</span>
+              <span style={{ color: 'var(--ink-3)' }}>{formatHour(a.hour, timeFormat)}</span>
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, color: 'var(--ink-0)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -116,6 +113,7 @@ export function BreachRibbon({ days, threshold }: { days: Day[]; threshold: numb
 }
 
 export function PeakHoursChart({ hours }: { hours: number[] }) {
+  const { timeFormat } = useTweaks();
   const max = Math.max(...hours);
   const peakHour = hours.indexOf(max);
   return (
@@ -138,7 +136,7 @@ export function PeakHoursChart({ hours }: { hours: number[] }) {
         })}
       </div>
       <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
-        {[0, 6, 12, 18, 23].map((h) => <span key={h}>{String(h).padStart(2, '0')}:00</span>)}
+        {[0, 6, 12, 18, 23].map((h) => <span key={h}>{formatHourTick(h, timeFormat)}</span>)}
       </div>
     </div>
   );
