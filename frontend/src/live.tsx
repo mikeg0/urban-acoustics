@@ -395,7 +395,7 @@ function StatusBanner({
   );
 }
 
-function BigLiveStat({ label, value, unit, tone = 'default', pulse = false }: {
+export function BigLiveStat({ label, value, unit, tone = 'default', pulse = false }: {
   label: string; value: string; unit?: string; tone?: 'hot' | 'warn' | 'default'; pulse?: boolean;
 }) {
   const color = tone === 'hot' ? 'var(--neon-hot)' : tone === 'warn' ? 'oklch(82% 0.16 70)' : 'var(--ink-0)';

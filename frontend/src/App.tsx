@@ -19,6 +19,7 @@ import {
   sourcesToUi,
   summaryToDays,
 } from './dashboard_adapter';
+import { RealDayView } from './dayview';
 import { DayView, HourView, MonthView, YearHeatmap, YearView } from './drills';
 import { HealthView, RealHealthView } from './health';
 import { LiveView, RealLiveView } from './live';
@@ -371,7 +372,9 @@ function DrillFlow({ state, setState, threshold, palette, months, yearDays, devi
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {(['YEAR', 'MONTH', 'DAY', 'HOUR'] as const).map((lbl, i) => (
+        {(['YEAR', 'MONTH', 'DAY'] as const).map((lbl, i) => {
+          const chipLevel = Math.min(level, 2);
+          return (
           <Fragment key={i}>
             <div
               onClick={() => {
@@ -385,18 +388,19 @@ function DrillFlow({ state, setState, threshold, palette, months, yearDays, devi
                 fontSize: 10,
                 letterSpacing: '0.12em',
                 fontFamily: 'var(--mono)',
-                background: i === level ? 'var(--neon-focus)' : i < level ? 'var(--bg-3)' : 'var(--bg-2)',
-                color: i === level ? '#0a0a0a' : i < level ? 'var(--ink-0)' : 'var(--ink-3)',
-                cursor: i <= level ? 'pointer' : 'default',
+                background: i === chipLevel ? 'var(--neon-focus)' : i < chipLevel ? 'var(--bg-3)' : 'var(--bg-2)',
+                color: i === chipLevel ? '#0a0a0a' : i < chipLevel ? 'var(--ink-0)' : 'var(--ink-3)',
+                cursor: i <= chipLevel ? 'pointer' : 'default',
                 border: '1px solid var(--line)',
                 transition: 'all 200ms',
               }}
             >
               {lbl}
             </div>
-            {i < 3 && <div style={{ flex: i < level ? 0.2 : 1, height: 1, background: i < level ? 'var(--neon-focus)' : 'var(--line)', transition: 'all 300ms' }} />}
+            {i < 2 && <div style={{ flex: i < chipLevel ? 0.2 : 1, height: 1, background: i < chipLevel ? 'var(--neon-focus)' : 'var(--line)', transition: 'all 300ms' }} />}
           </Fragment>
-        ))}
+          );
+        })}
       </div>
       <div key={animKey} style={{
         flex: 1, minHeight: 0, overflow: 'auto',
@@ -429,25 +433,34 @@ function DrillFlow({ state, setState, threshold, palette, months, yearDays, devi
             onPickMonth={(m) => setState({ ...state, month: m, dayKey: null, hour: null })} />
         )}
         {dayObj && hour == null && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>
-              <div>
-                <div style={{ fontSize: 16, color: 'var(--ink-0)' }}>
-                  {new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          deviceId ? (
+            <RealDayView
+              day={dayObj}
+              deviceId={deviceId}
+              threshold={threshold}
+              palette={palette}
+            />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'baseline' }}>
+                <div>
+                  <div style={{ fontSize: 16, color: 'var(--ink-0)' }}>
+                    {new Date(dayObj.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </div>
+                  {dayObj.event && <div className="mono" style={{ fontSize: 11, color: 'var(--neon-focus)', marginTop: 2 }}>◆ {dayObj.event}</div>}
                 </div>
-                {dayObj.event && <div className="mono" style={{ fontSize: 11, color: 'var(--neon-focus)', marginTop: 2 }}>◆ {dayObj.event}</div>}
+                <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 'auto' }}>
+                  peak <span style={{ color: 'var(--neon-hot)' }}>{dayObj.peak.toFixed(1)}</span> · avg {dayObj.mean.toFixed(1)} · {dayObj.breaches} breach hrs
+                </div>
               </div>
-              <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginLeft: 'auto' }}>
-                peak <span style={{ color: 'var(--neon-hot)' }}>{dayObj.peak.toFixed(1)}</span> · avg {dayObj.mean.toFixed(1)} · {dayObj.breaches} breach hrs
+              <DayView day={dayObj} threshold={threshold} onPickHour={(h) => setState({ ...state, hour: h })} />
+              <div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 6 }}>24-HOUR SPECTROGRAM · CLICK TO DRILL</div>
+                <TimelineSpectrogram day={dayObj} palette={palette} threshold={threshold}
+                  showBars onHourClick={(h) => setState({ ...state, hour: h })} deviceId={deviceId} />
               </div>
             </div>
-            <DayView day={dayObj} threshold={threshold} onPickHour={(h) => setState({ ...state, hour: h })} />
-            <div>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 6 }}>24-HOUR SPECTROGRAM · CLICK TO DRILL</div>
-              <TimelineSpectrogram day={dayObj} palette={palette} threshold={threshold}
-                showBars onHourClick={(h) => setState({ ...state, hour: h })} deviceId={deviceId} />
-            </div>
-          </div>
+          )
         )}
         {dayObj && hour != null && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -707,7 +720,7 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
               </Card>
             </div>
 
-            <Card title="DRILL · YEAR → HOUR → SPECTROGRAM">
+            <Card>
               <DrillFlow state={drillState} setState={setDrillState} threshold={dbThreshold}
                 palette={spectroColor} months={months} yearDays={days} deviceId={deviceId} />
             </Card>

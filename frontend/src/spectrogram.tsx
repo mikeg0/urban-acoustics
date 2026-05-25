@@ -591,6 +591,10 @@ interface HistoryRibbon24hProps {
   annotations?: SpectrogramAnnotationOverlay[];
   selectedAnnotationId?: number | null;
   onAnnotationClick?: (id: number) => void;
+  /** When set, render the 24 tiles for this UTC day (YYYY-MM-DD) instead of
+   *  the rolling-last-24h manifest. Used by the day view so the same ribbon
+   *  widget can show a historical day's hour grid. */
+  dayKey?: string | null;
 }
 
 // Minimal shape needed for ribbon overlay rendering — kept local so this
@@ -613,12 +617,37 @@ export function HistoryRibbon24h({
   annotations,
   selectedAnnotationId = null,
   onAnnotationClick,
+  dayKey = null,
 }: HistoryRibbon24hProps) {
   const [manifest, setManifest] = useState<SpectrogramHistoryResponse | null>(null);
   const [currentTick, setCurrentTick] = useState(0);
   const { timeFormat } = useTweaks();
 
+  // Day-anchored mode: skip the manifest fetch entirely and synthesize the
+  // 24 hour refs from dayKey. Closed historical hours are immutable on the
+  // backend so a static manifest is correct.
+  const syntheticManifest = useMemo<SpectrogramHistoryResponse | null>(() => {
+    if (!dayKey) return null;
+    return {
+      device_id: deviceId,
+      generated_at: 0,
+      tile_db_min: TILE_DB_MIN_DEFAULT,
+      tile_db_max: TILE_DB_MAX_DEFAULT,
+      tile_rows: TILE_ROWS_DEFAULT,
+      tile_cols: TILE_COLS_DEFAULT,
+      hours: Array.from({ length: 24 }, (_, h) => {
+        const hourTs = dayHourToEpoch(dayKey, h);
+        return { hour: hourTs, tile_url: spectrogramTileUrl(deviceId, hourTs) };
+      }),
+    };
+  }, [dayKey, deviceId]);
+
   useEffect(() => {
+    // Day-anchored mode owns its manifest; skip the rolling fetch.
+    if (dayKey) {
+      setManifest(syntheticManifest);
+      return;
+    }
     let alive = true;
     const load = async () => {
       try {
@@ -640,7 +669,7 @@ export function HistoryRibbon24h({
       window.clearInterval(manifestId);
       window.clearInterval(currentId);
     };
-  }, [deviceId]);
+  }, [deviceId, dayKey, syntheticManifest]);
 
   const placeholder = (
     <div
@@ -811,7 +840,7 @@ interface HistoryTileProps {
 // Compute the UTC hour-boundary epoch for a given dayKey (YYYY-MM-DD UTC)
 // and hour-of-day [0..23]. Dashboard summary days are UTC-anchored, so the
 // tile URL it generates aligns 1:1 with the backend's tile contract.
-function dayHourToEpoch(dayKey: string, hour: number): number {
+export function dayHourToEpoch(dayKey: string, hour: number): number {
   const ts = Date.parse(`${dayKey}T00:00:00Z`);
   return Math.floor(ts / 1000) + hour * 3600;
 }
