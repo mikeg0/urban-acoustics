@@ -1,0 +1,2272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SLC Noise Enforcement · Tracing Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://unpkg.com" crossorigin />
+<link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<style>
+:root{
+  --bg-0:#0a0a0a;--bg-1:#131313;--bg-2:#1a1a1a;--bg-3:#232323;--bg-4:#2a2a2a;
+  --ink-0:#f0f0f0;--ink-1:#c0c0c0;--ink-2:#909090;--ink-3:#606060;--ink-4:#404040;
+  --line:#2a2a2a;--line-strong:#3a3a3a;
+  --neon-cool:oklch(72% 0.13 195);--neon-warm:oklch(82% 0.16 70);
+  --neon-hot:oklch(72% 0.2 35);--neon-go:oklch(72% 0.18 145);
+  --neon-amber:oklch(78% 0.15 70);
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --sans:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;width:100%}
+body{background:var(--bg-0);color:var(--ink-0);font-family:var(--sans);font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased;overflow:hidden}
+.mono{font-family:var(--mono)}
+.hidden{display:none!important}
+button{font-family:inherit}
+
+/* CDN fail */
+#cdn-fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--bg-0);z-index:9999;padding:24px}
+body.cdn-fail #cdn-fail{display:flex}
+body.cdn-fail #role-chooser,body.cdn-fail #view-root{display:none}
+.cdn-card{padding:32px;border:1px solid var(--line);border-radius:8px;background:var(--bg-1);max-width:440px;text-align:center}
+.cdn-card h1{font-size:18px;margin-bottom:12px;color:var(--neon-hot);letter-spacing:.04em}
+.cdn-card p{color:var(--ink-2);margin-bottom:14px}
+.cdn-card .mono{font-size:10px;color:var(--ink-3);letter-spacing:.12em}
+
+/* Role chooser */
+#role-chooser{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:36px;
+  background:radial-gradient(ellipse at 30% 20%,oklch(30% 0.05 35/.3),transparent 40%),radial-gradient(ellipse at 70% 80%,oklch(30% 0.05 195/.3),transparent 40%),var(--bg-0)}
+.chooser-head{text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
+.chooser-head .badge{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--neon-hot);border:1px solid var(--neon-hot);padding:3px 8px;border-radius:2px;margin-bottom:10px}
+.chooser-head h1{font-size:32px;font-weight:600;letter-spacing:.02em}
+.chooser-head h2{font-size:13px;font-weight:400;color:var(--ink-2);letter-spacing:.14em;text-transform:uppercase}
+.chooser-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:1100px;width:100%}
+.chooser-card{background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:28px 22px;cursor:pointer;transition:all 160ms;display:flex;flex-direction:column;gap:12px;min-height:240px}
+.chooser-card:hover{border-color:var(--line-strong);background:var(--bg-2);transform:translateY(-2px)}
+.chooser-card .role-label{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--ink-3)}
+.chooser-card h3{font-size:20px;font-weight:600}
+.chooser-card p{color:var(--ink-2);font-size:13px;flex:1}
+.chooser-card .role-tools{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.08em;padding-top:12px;border-top:1px dashed var(--line);line-height:1.6}
+.chooser-foot{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-3)}
+
+/* Top bar */
+.topbar{display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--bg-1);border-bottom:1px solid var(--line);height:48px;flex-shrink:0}
+.topbar-title{font-weight:600;letter-spacing:.06em;font-size:13px}
+.topbar-sub{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-3)}
+.topbar-badge{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--neon-hot);border:1px solid var(--neon-hot);padding:2px 6px;border-radius:2px;animation:badgePulse 2.4s ease-in-out infinite}
+@keyframes badgePulse{50%{opacity:.5}}
+.topbar-spacer{flex:1}
+.topbar-clock{font-family:var(--mono);font-size:12px;color:var(--ink-1);letter-spacing:.06em}
+.topbar-back{background:transparent;border:1px solid var(--line);color:var(--ink-2);padding:4px 10px;border-radius:3px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;cursor:pointer}
+.topbar-back:hover{color:var(--ink-0);border-color:var(--line-strong)}
+
+/* Dispatcher */
+#view-dispatcher{height:100%;display:flex;flex-direction:column}
+.dispatcher-body{flex:1;display:grid;grid-template-columns:280px 1fr 320px;min-height:0}
+.dispatcher-rail{background:var(--bg-1);border-right:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column}
+.dispatcher-rail.right{border-right:0;border-left:1px solid var(--line)}
+.dispatcher-map-wrap{position:relative;overflow:hidden;background:#000}
+.dispatcher-map{width:100%;height:100%}
+.dispatcher-bottom{height:56px;background:var(--bg-1);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:28px;flex-shrink:0;overflow-x:auto}
+.rail-section{border-bottom:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.rail-section.flex{flex:1}
+.rail-section-header{padding:9px 12px;display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-3);background:var(--bg-2);border-bottom:1px solid var(--line);text-transform:uppercase}
+.rail-section-header .count{margin-left:auto;color:var(--ink-1)}
+.rail-section-content{overflow-y:auto;flex:1;min-height:0}
+
+.breach-row{display:grid;grid-template-columns:16px 1fr auto;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;transition:background 120ms}
+.breach-row:hover{background:var(--bg-2)}
+.breach-row.selected{background:var(--bg-3);box-shadow:inset 3px 0 0 var(--neon-amber)}
+.breach-row.dim{opacity:.45}
+.breach-row input[type=checkbox]{margin:0;accent-color:var(--neon-amber)}
+.breach-row .b-name{font-size:12px;color:var(--ink-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.breach-row .b-id{font-family:var(--mono);font-size:9px;color:var(--ink-3);letter-spacing:.06em}
+.breach-row .b-meta{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:2px}
+.breach-row .b-db{font-family:var(--mono);font-size:17px;font-weight:600;text-align:right;min-width:42px}
+.breach-row.assigned{background:oklch(20% 0.05 70)}
+.breach-row .assigned-tag{display:inline-block;font-family:var(--mono);font-size:9px;color:var(--neon-amber);letter-spacing:.1em;margin-left:6px}
+
+.convoy-banner{margin:8px 10px 4px;padding:10px 12px;background:oklch(26% 0.1 35);border:1px solid var(--neon-hot);border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:10px;animation:convoyPulse 1.8s ease-in-out infinite}
+.convoy-banner:hover{background:oklch(32% 0.12 35)}
+@keyframes convoyPulse{50%{box-shadow:0 0 18px oklch(60% 0.2 35/.5)}}
+.convoy-banner .icon{width:14px;height:14px;border-radius:50%;background:var(--neon-hot);flex-shrink:0;box-shadow:0 0 8px var(--neon-hot)}
+.convoy-banner .title{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--neon-hot)}
+.convoy-banner .detail{font-size:11px;color:var(--ink-1);margin-top:2px}
+
+.officer-row{display:grid;grid-template-columns:14px 16px 1fr auto;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.officer-row:hover{background:var(--bg-2)}
+.officer-row.selected{background:var(--bg-3);box-shadow:inset 3px 0 0 var(--neon-cool)}
+.officer-row input[type=checkbox]{accent-color:var(--neon-cool)}
+.officer-row .pip{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.officer-row .pip.available{background:var(--neon-go);box-shadow:0 0 6px var(--neon-go)}
+.officer-row .pip.en_route{background:var(--neon-amber);box-shadow:0 0 6px var(--neon-amber);animation:enRoutePulse 1.2s ease-in-out infinite}
+@keyframes enRoutePulse{50%{box-shadow:0 0 12px var(--neon-amber)}}
+.officer-row .pip.on_scene{background:var(--neon-hot);box-shadow:0 0 8px var(--neon-hot)}
+.officer-row .pip.on_break{background:var(--ink-4)}
+.officer-row .info{min-width:0}
+.officer-row .callsign{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-0)}
+.officer-row .beat{font-size:10px;color:var(--ink-3);font-family:var(--mono);letter-spacing:.06em}
+.officer-row .you-tag{display:inline-block;font-family:var(--mono);font-size:8px;color:var(--neon-cool);background:oklch(26% 0.06 195);padding:1px 4px;border-radius:2px;letter-spacing:.1em;margin-left:6px;vertical-align:1px}
+.officer-row .citations{font-family:var(--mono);font-size:11px;color:var(--ink-2);text-align:right}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;background:var(--bg-3);color:var(--ink-0);border:1px solid var(--line-strong);padding:6px 12px;border-radius:4px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;transition:all 100ms;text-transform:uppercase}
+.btn:hover:not(:disabled){background:var(--bg-4);border-color:var(--ink-3)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.primary{background:var(--neon-go);color:#000;border-color:var(--neon-go);font-weight:600}
+.btn.primary:hover:not(:disabled){background:oklch(78% 0.18 145)}
+.btn.danger{background:var(--neon-hot);color:#000;border-color:var(--neon-hot);font-weight:600}
+.btn.warn{background:var(--neon-amber);color:#000;border-color:var(--neon-amber);font-weight:600}
+.btn.ghost{background:transparent}
+.btn-small{padding:3px 8px;font-size:10px}
+
+/* Mode tabs / chips / sliders */
+.mode-tabs{display:inline-flex;gap:1px;background:var(--line);border-radius:4px;padding:1px}
+.mode-tab{padding:5px 12px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;background:var(--bg-2);color:var(--ink-2);border:0;cursor:pointer;border-radius:3px}
+.mode-tab.active{background:var(--bg-4);color:var(--ink-0)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:4px 8px;border:1px solid var(--line);border-radius:2px;cursor:pointer;color:var(--ink-3);background:var(--bg-1);user-select:none}
+.chip.active{color:var(--ink-0);background:var(--bg-3);border-color:var(--line-strong)}
+.chip .swatch{width:8px;height:8px;border-radius:50%}
+.slider-group{display:inline-flex;align-items:center;gap:8px}
+.slider-group label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-3)}
+.slider-group input[type=range]{width:120px;height:4px;background:var(--bg-3);outline:0;-webkit-appearance:none;appearance:none;border-radius:2px}
+.slider-group input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;background:var(--ink-1);border-radius:50%;cursor:pointer}
+.slider-group .value{font-family:var(--mono);font-size:11px;color:var(--ink-0);min-width:28px;text-align:right}
+
+/* Planner */
+.planner-section{padding:12px;display:flex;flex-direction:column;gap:10px}
+.planner-status{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-3);padding:8px 10px;background:var(--bg-2);border-radius:3px;border:1px dashed var(--line);text-align:center}
+.planner-status.ready{color:var(--neon-go);border-color:var(--neon-go);border-style:solid}
+.planner-status .count{color:var(--ink-0);font-weight:600}
+
+/* Radio */
+.radio-log{font-family:var(--mono);font-size:10px;padding:8px 12px;display:flex;flex-direction:column;gap:4px;max-height:120px;overflow-y:auto}
+.radio-line{color:var(--ink-2);line-height:1.5}
+.radio-line .from{color:var(--neon-amber);font-weight:600}
+.radio-line .from.you{color:var(--neon-cool)}
+.radio-line .ts{color:var(--ink-4);margin-right:4px}
+.radio-input-row{display:flex;padding:8px 12px;gap:6px;border-top:1px solid var(--line)}
+.radio-input{flex:1;font-family:var(--mono);font-size:11px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink-0);padding:5px 8px;border-radius:3px;outline:none}
+.radio-input:focus{border-color:var(--line-strong)}
+
+/* Citations */
+.citation-row{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.citation-row .head{display:flex;justify-content:space-between;align-items:center}
+.citation-row .case-id{font-family:var(--mono);font-size:11px;color:var(--ink-1);letter-spacing:.04em}
+.citation-row .by{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.citation-row .summary{font-size:11px;color:var(--ink-2);font-family:var(--mono)}
+.citation-row .actions{display:flex;gap:6px}
+.citation-row.status-approved{opacity:.6}
+.citation-row .badge-status{font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:2px 5px;border-radius:2px}
+.badge-status.pending_review{background:oklch(26% 0.06 70);color:var(--neon-amber)}
+.badge-status.approved{background:oklch(26% 0.05 145);color:var(--neon-go)}
+.badge-status.flagged{background:oklch(26% 0.06 35);color:var(--neon-hot)}
+
+/* Analytics ribbon */
+.analytics-stat{display:flex;flex-direction:column;gap:2px;min-width:80px}
+.analytics-stat .label{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--ink-3)}
+.analytics-stat .value{font-family:var(--mono);font-size:16px;color:var(--ink-0)}
+.analytics-stat .value.hot{color:var(--neon-hot)}
+.analytics-stat .value.go{color:var(--neon-go)}
+
+/* Officer view */
+#view-officer{height:100%;display:flex;justify-content:center;background:#050505}
+.officer-frame{width:100%;max-width:520px;height:100%;display:flex;flex-direction:column;background:var(--bg-0);border-left:1px solid var(--line);border-right:1px solid var(--line)}
+.officer-status-strip{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-1);border-bottom:1px solid var(--line)}
+.officer-callsign-chip{font-family:var(--mono);font-weight:700;font-size:14px;padding:5px 10px;background:var(--bg-3);border-radius:4px;letter-spacing:.04em}
+.officer-status-pill{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.16em;padding:6px 10px;border-radius:3px;text-align:center}
+.officer-status-pill.available{background:oklch(26% 0.06 145);color:var(--neon-go)}
+.officer-status-pill.en_route{background:oklch(26% 0.06 70);color:var(--neon-amber)}
+.officer-status-pill.on_scene{background:oklch(26% 0.08 35);color:var(--neon-hot);animation:scenePulse 1s ease-in-out infinite}
+@keyframes scenePulse{50%{box-shadow:0 0 12px oklch(60% 0.2 35/.4)}}
+.officer-status-pill.on_break{background:var(--bg-2);color:var(--ink-3)}
+.officer-meta{font-family:var(--mono);font-size:10px;color:var(--ink-2);text-align:right;letter-spacing:.06em;line-height:1.5}
+.officer-meta .clock{font-size:12px;color:var(--ink-1)}
+
+.officer-map-wrap{flex:0 0 50%;position:relative;background:#000}
+.officer-map{width:100%;height:100%}
+
+.officer-card-area{flex:1;display:flex;flex-direction:column;overflow-y:auto;padding:12px;gap:10px;min-height:0}
+
+.assignment-card{background:oklch(18% 0.05 70);border:1px solid var(--neon-amber);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 0 20px oklch(60% 0.16 70/.15)}
+.assignment-card.scene{background:oklch(18% 0.05 35);border-color:var(--neon-hot);box-shadow:0 0 20px oklch(60% 0.2 35/.2)}
+.assignment-card .head-label{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--neon-amber);text-transform:uppercase}
+.assignment-card.scene .head-label{color:var(--neon-hot)}
+.assignment-card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.assignment-card .type-row{display:flex;flex-direction:column;gap:2px}
+.assignment-card .type{font-size:15px;font-weight:600}
+.assignment-card .vehicle-id{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.06em}
+.assignment-card .db-block{text-align:right}
+.assignment-card .db-now{font-family:var(--mono);font-size:34px;font-weight:600;line-height:1}
+.assignment-card .db-peak{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:2px}
+.assignment-card .intercept{background:rgba(0,0,0,0.35);padding:10px 12px;border-radius:4px;display:flex;flex-direction:column;gap:8px}
+.assignment-card .intercept .label{font-family:var(--mono);font-size:9px;color:var(--ink-3);letter-spacing:.14em}
+.assignment-card .intercept .where{font-size:14px;font-weight:600}
+.assignment-card .compass{display:flex;align-items:center;gap:12px;font-family:var(--mono)}
+.assignment-card .arrow{width:32px;height:32px;border:1.5px solid currentColor;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--neon-amber);flex-shrink:0;font-weight:600}
+.assignment-card.scene .arrow{color:var(--neon-hot)}
+.assignment-card .compass .distance{font-size:13px;color:var(--ink-1)}
+.assignment-card .compass .eta{font-size:13px;color:var(--neon-amber);margin-left:auto;font-weight:600}
+.assignment-card.scene .compass .eta{color:var(--neon-hot)}
+.assignment-card .stage-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.assignment-card .stage-btn{padding:13px 6px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink-2);font-family:var(--mono);font-size:10px;letter-spacing:.1em;border-radius:4px;cursor:pointer;font-weight:600;text-transform:uppercase}
+.assignment-card .stage-btn:disabled{cursor:not-allowed;opacity:.5}
+.assignment-card .stage-btn.current{background:var(--neon-amber);color:#000;border-color:var(--neon-amber)}
+.assignment-card.scene .stage-btn.current{background:var(--neon-hot);border-color:var(--neon-hot)}
+.assignment-card .stage-btn.done{background:transparent;color:var(--neon-go);border-color:var(--neon-go)}
+
+.nearby-list-card{background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:12px}
+.nearby-list-card .head{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-3);margin-bottom:10px;display:flex;justify-content:space-between;text-transform:uppercase}
+.nearby-list-card .head .count{color:var(--ink-1)}
+.nearby-item{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:4px;margin-bottom:6px;cursor:pointer;transition:background 120ms}
+.nearby-item:last-child{margin-bottom:0}
+.nearby-item:hover{background:var(--bg-2);border-color:var(--line-strong)}
+.nearby-item .type{font-size:13px}
+.nearby-item .type .id{font-family:var(--mono);font-size:9px;color:var(--ink-3);margin-left:6px}
+.nearby-item .dist{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.nearby-item .db{font-family:var(--mono);font-size:16px;font-weight:600;min-width:36px;text-align:right}
+
+.officer-citation-bar{flex-shrink:0;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg-1)}
+.btn-issue{width:100%;padding:14px;background:var(--neon-hot);color:#000;font-family:var(--mono);font-weight:700;font-size:12px;letter-spacing:.18em;border:0;border-radius:4px;cursor:pointer;transition:all 100ms}
+.btn-issue:hover:not(:disabled){background:oklch(78% 0.2 35)}
+.btn-issue:disabled{background:var(--bg-3);color:var(--ink-3);cursor:not-allowed}
+
+.incident-log-card{background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:12px}
+.incident-log-card .head{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-3);margin-bottom:8px;display:flex;justify-content:space-between;cursor:pointer}
+.incident-entry{font-family:var(--mono);font-size:10px;color:var(--ink-2);padding:4px 0;border-bottom:1px dashed var(--line);display:flex;gap:8px}
+.incident-entry:last-child{border-bottom:0}
+.incident-entry .when{color:var(--ink-4);min-width:48px}
+.incident-entry .what{color:var(--ink-1);flex:1}
+
+/* Split view */
+#view-split{height:100%;display:grid;grid-template-columns:62% 38%;background:#050505}
+#view-split .dispatcher-frame{overflow:hidden;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+#view-split .dispatcher-frame #view-dispatcher{height:100%}
+#view-split .dispatcher-frame .dispatcher-body{grid-template-columns:200px 1fr 220px}
+#view-split .dispatcher-frame .rail-section-header,#view-split .dispatcher-frame .breach-row .b-meta,#view-split .dispatcher-frame .officer-row .beat{font-size:9px}
+#view-split .bezel-wrap{padding:14px;display:flex;align-items:center;justify-content:center;height:100%;background:linear-gradient(180deg,#1a1a1a,#050505)}
+#view-split .bezel{width:100%;max-width:430px;height:100%;background:var(--bg-0);border-radius:24px;border:6px solid #1a1a1a;box-shadow:0 14px 40px rgba(0,0,0,.7),inset 0 0 0 1px #2a2a2a;overflow:hidden;display:flex;flex-direction:column}
+#view-split .bezel .officer-frame{max-width:100%;border:0}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.78);z-index:200;padding:20px}
+.modal{background:var(--bg-1);border:1px solid var(--line-strong);border-radius:8px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;animation:modalIn 160ms ease-out}
+@keyframes modalIn{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-weight:600;letter-spacing:.06em;font-size:13px;text-transform:uppercase;font-family:var(--mono)}
+.modal-close{background:transparent;border:0;color:var(--ink-2);font-size:20px;cursor:pointer;line-height:1}
+.modal-body{padding:18px;display:flex;flex-direction:column;gap:14px}
+.modal-footer{padding:14px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+.kv-grid{display:grid;grid-template-columns:140px 1fr;gap:8px 14px;font-size:12px}
+.kv-grid .k{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-3);text-transform:uppercase;align-self:center}
+.kv-grid .v{color:var(--ink-0);font-family:var(--mono)}
+.evidence-placeholder{height:120px;background:repeating-linear-gradient(45deg,#0e0e0e,#0e0e0e 8px,#161616 8px,#161616 16px);border:1px dashed var(--line-strong);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-3)}
+.modal.flash-red{animation:flashRed 700ms ease-out}
+@keyframes flashRed{0%,100%{box-shadow:0 0 0 0 transparent}25%{box-shadow:0 0 0 8px oklch(60% 0.2 35/.5)}}
+.modal textarea{background:var(--bg-2);border:1px solid var(--line);color:var(--ink-0);font-family:var(--mono);font-size:11px;padding:8px;border-radius:3px;resize:vertical;min-height:60px;outline:none}
+.modal textarea:focus{border-color:var(--line-strong)}
+
+/* Map overlays */
+.map-overlay{position:absolute;pointer-events:none;z-index:5}
+.map-overlay>*{pointer-events:auto}
+.map-overlay.top-left{top:12px;left:12px}
+.map-overlay.top-right{top:12px;right:12px}
+.map-overlay.bottom-left{bottom:12px;left:12px;right:12px;display:flex;gap:8px;justify-content:space-between;align-items:flex-end}
+.map-legend{background:rgba(10,10,10,.85);border:1px solid var(--line);border-radius:4px;padding:6px 10px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--ink-2)}
+.swatch{display:inline-flex;align-items:center;gap:5px}
+.swatch .sw{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.scrubber-panel{background:rgba(10,10,10,.85);border:1px solid var(--line);border-radius:4px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:10px}
+.scrubber-panel input[type=range]{flex:1;min-width:200px}
+
+/* MapLibre overrides */
+.maplibregl-ctrl-attrib{font-size:9px!important;background:rgba(10,10,10,.7)!important}
+.maplibregl-ctrl-attrib a{color:var(--ink-3)!important}
+.maplibregl-ctrl-attrib-button{display:none!important}
+.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{z-index:4!important}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg-0)}
+::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--bg-4)}
+
+@media (max-width:720px){
+  .officer-frame{max-width:100%;border-left:0;border-right:0}
+  #view-split{grid-template-columns:1fr;grid-template-rows:60% 40%}
+  #view-split .bezel{max-width:100%;border-radius:8px}
+  .dispatcher-body{grid-template-columns:160px 1fr 200px}
+}
+</style>
+</head>
+<body>
+
+<div id="cdn-fail">
+  <div class="cdn-card">
+    <h1>MAP LIBRARY UNAVAILABLE</h1>
+    <p>The demo couldn't reach the CDN that serves its map engine. Check your network connection and reload the page.</p>
+    <div class="mono">SLC NOISE ENFORCEMENT · TRACING DEMO</div>
+  </div>
+</div>
+
+<div id="role-chooser">
+  <div class="chooser-head">
+    <div class="badge">DEMO · SIMULATION</div>
+    <h1>SALT LAKE CITY NOISE ENFORCEMENT</h1>
+    <h2>Real-time tracing &amp; coordinated interdiction</h2>
+  </div>
+  <div class="chooser-cards">
+    <a class="chooser-card" href="#dispatcher">
+      <span class="role-label">ROLE · 01</span>
+      <h3>Dispatcher</h3>
+      <p>Stationary ops desk. Watch the full city, coordinate group stops across multiple officers, review citations submitted from the field.</p>
+      <div class="role-tools">▸ CITY-WIDE MAP<br>▸ ROSTER + GROUP STOP PLANNER<br>▸ CITATION REVIEW QUEUE</div>
+    </a>
+    <a class="chooser-card" href="#officer">
+      <span class="role-label">ROLE · 02</span>
+      <h3>Mobile Officer</h3>
+      <p>In-vehicle terminal. Receive dispatch assignments with predicted intercept points, run a traffic stop, capture court-admissible citations on the spot.</p>
+      <div class="role-tools">▸ TABLET LAYOUT (UNIT-12)<br>▸ ASSIGNMENT CARD + HEADING<br>▸ ISSUE CITATION ON SCENE</div>
+    </a>
+    <a class="chooser-card" href="#split">
+      <span class="role-label">ROLE · DEMO</span>
+      <h3>Split Screen</h3>
+      <p>Both views side-by-side. Watch the dispatcher coordinate a stop and an officer receive and act on the assignment in real time.</p>
+      <div class="role-tools">▸ DISPATCHER (LEFT)<br>▸ UNIT-12 TABLET (RIGHT)<br>▸ FOR PRESENTATIONS</div>
+    </a>
+  </div>
+  <div class="chooser-foot">PRESS A CARD · OR APPEND #DISPATCHER / #OFFICER / #SPLIT TO THE URL</div>
+</div>
+
+<div id="view-root"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
+        onerror="document.body.classList.add('cdn-fail')"></script>
+<script>
+/* Boot guard */
+if (typeof maplibregl === 'undefined') {
+  document.body.classList.add('cdn-fail');
+}
+</script>
+
+<script>
+/* =============================================================================
+ * SLC NOISE ENFORCEMENT — TRACING DEMO
+ * Single-file, CDN-served. All simulation runs client-side.
+ * Sections:
+ *   1. CONFIG          map style, corridor bounds, street grid, stations
+ *   2. HELPERS         math, color ramp, formatting
+ *   3. STATE + BUS     sim state, pub-sub
+ *   4. STREET GRAPH    intersections, path building, walking
+ *   5. VEHICLE SIM     spawn, tick, convoy spawn
+ *   6. OFFICER SIM     patrol, dispatch, status machine
+ *   7. CONVOY/PREDICT  group detection, +5m extrapolation, heatmap
+ *   8. CITATIONS       officer→dispatcher queue
+ *   9. AUTO-DISPATCH   background AI that assigns idle officers
+ *  10. SIM LOOP        10Hz tick + render loop
+ *  11. PLAYBACK        10min pre-generated history
+ *  12. MAP SETUP       sources + layers + render fn (shared by views)
+ *  13. DISPATCHER VIEW
+ *  14. OFFICER VIEW
+ *  15. SPLIT VIEW
+ *  16. ROUTER + BOOT
+ * ===========================================================================*/
+(function() {
+'use strict';
+if (typeof maplibregl === 'undefined') return;
+
+/* ============================================================================
+ * 1. CONFIG
+ * ==========================================================================*/
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+const CORRIDOR_CENTER = [-111.8881, 40.7616];
+const CORRIDOR_BOUNDS = [[-111.9300, 40.7400], [-111.8500, 40.7850]];
+const CORRIDOR_ZOOM = 12.8;
+const OFFICER_ZOOM = 14.4;
+const PRECINCT = [-111.8881, 40.7626]; // State & 400 S
+
+// N-S streets indexed by their SLC longitude.
+// `weight` biases how often vehicles & predictions favor this street.
+const NS = [
+  {name: '300 West',     lon: -111.8970, weight: 0.55, arterial: false},
+  {name: 'West Temple',  lon: -111.8941, weight: 0.40, arterial: false},
+  {name: 'Main',         lon: -111.8910, weight: 0.85, arterial: true },
+  {name: 'State',        lon: -111.8881, weight: 1.00, arterial: true },
+  {name: '200 East',     lon: -111.8852, weight: 0.55, arterial: false},
+  {name: '300 East',     lon: -111.8823, weight: 0.55, arterial: false},
+  {name: '400 East',     lon: -111.8794, weight: 0.50, arterial: false},
+  {name: '500 East',     lon: -111.8765, weight: 0.40, arterial: false},
+  {name: '600 East',     lon: -111.8736, weight: 0.40, arterial: false},
+  {name: '700 East',     lon: -111.8707, weight: 0.60, arterial: true },
+];
+const EW = [
+  {name: 'N Temple', lat: 40.7706, weight: 0.85, arterial: true },
+  {name: '100 S',    lat: 40.7686, weight: 0.35, arterial: false},
+  {name: '200 S',    lat: 40.7666, weight: 0.60, arterial: false},
+  {name: '300 S',    lat: 40.7646, weight: 0.70, arterial: false},
+  {name: '400 S',    lat: 40.7626, weight: 0.95, arterial: true },
+  {name: '500 S',    lat: 40.7606, weight: 0.40, arterial: false},
+  {name: '600 S',    lat: 40.7586, weight: 0.85, arterial: true },
+  {name: '700 S',    lat: 40.7566, weight: 0.40, arterial: false},
+  {name: '800 S',    lat: 40.7546, weight: 0.40, arterial: false},
+  {name: '900 S',    lat: 40.7526, weight: 0.75, arterial: true },
+];
+
+// 40 pilot-corridor stations (derived from backend/scripts/seed_pilot_corridor.py).
+const STATIONS = (function() {
+  const out = [];
+  const stateCrosses = [40.7706,40.7686,40.7666,40.7646,40.7626,40.7606,40.7586,40.7566,40.7546,40.7526];
+  stateCrosses.forEach((lat, i) => out.push({id: 'UQI-ST-'+String(i+1).padStart(2,'0'), lat, lon: -111.8881}));
+  const parallels = [['300W',-111.8970],['WT',-111.8941],['MAIN',-111.8910],['200E',-111.8852],['300E',-111.8823],['400E',-111.8794]];
+  const standardCrosses = [40.7686,40.7646,40.7606,40.7566,40.7526];
+  parallels.forEach(([px, lon]) => {
+    standardCrosses.forEach((lat, j) => out.push({id: 'UQI-'+px+'-'+String(j+1).padStart(2,'0'), lat, lon}));
+  });
+  return out;
+})();
+
+// Officer roster. UNIT-12 is "you" in the officer view.
+const OFFICER_DEFS = [
+  {id:'U10', callsign:'UNIT-10', beat:'Downtown North', home:[-111.8910, 40.7696]},
+  {id:'U11', callsign:'UNIT-11', beat:'Downtown West',  home:[-111.8970, 40.7656]},
+  {id:'U12', callsign:'UNIT-12', beat:'Granary',        home:[-111.8881, 40.7586], you:true},
+  {id:'U13', callsign:'UNIT-13', beat:'Central',        home:[-111.8852, 40.7626]},
+  {id:'U14', callsign:'UNIT-14', beat:'Ballpark',       home:[-111.8910, 40.7536], status:'on_break'},
+  {id:'U15', callsign:'UNIT-15', beat:'Downtown East',  home:[-111.8707, 40.7666]},
+];
+
+const VEHICLE_TYPES = {
+  motorcycle:       {label: 'Motorcycle',       icon: '🏍', dbBase: 88, dbVar: 8},
+  motorcycle_group: {label: 'Motorcycle Group', icon: '⫷⫸', dbBase: 95, dbVar: 4},
+  modified_car:     {label: 'Modified Car',     icon: '⚐',  dbBase: 84, dbVar: 7},
+  truck:            {label: 'Diesel Truck',     icon: '☗',  dbBase: 80, dbVar: 5},
+};
+
+const PRESET_RADIO = [
+  ['UNIT-10', '10-4 dispatch, intercepting at 400 S & State.'],
+  ['UNIT-15', 'Confirming convoy of three motorcycles southbound on State.'],
+  ['UNIT-13', 'On scene, vehicle stopped, requesting backup.'],
+  ['UNIT-11', 'Clearing scene at 200 S & Main, returning to patrol.'],
+  ['UNIT-10', 'Reading 94 dB peak on the lead bike.'],
+];
+
+/* ============================================================================
+ * 2. HELPERS
+ * ==========================================================================*/
+const now = () => Date.now();
+const rand = (a, b) => a + Math.random() * (b - a);
+const irand = (a, b) => Math.floor(rand(a, b+1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const pad = (n, w=2) => String(n).padStart(w, '0');
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+function pickWeighted(arr, weightFn) {
+  let total = 0; arr.forEach(x => total += weightFn(x));
+  let r = Math.random() * total;
+  for (const x of arr) { r -= weightFn(x); if (r <= 0) return x; }
+  return arr[arr.length-1];
+}
+
+// Approx meters between two [lon,lat] points (planar at this latitude).
+function dist(a, b) {
+  const dLat = (b[1]-a[1]) * 111320;
+  const dLon = (b[0]-a[0]) * 111320 * Math.cos(a[1] * Math.PI/180);
+  return Math.sqrt(dLat*dLat + dLon*dLon);
+}
+function lerp2(a, b, t) { return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
+
+// Mirrors stations.tsx colorForDb (oklch values verbatim).
+function colorForDb(db) {
+  if (db == null) return 'oklch(60% 0.02 60)';
+  if (db >= 75) return 'oklch(72% 0.2 35)';
+  if (db >= 65) return 'oklch(82% 0.16 70)';
+  if (db >= 55) return 'oklch(78% 0.14 130)';
+  return 'oklch(72% 0.13 195)';
+}
+
+function fmtClock(d) {
+  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+function fmtIso(d) {
+  return d.toISOString().replace('T',' ').slice(0,19) + ' MDT';
+}
+function fmtCaseId(d, n) {
+  return 'UQI-CIT-' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '-' + pad(n, 4);
+}
+
+// Heading bearing → compass label.
+function bearingLabel(dx, dy) {
+  // dx in lon, dy in lat. Treat lat=north, lon=east.
+  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return '—';
+  const ang = Math.atan2(dx, dy) * 180 / Math.PI; // 0 = north, 90 = east
+  const a = (ang + 360) % 360;
+  if (a < 22.5 || a >= 337.5) return 'N';
+  if (a < 67.5)  return 'NE';
+  if (a < 112.5) return 'E';
+  if (a < 157.5) return 'SE';
+  if (a < 202.5) return 'S';
+  if (a < 247.5) return 'SW';
+  if (a < 292.5) return 'W';
+  return 'NW';
+}
+
+/* ============================================================================
+ * 3. STATE + BUS
+ * ==========================================================================*/
+const bus = (() => {
+  const h = {};
+  return {
+    on(evt, fn) { (h[evt] = h[evt] || []).push(fn); return () => bus.off(evt, fn); },
+    off(evt, fn) { h[evt] = (h[evt] || []).filter(x => x !== fn); },
+    emit(evt, data) { (h[evt] || []).slice().forEach(fn => { try { fn(data); } catch (e) { console.error(e); } }); },
+  };
+})();
+
+const sim = {
+  startedAt: now(),
+  mode: 'live',                 // live | playback | predict
+  dbThreshold: 82,
+  typeFilter: {motorcycle:true, motorcycle_group:true, modified_car:true, truck:true},
+  vehicles: [],
+  officers: [],
+  citations: [],
+  convoys: new Map(),           // groupId → {memberIds:[], detectedAt}
+  radio: [],
+  nextVehicleSeq: 1,
+  nextGroupSeq: 1,
+  nextCitationSeq: 1,
+  lastSpawnAt: 0,
+  lastConvoyAt: 0,
+  selBreaches: new Set(),
+  selOfficers: new Set(),
+  showHeatmap: false,           // toggled on in predict mode
+  history: null,                // playback ticks
+  playbackTickIdx: 0,
+  playbackPlaying: false,
+  playbackLoadedAt: 0,
+};
+
+/* ============================================================================
+ * 4. STREET GRAPH
+ * Each "node" is an (i,j) intersection of NS[i] × EW[j].
+ * Vehicles walk node-to-node via 4-direction edges.
+ * ==========================================================================*/
+const NI = NS.length, NJ = EW.length;
+function nodeXY(i, j) { return [NS[i].lon, EW[j].lat]; }
+function inGrid(i, j) { return i >= 0 && i < NI && j >= 0 && j < NJ; }
+
+// Pick a perimeter node + initial inward direction for spawn.
+function pickEdgeStart() {
+  const side = pick(['N','S','E','W']);
+  let i, j, dx = 0, dy = 0;
+  if (side === 'N') { i = irand(0, NI-1); j = 0;      dy = 1; }
+  if (side === 'S') { i = irand(0, NI-1); j = NJ-1;   dy = -1; }
+  if (side === 'W') { i = 0;              j = irand(0, NJ-1); dx = 1; }
+  if (side === 'E') { i = NI-1;           j = irand(0, NJ-1); dx = -1; }
+  return {i, j, dx, dy};
+}
+
+// Build a node sequence by walking the grid with weighted branching.
+function buildPath(i, j, dx, dy, steps) {
+  const path = [[i, j]];
+  let ci = i, cj = j, cdx = dx, cdy = dy;
+  for (let s = 0; s < steps; s++) {
+    // Step forward in current direction.
+    const ni = ci + cdx, nj = cj + cdy;
+    if (!inGrid(ni, nj)) {
+      // Force a turn rather than fall off the grid.
+      const turn = chooseTurn(ci, cj, cdx, cdy);
+      if (!turn) break;
+      cdx = turn.dx; cdy = turn.dy;
+      continue;
+    }
+    ci = ni; cj = nj;
+    path.push([ci, cj]);
+    // 22% chance to turn at intersection (weighted by cross-street importance).
+    if (Math.random() < 0.22) {
+      const turn = chooseTurn(ci, cj, cdx, cdy);
+      if (turn) { cdx = turn.dx; cdy = turn.dy; }
+    }
+  }
+  return path;
+}
+
+function chooseTurn(i, j, dx, dy) {
+  // Available perpendicular directions.
+  const opts = [];
+  if (dx !== 0) {
+    if (j > 0)    opts.push({dx:0, dy:-1, w: EW[j-1].weight});
+    if (j < NJ-1) opts.push({dx:0, dy: 1, w: EW[j+1].weight});
+  } else {
+    if (i > 0)    opts.push({dx:-1, dy:0, w: NS[i-1].weight});
+    if (i < NI-1) opts.push({dx: 1, dy:0, w: NS[i+1].weight});
+  }
+  if (!opts.length) return null;
+  return pickWeighted(opts, o => o.w);
+}
+
+// Convert a node-path to a list of [lon,lat] points (for line rendering).
+function pathToCoords(path) { return path.map(([i,j]) => nodeXY(i, j)); }
+
+// Crossstreet label like "State & 400 S".
+function crossLabel(i, j) {
+  return NS[i].name.replace(' Street','') + ' & ' + EW[j].name;
+}
+
+/* ============================================================================
+ * 5. VEHICLE SIMULATION
+ * ==========================================================================*/
+function spawnVehicle(opts = {}) {
+  const start = opts.start || pickEdgeStart();
+  const path = opts.path || buildPath(start.i, start.j, start.dx, start.dy, 14);
+  if (path.length < 2) return null;
+  const type = opts.type || pickWeighted(
+    [['motorcycle',3], ['modified_car',2.2], ['truck',1.6], ['motorcycle_group',0.4]],
+    x => x[1]
+  )[0];
+  const def = VEHICLE_TYPES[type];
+  const baseDb = def.dbBase + rand(-def.dbVar, def.dbVar);
+  const v = {
+    id: 'V-' + pad(sim.nextVehicleSeq++, 4),
+    type, groupId: opts.groupId || null,
+    path, segIdx: 0, t: 0,
+    speedMps: opts.speedMps || rand(9, 22),
+    db: baseDb, baseDb,
+    peakDb: baseDb,
+    pos: nodeXY(path[0][0], path[0][1]),
+    trail: [],
+    spawnedAt: now(),
+    assignedOfficerId: null,
+    cited: false,
+  };
+  sim.vehicles.push(v);
+  bus.emit('vehicle:new', v);
+  return v;
+}
+
+// Spawn a 3–5 bike convoy following the same path with small offsets.
+function spawnConvoy() {
+  const groupId = 'G-' + pad(sim.nextGroupSeq++, 3);
+  const start = pickEdgeStart();
+  // Convoys prefer arterials: bias start to State or Main.
+  if (Math.random() < 0.7) {
+    start.i = Math.random() < 0.5 ? 3 : 2; // State or Main
+    start.j = Math.random() < 0.5 ? 0 : NJ - 1;
+    start.dx = 0;
+    start.dy = start.j === 0 ? 1 : -1;
+  }
+  const path = buildPath(start.i, start.j, start.dx, start.dy, 18);
+  if (path.length < 4) return;
+  const n = irand(3, 5);
+  const baseSpeed = rand(13, 18);
+  const baseDb = 92 + rand(-2, 4);
+  for (let k = 0; k < n; k++) {
+    const v = spawnVehicle({
+      start, path, groupId, type: 'motorcycle',
+      speedMps: baseSpeed + rand(-1, 1),
+    });
+    if (v) {
+      v.db = baseDb + rand(-2, 2);
+      v.baseDb = v.db;
+      // Stagger initial progress so they're spread along the path tail.
+      v.segIdx = 0;
+      v.t = -k * 0.4; // negative t means "hasn't crossed first intersection yet"; we'll keep them tight by offsetting later via segLength
+      v.convoyLead = (k === 0);
+    }
+  }
+  sim.convoys.set(groupId, {memberIds: [], detectedAt: now()});
+  bus.emit('convoy:new', groupId);
+}
+
+function tickVehicle(v, dt) {
+  // Wobble db a little.
+  v.db = clamp(v.baseDb + Math.sin((now() - v.spawnedAt) / 600 + v.id.charCodeAt(2)) * 2, 60, 105);
+  v.peakDb = Math.max(v.peakDb, v.db);
+
+  // Advance position.
+  let remaining = v.speedMps * dt;
+  while (remaining > 0) {
+    const a = nodeXY(v.path[v.segIdx][0], v.path[v.segIdx][1]);
+    const b = nodeXY(v.path[v.segIdx+1][0], v.path[v.segIdx+1][1]);
+    const segLen = dist(a, b);
+    const tStep = remaining / segLen;
+    if (v.t + tStep >= 1) {
+      remaining -= (1 - v.t) * segLen;
+      v.segIdx++;
+      v.t = 0;
+      if (v.segIdx >= v.path.length - 1) {
+        // Either despawn or extend.
+        if (Math.random() < 0.4) {
+          v._dead = true; return;
+        }
+        const last = v.path[v.path.length - 1];
+        const prev = v.path[v.path.length - 2];
+        const dx = Math.sign(last[0] - prev[0]);
+        const dy = Math.sign(last[1] - prev[1]);
+        const ext = buildPath(last[0], last[1], dx, dy, 8);
+        if (ext.length < 2) { v._dead = true; return; }
+        v.path = v.path.concat(ext.slice(1));
+      }
+    } else {
+      v.t += tStep;
+      remaining = 0;
+    }
+  }
+
+  const a = nodeXY(v.path[v.segIdx][0], v.path[v.segIdx][1]);
+  const b = nodeXY(v.path[v.segIdx+1][0], v.path[v.segIdx+1][1]);
+  v.pos = lerp2(a, b, clamp(v.t, 0, 1));
+  v.trail.push({xy: v.pos.slice(), t: now()});
+  // Cap trail length.
+  if (v.trail.length > 60) v.trail.splice(0, v.trail.length - 60);
+}
+
+/* ============================================================================
+ * 6. OFFICER SIMULATION
+ * ==========================================================================*/
+function initOfficers() {
+  sim.officers = OFFICER_DEFS.map(def => ({
+    id: def.id,
+    callsign: def.callsign,
+    beat: def.beat,
+    you: !!def.you,
+    pos: def.home.slice(),
+    home: def.home.slice(),
+    status: def.status || 'available',
+    assignmentId: null,         // breach vehicle id
+    assignmentSource: null,     // 'auto' | 'dispatcher' | 'self'
+    interceptPoint: null,
+    interceptT: null,           // ms timestamp of predicted intercept
+    routePath: null,            // [lon,lat][] for animation toward intercept
+    routeProgress: 0,           // 0..1 along routePath length
+    routeSpeedMps: 12,
+    stage: 'idle',              // idle | acknowledged | on_scene | complete
+    sceneSince: null,
+    citationsToday: irand(0, 3),
+    activityLog: [],
+  }));
+}
+
+function logActivity(officer, what) {
+  officer.activityLog.unshift({t: now(), what});
+  if (officer.activityLog.length > 20) officer.activityLog.pop();
+}
+
+function dispatchOfficer(officerId, vehicleId, source) {
+  const o = sim.officers.find(x => x.id === officerId);
+  const v = sim.vehicles.find(x => x.id === vehicleId);
+  if (!o || !v) return false;
+  if (o.status !== 'available' && o.status !== 'en_route') return false;
+  if (v.assignedOfficerId && v.assignedOfficerId !== o.id) {
+    // Reassign: clear old
+    const prev = sim.officers.find(x => x.id === v.assignedOfficerId);
+    if (prev) clearOfficerAssignment(prev);
+  }
+  // Compute predicted intercept point ~60s out from vehicle's current path.
+  const intercept = predictPosition(v, 60);
+  o.status = 'en_route';
+  o.assignmentId = v.id;
+  o.assignmentSource = source;
+  o.interceptPoint = intercept;
+  o.interceptT = now() + 60 * 1000;
+  o.routePath = [o.pos.slice(), intercept.slice()];
+  o.routeProgress = 0;
+  o.routeSpeedMps = 14;
+  o.stage = 'idle';
+  v.assignedOfficerId = o.id;
+  logActivity(o, `DISPATCH → ${v.id} (${VEHICLE_TYPES[v.type].label}) · ${source.toUpperCase()}`);
+  bus.emit('officer:dispatch', {officerId: o.id, vehicleId: v.id, source});
+  if (Math.random() < 0.6) pushRadio(o.callsign, `10-4, en route to ${v.id}, ETA 60s.`);
+  return true;
+}
+
+function clearOfficerAssignment(o) {
+  if (o.assignmentId) {
+    const v = sim.vehicles.find(x => x.id === o.assignmentId);
+    if (v) v.assignedOfficerId = null;
+  }
+  o.assignmentId = null;
+  o.assignmentSource = null;
+  o.interceptPoint = null;
+  o.interceptT = null;
+  o.routePath = null;
+  o.routeProgress = 0;
+  o.stage = 'idle';
+}
+
+function officerStage(o, nextStage) {
+  if (o.stage === nextStage) return;
+  o.stage = nextStage;
+  if (nextStage === 'acknowledged') {
+    logActivity(o, `ACKNOWLEDGED ${o.assignmentId}`);
+    pushRadio(o.callsign, `Copy, acknowledging intercept.`);
+  } else if (nextStage === 'on_scene') {
+    o.status = 'on_scene';
+    o.sceneSince = now();
+    if (o.assignmentId) {
+      const v = sim.vehicles.find(x => x.id === o.assignmentId);
+      if (v) { o.pos = v.pos.slice(); }
+    }
+    logActivity(o, `ON SCENE — ${o.assignmentId}`);
+    pushRadio(o.callsign, `On scene, vehicle stopped.`);
+  } else if (nextStage === 'complete') {
+    logActivity(o, `STOP COMPLETE — ${o.assignmentId}`);
+    pushRadio(o.callsign, `Clearing scene, returning to patrol.`);
+    clearOfficerAssignment(o);
+    o.status = 'available';
+    o.stage = 'idle';
+    o.sceneSince = null;
+  }
+  bus.emit('officer:update', o.id);
+}
+
+function tickOfficer(o, dt) {
+  if (o.status === 'en_route' && o.routePath) {
+    // Update intercept point based on vehicle's current forecast.
+    const v = sim.vehicles.find(x => x.id === o.assignmentId);
+    if (v && !v._dead) {
+      const newIntercept = predictPosition(v, Math.max(8, (o.interceptT - now()) / 1000));
+      o.routePath[1] = newIntercept;
+      o.interceptPoint = newIntercept;
+    }
+    const segLen = dist(o.routePath[0], o.routePath[1]);
+    if (segLen < 6) {
+      // Auto-arrive.
+      if (o.stage !== 'on_scene') officerStage(o, 'on_scene');
+      return;
+    }
+    const stepMeters = o.routeSpeedMps * dt;
+    o.routeProgress += stepMeters / segLen;
+    if (o.routeProgress >= 1) {
+      o.routeProgress = 1;
+      o.pos = o.routePath[1].slice();
+      // For auto-managed officers (not 'you'), auto-progress.
+      if (!o.you && o.stage !== 'on_scene') officerStage(o, 'on_scene');
+    } else {
+      o.pos = lerp2(o.routePath[0], o.routePath[1], o.routeProgress);
+    }
+  } else if (o.status === 'on_scene') {
+    // Auto-clear non-you officers after a hold.
+    if (!o.you && o.sceneSince != null && now() - o.sceneSince > 14000) {
+      if (Math.random() < 0.7) {
+        const v = sim.vehicles.find(x => x.id === o.assignmentId);
+        if (v) submitCitation(o, v); // automated paperwork
+      }
+      officerStage(o, 'complete');
+    }
+  } else if (o.status === 'available') {
+    // Slow drift toward home (idle patrol).
+    const d = dist(o.pos, o.home);
+    if (d > 8) {
+      const step = 4 * dt;
+      const t = clamp(step / d, 0, 1);
+      o.pos = lerp2(o.pos, o.home, t);
+    } else {
+      // Wander a few meters.
+      o.pos[0] += (Math.random() - 0.5) * 0.00005;
+      o.pos[1] += (Math.random() - 0.5) * 0.00005;
+    }
+  }
+}
+
+/* ============================================================================
+ * 7. CONVOYS + PREDICTION + HEATMAP
+ * ==========================================================================*/
+function refreshConvoys() {
+  // Rebuild convoy index from live vehicles.
+  const idx = new Map();
+  for (const v of sim.vehicles) {
+    if (!v.groupId) continue;
+    if (!idx.has(v.groupId)) idx.set(v.groupId, []);
+    idx.get(v.groupId).push(v.id);
+  }
+  // Drop empty groups; preserve detectedAt.
+  for (const [g, members] of idx) {
+    if (members.length < 2) { idx.delete(g); continue; }
+    const existing = sim.convoys.get(g);
+    idx.set(g, {memberIds: members, detectedAt: existing ? existing.detectedAt : now()});
+  }
+  sim.convoys = idx;
+}
+
+// Where will vehicle `v` be in `seconds` from now? Returns [lon, lat].
+function predictPosition(v, seconds) {
+  let segIdx = v.segIdx;
+  let t = v.t;
+  let meters = v.speedMps * seconds;
+  let path = v.path;
+  while (meters > 0 && segIdx < path.length - 1) {
+    const a = nodeXY(path[segIdx][0], path[segIdx][1]);
+    const b = nodeXY(path[segIdx+1][0], path[segIdx+1][1]);
+    const segLen = dist(a, b);
+    const remOnSeg = (1 - t) * segLen;
+    if (meters < remOnSeg) {
+      t += meters / segLen;
+      meters = 0;
+    } else {
+      meters -= remOnSeg;
+      segIdx++; t = 0;
+    }
+  }
+  if (segIdx >= path.length - 1) {
+    return nodeXY(path[path.length-1][0], path[path.length-1][1]);
+  }
+  const a = nodeXY(path[segIdx][0], path[segIdx][1]);
+  const b = nodeXY(path[segIdx+1][0], path[segIdx+1][1]);
+  return lerp2(a, b, clamp(t, 0, 1));
+}
+
+// Full forward-projected polyline for the next `seconds` (used by predict view).
+function predictForwardPath(v, seconds) {
+  const out = [v.pos.slice()];
+  let segIdx = v.segIdx;
+  let t = v.t;
+  let meters = v.speedMps * seconds;
+  let path = v.path.slice();
+  // Make sure path is long enough; extend with weighted branching if not.
+  while (segIdx + 4 >= path.length) {
+    const last = path[path.length - 1];
+    const prev = path[path.length - 2];
+    const dx = Math.sign(last[0] - prev[0]);
+    const dy = Math.sign(last[1] - prev[1]);
+    const ext = buildPath(last[0], last[1], dx, dy, 6);
+    if (ext.length < 2) break;
+    path = path.concat(ext.slice(1));
+  }
+  while (meters > 0 && segIdx < path.length - 1) {
+    const a = nodeXY(path[segIdx][0], path[segIdx][1]);
+    const b = nodeXY(path[segIdx+1][0], path[segIdx+1][1]);
+    const segLen = dist(a, b);
+    const remOnSeg = (1 - t) * segLen;
+    if (meters < remOnSeg) {
+      const p = lerp2(a, b, t + meters / segLen);
+      out.push(p); meters = 0;
+    } else {
+      out.push(b.slice());
+      meters -= remOnSeg;
+      segIdx++; t = 0;
+    }
+  }
+  return out;
+}
+
+// Heatmap data: weighted points concentrated on arterials & big intersections.
+const HEATMAP_FEATURES = (function() {
+  const fts = [];
+  // Dense band along State & Main, intervals every ~200m vertically.
+  for (let lat = 40.7506; lat <= 40.7726; lat += 0.0006) {
+    fts.push({type:'Feature', geometry:{type:'Point', coordinates:[-111.8881, lat]}, properties:{w: 1.0}});
+    fts.push({type:'Feature', geometry:{type:'Point', coordinates:[-111.8910, lat]}, properties:{w: 0.7}});
+  }
+  // E-W arterials.
+  for (let lon = -111.9000; lon <= -111.8700; lon += 0.0008) {
+    fts.push({type:'Feature', geometry:{type:'Point', coordinates:[lon, 40.7706]}, properties:{w: 0.7}});
+    fts.push({type:'Feature', geometry:{type:'Point', coordinates:[lon, 40.7626]}, properties:{w: 0.95}});
+    fts.push({type:'Feature', geometry:{type:'Point', coordinates:[lon, 40.7586]}, properties:{w: 0.75}});
+    fts.push({type:'Feature', geometry:{type:'Point', coordinates:[lon, 40.7526]}, properties:{w: 0.65}});
+  }
+  // Hotspots at key intersections.
+  [[-111.8881,40.7626],[-111.8881,40.7706],[-111.8881,40.7586],[-111.8910,40.7626],[-111.8881,40.7526]].forEach(c => {
+    for (let k = 0; k < 6; k++) fts.push({type:'Feature', geometry:{type:'Point', coordinates:c}, properties:{w: 1.4}});
+  });
+  return {type:'FeatureCollection', features: fts};
+})();
+
+/* ============================================================================
+ * 8. CITATIONS
+ * ==========================================================================*/
+function submitCitation(officer, vehicle) {
+  if (!vehicle || vehicle.cited) return null;
+  const d = new Date();
+  const caseId = fmtCaseId(d, sim.nextCitationSeq++);
+  const cross = nearestCrossstreet(vehicle.pos);
+  const c = {
+    caseId,
+    vehicleId: vehicle.id,
+    vehicleType: vehicle.type,
+    peakDb: vehicle.peakDb,
+    capturedBy: officer.id,
+    capturedByCallsign: officer.callsign,
+    capturedAt: now(),
+    capturedAtIso: fmtIso(d),
+    crossstreet: cross,
+    location: vehicle.pos.slice(),
+    status: 'pending_review',
+  };
+  sim.citations.unshift(c);
+  vehicle.cited = true;
+  officer.citationsToday++;
+  logActivity(officer, `CITATION SUBMITTED — ${caseId} · ${Math.round(vehicle.peakDb)} dB`);
+  pushRadio(officer.callsign, `Citation submitted, case ${caseId}, peak ${Math.round(vehicle.peakDb)} dB.`);
+  bus.emit('citation:new', c);
+  return c;
+}
+
+function reviewCitation(caseId, action) {
+  const c = sim.citations.find(x => x.caseId === caseId);
+  if (!c || c.status !== 'pending_review') return;
+  c.status = action; // 'approved' | 'flagged'
+  c.reviewedAt = now();
+  bus.emit('citation:update', c);
+}
+
+function nearestCrossstreet(pos) {
+  // Find nearest NS+EW pair.
+  let bestI = 0, bestJ = 0, best = Infinity;
+  for (let i = 0; i < NI; i++) {
+    for (let j = 0; j < NJ; j++) {
+      const d = dist(pos, nodeXY(i, j));
+      if (d < best) { best = d; bestI = i; bestJ = j; }
+    }
+  }
+  return crossLabel(bestI, bestJ);
+}
+
+/* ============================================================================
+ * 9. AUTO-DISPATCH (background AI)
+ *   Keeps the demo lively when nobody is clicking buttons.
+ * ==========================================================================*/
+function autoDispatchTick() {
+  const available = sim.officers.filter(o => o.status === 'available' && !o.you);
+  // Per the demo: keep UNIT-12 busy too if no one has manually assigned them.
+  if (!sim.officers.find(o => o.you && o.status !== 'available')) {
+    const youOfc = sim.officers.find(o => o.you);
+    if (youOfc && youOfc.status === 'available' && Math.random() < 0.5) {
+      const candidate = topUnassignedBreach();
+      if (candidate) dispatchOfficer(youOfc.id, candidate.id, 'auto');
+    }
+  }
+  for (const o of available) {
+    if (Math.random() > 0.35) continue;
+    const candidate = topUnassignedBreach();
+    if (!candidate) break;
+    dispatchOfficer(o.id, candidate.id, 'auto');
+  }
+}
+
+function topUnassignedBreach() {
+  return sim.vehicles
+    .filter(v => !v._dead && !v.assignedOfficerId && v.db >= sim.dbThreshold && sim.typeFilter[v.type])
+    .sort((a, b) => b.db - a.db)[0];
+}
+
+/* ============================================================================
+ * 10. SIM LOOP
+ * ==========================================================================*/
+const SIM_DT = 0.1; // seconds per tick
+let lastTick = now();
+
+function simStep() {
+  if (sim.mode !== 'live') { lastTick = now(); return; }
+  const t = now();
+  const dt = Math.min((t - lastTick) / 1000, 0.5);
+  lastTick = t;
+
+  // Spawn new vehicles.
+  if (t - sim.lastSpawnAt > rand(1800, 4200) && sim.vehicles.length < 24) {
+    spawnVehicle();
+    sim.lastSpawnAt = t;
+  }
+  // Spawn a convoy every ~30–55s.
+  if (t - sim.lastConvoyAt > rand(28000, 55000)) {
+    spawnConvoy();
+    sim.lastConvoyAt = t;
+  }
+
+  // Tick vehicles.
+  for (const v of sim.vehicles) tickVehicle(v, dt);
+  sim.vehicles = sim.vehicles.filter(v => !v._dead);
+
+  // Tick officers.
+  for (const o of sim.officers) tickOfficer(o, dt);
+
+  // Convoy index.
+  refreshConvoys();
+
+  bus.emit('sim:tick');
+}
+
+setInterval(simStep, 100);
+setInterval(autoDispatchTick, 4500);
+
+function pushRadio(from, msg, isYou=false) {
+  sim.radio.unshift({t: now(), from, msg, isYou});
+  if (sim.radio.length > 60) sim.radio.pop();
+  bus.emit('radio:new');
+}
+
+// Seed a few preset radio lines so the log isn't empty on load.
+PRESET_RADIO.forEach((m, i) => sim.radio.push({t: now() - (PRESET_RADIO.length - i) * 14000, from: m[0], msg: m[1]}));
+
+/* ============================================================================
+ * 11. PLAYBACK (pre-generated 10min history)
+ *   To keep page load snappy we generate lazily on first PLAYBACK toggle.
+ * ==========================================================================*/
+function pregenHistory() {
+  if (sim.history) return;
+  // Simulate 600 seconds (10 min) at 0.5s ticks = 1200 frames.
+  // We only record map-visible state: vehicle positions + dbs, officer positions.
+  const ticks = [];
+  const tmpSim = createShadowSim(); // independent state for replay
+  const dt = 0.5;
+  for (let s = 0; s < 1200; s++) {
+    shadowTick(tmpSim, dt);
+    if (s % 2 === 0) {
+      ticks.push({
+        s,
+        v: tmpSim.vehicles.map(v => ({id:v.id, type:v.type, pos:v.pos.slice(), db:v.db, gid:v.groupId})),
+        o: tmpSim.officers.map(o => ({id:o.id, status:o.status, pos:o.pos.slice()})),
+      });
+    }
+  }
+  sim.history = ticks;
+  sim.playbackLoadedAt = now();
+}
+
+function createShadowSim() {
+  const shadow = {
+    vehicles: [], officers: [], nextSeq: 1, t: 0,
+    lastSpawn: 0, lastConvoy: 0,
+  };
+  // Seed initial state — handful of vehicles already in motion.
+  for (let k = 0; k < 6; k++) shadowSpawn(shadow);
+  shadow.officers = OFFICER_DEFS.map(def => ({
+    id:def.id, status:'available', pos:def.home.slice(),
+  }));
+  return shadow;
+}
+
+function shadowSpawn(shadow) {
+  const start = pickEdgeStart();
+  const path = buildPath(start.i, start.j, start.dx, start.dy, 14);
+  if (path.length < 2) return;
+  const type = pickWeighted(
+    [['motorcycle',3],['modified_car',2.2],['truck',1.6],['motorcycle_group',0.4]],
+    x => x[1]
+  )[0];
+  const def = VEHICLE_TYPES[type];
+  shadow.vehicles.push({
+    id:'H-' + pad(shadow.nextSeq++, 4),
+    type, pos: nodeXY(path[0][0], path[0][1]),
+    path, segIdx:0, t:0, speedMps:rand(10,22),
+    db: def.dbBase + rand(-def.dbVar, def.dbVar),
+    groupId: null,
+  });
+}
+
+function shadowTick(shadow, dt) {
+  shadow.t += dt;
+  if (shadow.t - shadow.lastSpawn > rand(2.5, 4.5) && shadow.vehicles.length < 22) {
+    shadowSpawn(shadow); shadow.lastSpawn = shadow.t;
+  }
+  for (const v of shadow.vehicles) {
+    let remaining = v.speedMps * dt;
+    while (remaining > 0 && v.segIdx < v.path.length - 1) {
+      const a = nodeXY(v.path[v.segIdx][0], v.path[v.segIdx][1]);
+      const b = nodeXY(v.path[v.segIdx+1][0], v.path[v.segIdx+1][1]);
+      const segLen = dist(a, b);
+      const rem = (1 - v.t) * segLen;
+      if (remaining < rem) { v.t += remaining/segLen; remaining = 0; }
+      else { remaining -= rem; v.segIdx++; v.t = 0; }
+    }
+    if (v.segIdx >= v.path.length - 1) { v._dead = true; continue; }
+    const a = nodeXY(v.path[v.segIdx][0], v.path[v.segIdx][1]);
+    const b = nodeXY(v.path[v.segIdx+1][0], v.path[v.segIdx+1][1]);
+    v.pos = lerp2(a, b, v.t);
+  }
+  shadow.vehicles = shadow.vehicles.filter(v => !v._dead);
+}
+
+/* ============================================================================
+ * 12. MAP SETUP
+ *   Returns {map, sources, dispose}. Each mounted view gets one of these.
+ *   We render via continuous setData() calls — no symbol images needed.
+ * ==========================================================================*/
+function createMap(container, opts = {}) {
+  const center = opts.center || CORRIDOR_CENTER;
+  const zoom = opts.zoom || CORRIDOR_ZOOM;
+  const map = new maplibregl.Map({
+    container,
+    style: MAP_STYLE,
+    center,
+    zoom,
+    minZoom: 11.5,
+    maxZoom: 17,
+    maxBounds: opts.bounds || CORRIDOR_BOUNDS,
+    attributionControl: false,
+  });
+  map.addControl(new maplibregl.AttributionControl({compact: true}), 'bottom-right');
+  if (opts.nav) map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-right');
+
+  const sources = {};
+
+  map.on('load', () => {
+    // Heatmap (predict mode only).
+    map.addSource('heatmap', {type:'geojson', data: HEATMAP_FEATURES});
+    map.addLayer({
+      id: 'heatmap-layer', type: 'heatmap', source: 'heatmap',
+      maxzoom: 17,
+      layout: {visibility: 'none'},
+      paint: {
+        'heatmap-weight': ['interpolate', ['linear'], ['get', 'w'], 0, 0, 2, 1],
+        'heatmap-intensity': 0.9,
+        'heatmap-color': [
+          'interpolate', ['linear'], ['heatmap-density'],
+          0,    'rgba(0,0,0,0)',
+          0.15, 'rgba(80, 60, 200, 0.25)',
+          0.4,  'rgba(220, 130, 60, 0.45)',
+          0.7,  'rgba(240, 80, 40, 0.55)',
+          1.0,  'rgba(255, 60, 30, 0.65)'
+        ],
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 12, 14, 16, 50],
+        'heatmap-opacity': 0.7,
+      }
+    });
+
+    // Sensor pins (dim).
+    map.addSource('sensors', {type:'geojson', data: {type:'FeatureCollection', features: STATIONS.map(s => ({
+      type:'Feature', geometry:{type:'Point', coordinates:[s.lon, s.lat]}, properties:{id: s.id},
+    }))}});
+    map.addLayer({
+      id: 'sensors-layer', type: 'circle', source: 'sensors',
+      paint: {
+        'circle-radius': 3,
+        'circle-color': '#606060',
+        'circle-opacity': 0.5,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#303030',
+      }
+    });
+
+    // Predicted ghost trails (predict mode only).
+    map.addSource('predictions', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+    map.addLayer({
+      id: 'predictions-layer', type: 'line', source: 'predictions',
+      layout: {visibility: 'none', 'line-cap':'round'},
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 2,
+        'line-opacity': 0.55,
+        'line-dasharray': [2, 2],
+      }
+    });
+
+    // Vehicle trails — one feature per active vehicle. Per-feature line-color
+    // by dB; a soft glow halo behind gives the streamer its glow. MapLibre's
+    // line-gradient can't take data expressions, so the fade-to-head effect
+    // would need lineMetrics + a constant gradient — we keep it simple here.
+    map.addSource('trails', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+    map.addLayer({
+      id: 'trails-glow', type: 'line', source: 'trails',
+      layout: {'line-cap':'round'},
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 9,
+        'line-blur': 7,
+        'line-opacity': 0.35,
+      }
+    });
+    map.addLayer({
+      id: 'trails-line', type: 'line', source: 'trails',
+      layout: {'line-cap':'round'},
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 3,
+        'line-opacity': 0.85,
+      }
+    });
+
+    // Officer route dashes (when en route).
+    map.addSource('routes', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+    map.addLayer({
+      id: 'routes-layer', type: 'line', source: 'routes',
+      paint: {
+        'line-color': '#f0c060',
+        'line-width': 2,
+        'line-dasharray': [3, 3],
+        'line-opacity': 0.7,
+      }
+    });
+
+    // Vehicle heads.
+    map.addSource('vehicles', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+    map.addLayer({
+      id: 'vehicles-halo', type: 'circle', source: 'vehicles',
+      paint: {
+        'circle-radius': ['case', ['get','convoy'], 12, 7],
+        'circle-color': ['get', 'color'],
+        'circle-opacity': 0.2,
+        'circle-blur': 0.5,
+      }
+    });
+    map.addLayer({
+      id: 'vehicles-layer', type: 'circle', source: 'vehicles',
+      paint: {
+        'circle-radius': ['case', ['get','convoy'], 7, 5],
+        'circle-color': ['get', 'color'],
+        'circle-stroke-width': ['case', ['get','convoy'], 2, 1.5],
+        'circle-stroke-color': '#0a0a0a',
+      }
+    });
+
+    // Officer pins.
+    map.addSource('officers', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+    map.addLayer({
+      id: 'officers-shadow', type: 'circle', source: 'officers',
+      paint: {
+        'circle-radius': 14,
+        'circle-color': ['get', 'color'],
+        'circle-opacity': 0.15,
+        'circle-blur': 0.4,
+      }
+    });
+    map.addLayer({
+      id: 'officers-layer', type: 'circle', source: 'officers',
+      paint: {
+        'circle-radius': ['case', ['get','you'], 9, 7],
+        'circle-color': ['get', 'color'],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#0a0a0a',
+      }
+    });
+    map.addLayer({
+      id: 'officers-label', type: 'symbol', source: 'officers',
+      layout: {
+        'text-field': ['get', 'callsign'],
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+        'text-size': 9,
+        'text-offset': [0, -1.4],
+        'text-anchor': 'bottom',
+        'text-allow-overlap': true,
+      },
+      paint: {
+        'text-color': '#f0f0f0',
+        'text-halo-color': '#0a0a0a',
+        'text-halo-width': 1.5,
+      }
+    });
+
+    sources.heatmap = map.getSource('heatmap');
+    sources.predictions = map.getSource('predictions');
+    sources.trails = map.getSource('trails');
+    sources.vehicles = map.getSource('vehicles');
+    sources.officers = map.getSource('officers');
+    sources.routes = map.getSource('routes');
+    sources._ready = true;
+
+    if (handle.onReady) handle.onReady();
+  });
+
+  const handle = {
+    map, sources,
+    dispose() { try { map.remove(); } catch (e) {} },
+  };
+  return handle;
+}
+
+// Update all dynamic sources on a map handle from current sim state.
+function renderMapFrame(handle) {
+  const s = handle.sources;
+  if (!s._ready) return;
+
+  // Build features.
+  const trailFts = [];
+  const vehFts = [];
+  for (const v of sim.vehicles) {
+    if (!sim.typeFilter[v.type]) continue;
+    const below = v.db < sim.dbThreshold;
+    const col = colorForDb(v.db);
+    if (v.trail.length >= 2) {
+      trailFts.push({
+        type:'Feature',
+        geometry:{type:'LineString', coordinates: v.trail.map(p => p.xy)},
+        properties:{ color: below ? 'rgba(120,120,120,0.5)' : col },
+      });
+    }
+    vehFts.push({
+      type:'Feature',
+      geometry:{type:'Point', coordinates: v.pos},
+      properties:{
+        id: v.id, color: below ? '#888' : col,
+        convoy: !!v.groupId,
+      },
+    });
+  }
+  s.trails.setData({type:'FeatureCollection', features: trailFts});
+  s.vehicles.setData({type:'FeatureCollection', features: vehFts});
+
+  // Officers.
+  const ofcColor = {available: '#4ad991', en_route: '#f0c060', on_scene: '#f06840', on_break: '#404040'};
+  s.officers.setData({type:'FeatureCollection', features: sim.officers.map(o => ({
+    type:'Feature', geometry:{type:'Point', coordinates: o.pos},
+    properties: {id: o.id, callsign: o.callsign, color: ofcColor[o.status] || '#888', you: !!o.you},
+  }))});
+
+  // Routes (officers en route).
+  const routeFts = sim.officers.filter(o => o.routePath && o.status === 'en_route').map(o => ({
+    type:'Feature',
+    geometry:{type:'LineString', coordinates: o.routePath},
+    properties:{officerId: o.id},
+  }));
+  s.routes.setData({type:'FeatureCollection', features: routeFts});
+
+  // Predictions (only when in predict mode).
+  if (sim.mode === 'predict') {
+    const predFts = sim.vehicles.filter(v => sim.typeFilter[v.type] && v.db >= sim.dbThreshold).map(v => ({
+      type:'Feature',
+      geometry:{type:'LineString', coordinates: predictForwardPath(v, 300)},
+      properties:{color: colorForDb(v.db)},
+    }));
+    s.predictions.setData({type:'FeatureCollection', features: predFts});
+  } else {
+    s.predictions.setData({type:'FeatureCollection', features: []});
+  }
+}
+
+function setMapModeVisibility(handle) {
+  const map = handle.map;
+  if (!handle.sources._ready) return;
+  const showHeatmap = sim.mode === 'predict';
+  const showPred = sim.mode === 'predict';
+  map.setLayoutProperty('heatmap-layer', 'visibility', showHeatmap ? 'visible' : 'none');
+  map.setLayoutProperty('predictions-layer', 'visibility', showPred ? 'visible' : 'none');
+}
+
+/* Render-loop manager: tracks mounted map handles and updates them each frame. */
+const activeHandles = new Set();
+function renderLoop() {
+  if (sim.mode === 'playback') applyPlaybackTick();
+  for (const h of activeHandles) renderMapFrame(h);
+  requestAnimationFrame(renderLoop);
+}
+
+/* ============================================================================
+ * 13. DISPATCHER VIEW
+ * ==========================================================================*/
+function mountDispatcher(container, opts = {}) {
+  container.innerHTML = '';
+  const root = document.createElement('div');
+  root.id = 'view-dispatcher';
+  root.innerHTML = `
+    <div class="topbar">
+      ${opts.noBack ? '' : '<button class="topbar-back" data-back>‹ ROLE</button>'}
+      <div class="topbar-title">SALT LAKE CITY NOISE ENFORCEMENT</div>
+      <div class="topbar-sub">· DISPATCH OPERATIONS</div>
+      <div class="topbar-badge">DEMO · SIMULATION</div>
+      <div class="topbar-spacer"></div>
+      <div class="mode-tabs" data-mode-tabs>
+        <button class="mode-tab" data-mode="live">LIVE</button>
+        <button class="mode-tab" data-mode="playback">PLAYBACK −10m</button>
+        <button class="mode-tab" data-mode="predict">PREDICT +5m</button>
+      </div>
+      <div class="slider-group">
+        <label>dB ≥</label>
+        <input type="range" min="70" max="98" value="${sim.dbThreshold}" data-db-slider>
+        <span class="value" data-db-val>${sim.dbThreshold}</span>
+      </div>
+      <div data-chips style="display:inline-flex;gap:4px"></div>
+      <div class="topbar-clock" data-clock>—</div>
+    </div>
+    <div class="dispatcher-body">
+      <div class="dispatcher-rail left">
+        <div data-convoy-banner></div>
+        <div class="rail-section flex">
+          <div class="rail-section-header">ACTIVE BREACHES <span class="count" data-breach-count>0</span></div>
+          <div class="rail-section-content" data-breach-list></div>
+        </div>
+      </div>
+      <div class="dispatcher-map-wrap">
+        <div class="dispatcher-map" data-map></div>
+        <div class="map-overlay bottom-left">
+          <div class="map-legend">
+            <span>dB</span>
+            <span class="swatch"><span class="sw" style="background:oklch(72% 0.13 195)"></span>&lt;55</span>
+            <span class="swatch"><span class="sw" style="background:oklch(78% 0.14 130)"></span>55–64</span>
+            <span class="swatch"><span class="sw" style="background:oklch(82% 0.16 70)"></span>65–74</span>
+            <span class="swatch"><span class="sw" style="background:oklch(72% 0.2 35)"></span>≥75</span>
+            <span style="opacity:.5">·</span>
+            <span class="swatch"><span class="sw" style="background:#4ad991"></span>OFC AVAIL</span>
+            <span class="swatch"><span class="sw" style="background:#f0c060"></span>EN ROUTE</span>
+            <span class="swatch"><span class="sw" style="background:#f06840"></span>ON SCENE</span>
+          </div>
+          <div data-scrubber></div>
+        </div>
+      </div>
+      <div class="dispatcher-rail right">
+        <div class="rail-section">
+          <div class="rail-section-header">OFFICERS <span class="count" data-officer-count>0</span></div>
+          <div class="rail-section-content" data-officer-list></div>
+        </div>
+        <div class="rail-section">
+          <div class="rail-section-header">GROUP STOP PLANNER</div>
+          <div class="planner-section">
+            <div class="planner-status" data-planner-status>Select ≥2 breaches and ≥2 officers</div>
+            <button class="btn primary" data-planner-btn disabled>PLAN COORDINATED STOP</button>
+          </div>
+        </div>
+        <div class="rail-section">
+          <div class="rail-section-header">RADIO LOG</div>
+          <div class="radio-log" data-radio-log></div>
+          <div class="radio-input-row">
+            <input class="radio-input mono" placeholder="BROADCAST..." data-radio-input maxlength="80">
+            <button class="btn btn-small" data-radio-send>SEND</button>
+          </div>
+        </div>
+        <div class="rail-section flex">
+          <div class="rail-section-header">CITATION REVIEW <span class="count" data-cit-count>0</span></div>
+          <div class="rail-section-content" data-cit-list></div>
+        </div>
+      </div>
+    </div>
+    <div class="dispatcher-bottom" data-analytics></div>
+  `;
+  container.appendChild(root);
+
+  // Back button.
+  root.querySelector('[data-back]')?.addEventListener('click', () => { location.hash = ''; });
+
+  // Mode tabs.
+  const modeTabs = root.querySelector('[data-mode-tabs]');
+  function refreshModeTabs() {
+    modeTabs.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === sim.mode));
+  }
+  modeTabs.addEventListener('click', e => {
+    const b = e.target.closest('button.mode-tab'); if (!b) return;
+    setMode(b.dataset.mode);
+  });
+  refreshModeTabs();
+  bus.on('mode:change', refreshModeTabs);
+
+  // dB slider.
+  const dbSlider = root.querySelector('[data-db-slider]');
+  const dbVal = root.querySelector('[data-db-val]');
+  dbSlider.addEventListener('input', e => { sim.dbThreshold = +e.target.value; dbVal.textContent = sim.dbThreshold; refreshBreaches(); });
+
+  // Type chips.
+  const chipsEl = root.querySelector('[data-chips]');
+  Object.entries(VEHICLE_TYPES).forEach(([type, def]) => {
+    const c = document.createElement('button');
+    c.className = 'chip' + (sim.typeFilter[type] ? ' active' : '');
+    c.innerHTML = `<span class="swatch sw" style="width:8px;height:8px;border-radius:50%;background:${colorForDb(def.dbBase)}"></span>${type.toUpperCase().replace('_',' ')}`;
+    c.addEventListener('click', () => {
+      sim.typeFilter[type] = !sim.typeFilter[type];
+      c.classList.toggle('active', sim.typeFilter[type]);
+      refreshBreaches();
+    });
+    chipsEl.appendChild(c);
+  });
+
+  // Map.
+  const mapEl = root.querySelector('[data-map]');
+  const handle = createMap(mapEl, {nav: true});
+  handle.onReady = () => { setMapModeVisibility(handle); };
+  activeHandles.add(handle);
+
+  // Refresh routines.
+  const breachListEl = root.querySelector('[data-breach-list]');
+  const officerListEl = root.querySelector('[data-officer-list]');
+  const plannerStatusEl = root.querySelector('[data-planner-status]');
+  const plannerBtn = root.querySelector('[data-planner-btn]');
+  const breachCountEl = root.querySelector('[data-breach-count]');
+  const officerCountEl = root.querySelector('[data-officer-count]');
+  const convoyBannerEl = root.querySelector('[data-convoy-banner]');
+  const citListEl = root.querySelector('[data-cit-list]');
+  const citCountEl = root.querySelector('[data-cit-count]');
+  const radioLogEl = root.querySelector('[data-radio-log]');
+  const analyticsEl = root.querySelector('[data-analytics]');
+  const scrubberContainer = root.querySelector('[data-scrubber]');
+
+  function refreshBreaches() {
+    const list = sim.vehicles
+      .filter(v => !v._dead && sim.typeFilter[v.type])
+      .sort((a, b) => b.db - a.db);
+    breachCountEl.textContent = list.filter(v => v.db >= sim.dbThreshold).length;
+    breachListEl.innerHTML = '';
+    for (const v of list) {
+      const row = document.createElement('div');
+      const below = v.db < sim.dbThreshold;
+      row.className = 'breach-row' + (sim.selBreaches.has(v.id) ? ' selected' : '') + (below ? ' dim' : '') + (v.assignedOfficerId ? ' assigned' : '');
+      const cross = nearestCrossstreet(v.pos);
+      row.innerHTML = `
+        <input type="checkbox" ${sim.selBreaches.has(v.id) ? 'checked' : ''} ${below ? 'disabled' : ''} data-sel="${v.id}">
+        <div style="min-width:0">
+          <div class="b-name">${VEHICLE_TYPES[v.type].label}${v.groupId ? ' <span class="mono" style="font-size:9px;color:var(--neon-hot)">⫷'+v.groupId+'⫸</span>' : ''}<span class="b-id"> ${v.id}</span>${v.assignedOfficerId ? '<span class="assigned-tag">◉ '+v.assignedOfficerId+'</span>' : ''}</div>
+          <div class="b-meta">${cross} · ${VEHICLE_TYPES[v.type].label.toUpperCase()}</div>
+        </div>
+        <div class="b-db" style="color:${below ? 'var(--ink-3)' : colorForDb(v.db)}">${Math.round(v.db)}</div>
+      `;
+      row.querySelector('input').addEventListener('click', e => {
+        e.stopPropagation();
+        if (e.target.checked) sim.selBreaches.add(v.id); else sim.selBreaches.delete(v.id);
+        refreshPlanner();
+        row.classList.toggle('selected', sim.selBreaches.has(v.id));
+      });
+      row.addEventListener('click', () => {
+        handle.map.flyTo({center: v.pos, zoom: Math.max(handle.map.getZoom(), 14.5), duration: 800});
+      });
+      breachListEl.appendChild(row);
+    }
+    refreshConvoyBanner();
+    refreshPlanner();
+  }
+  function refreshConvoyBanner() {
+    convoyBannerEl.innerHTML = '';
+    for (const [gid, info] of sim.convoys) {
+      if (info.memberIds.length < 3) continue;
+      const lead = sim.vehicles.find(v => v.id === info.memberIds[0]);
+      if (!lead) continue;
+      const banner = document.createElement('div');
+      banner.className = 'convoy-banner';
+      banner.innerHTML = `
+        <div class="icon"></div>
+        <div style="min-width:0">
+          <div class="title">CONVOY DETECTED · ${gid}</div>
+          <div class="detail">${info.memberIds.length} MOTORCYCLES · NEAR ${nearestCrossstreet(lead.pos)} · POTENTIAL ORGANIZED RIDE</div>
+        </div>
+      `;
+      banner.addEventListener('click', () => {
+        info.memberIds.forEach(id => sim.selBreaches.add(id));
+        refreshBreaches();
+      });
+      convoyBannerEl.appendChild(banner);
+      break; // one at a time
+    }
+  }
+  function refreshOfficers() {
+    officerCountEl.textContent = sim.officers.filter(o => o.status !== 'on_break').length + '/' + sim.officers.length;
+    officerListEl.innerHTML = '';
+    for (const o of sim.officers) {
+      const row = document.createElement('div');
+      row.className = 'officer-row' + (sim.selOfficers.has(o.id) ? ' selected' : '');
+      row.innerHTML = `
+        <input type="checkbox" ${sim.selOfficers.has(o.id) ? 'checked' : ''} ${o.status === 'on_break' ? 'disabled' : ''} data-sel="${o.id}">
+        <span class="pip ${o.status}"></span>
+        <div class="info">
+          <div class="callsign">${o.callsign}${o.you ? '<span class="you-tag">YOU</span>' : ''}</div>
+          <div class="beat">${o.beat.toUpperCase()} · ${o.status.replace('_',' ').toUpperCase()}</div>
+        </div>
+        <div class="citations">${o.citationsToday}<span style="color:var(--ink-3);font-size:9px"> CIT</span></div>
+      `;
+      row.querySelector('input').addEventListener('click', e => {
+        e.stopPropagation();
+        if (e.target.checked) sim.selOfficers.add(o.id); else sim.selOfficers.delete(o.id);
+        row.classList.toggle('selected', sim.selOfficers.has(o.id));
+        refreshPlanner();
+      });
+      row.addEventListener('click', () => {
+        handle.map.flyTo({center: o.pos, zoom: Math.max(handle.map.getZoom(), 14.5), duration: 800});
+      });
+      officerListEl.appendChild(row);
+    }
+  }
+  function refreshPlanner() {
+    const nb = sim.selBreaches.size;
+    const no = sim.selOfficers.size;
+    const ready = nb >= 2 && no >= 2;
+    plannerStatusEl.className = 'planner-status' + (ready ? ' ready' : '');
+    plannerStatusEl.innerHTML = ready
+      ? `READY · <span class="count">${nb} BREACHES × ${no} OFFICERS</span>`
+      : `<span class="count">${nb}</span> breach${nb===1?'':'es'} · <span class="count">${no}</span> officer${no===1?'':'s'} selected · need ≥2 each`;
+    plannerBtn.disabled = !ready;
+  }
+  function refreshCitations() {
+    const pending = sim.citations.filter(c => c.status === 'pending_review').length;
+    citCountEl.textContent = pending;
+    citListEl.innerHTML = '';
+    for (const c of sim.citations) {
+      const row = document.createElement('div');
+      row.className = 'citation-row status-' + c.status;
+      row.innerHTML = `
+        <div class="head">
+          <span class="case-id">${c.caseId}</span>
+          <span class="badge-status ${c.status}">${c.status.replace('_',' ').toUpperCase()}</span>
+        </div>
+        <div class="summary">${VEHICLE_TYPES[c.vehicleType].label.toUpperCase()} · ${Math.round(c.peakDb)} dB · ${c.crossstreet}</div>
+        <div class="by">CAPTURED BY ${c.capturedByCallsign}</div>
+        ${c.status === 'pending_review' ? `<div class="actions">
+          <button class="btn btn-small primary" data-cit-approve="${c.caseId}">APPROVE</button>
+          <button class="btn btn-small warn" data-cit-flag="${c.caseId}">FLAG</button>
+        </div>` : ''}
+      `;
+      row.querySelectorAll('[data-cit-approve]').forEach(b => b.addEventListener('click', () => { reviewCitation(c.caseId, 'approved'); refreshCitations(); }));
+      row.querySelectorAll('[data-cit-flag]').forEach(b => b.addEventListener('click', () => { reviewCitation(c.caseId, 'flagged'); refreshCitations(); }));
+      citListEl.appendChild(row);
+    }
+  }
+  function refreshRadio() {
+    radioLogEl.innerHTML = '';
+    sim.radio.slice(0, 16).forEach(r => {
+      const d = new Date(r.t);
+      const el = document.createElement('div');
+      el.className = 'radio-line';
+      el.innerHTML = `<span class="ts">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</span><span class="from ${r.isYou?'you':''}">${r.from}:</span> ${r.msg}`;
+      radioLogEl.appendChild(el);
+    });
+  }
+  function refreshAnalytics() {
+    const breachCount = sim.vehicles.filter(v => v.db >= sim.dbThreshold).length;
+    const convoyCount = sim.convoys.size;
+    const onDuty = sim.officers.filter(o => o.status !== 'on_break').length;
+    const citToday = sim.citations.length;
+    const topStreets = topBreachStreets(3);
+    analyticsEl.innerHTML = `
+      <div class="analytics-stat"><div class="label">ACTIVE BREACHES</div><div class="value hot">${breachCount}</div></div>
+      <div class="analytics-stat"><div class="label">ACTIVE CONVOYS</div><div class="value ${convoyCount?'hot':''}">${convoyCount}</div></div>
+      <div class="analytics-stat"><div class="label">OFFICERS ON DUTY</div><div class="value go">${onDuty}/${sim.officers.length}</div></div>
+      <div class="analytics-stat"><div class="label">CITATIONS · TODAY</div><div class="value">${citToday}</div></div>
+      <div class="analytics-stat" style="min-width:200px"><div class="label">TOP CORRIDORS · 5 MIN</div><div class="value" style="font-size:11px">${topStreets.join(' · ') || '—'}</div></div>
+      <div class="topbar-spacer"></div>
+      <div class="analytics-stat" style="text-align:right"><div class="label">SHIFT</div><div class="value" style="font-size:11px">${Math.floor((now()-sim.startedAt)/60000)}m ELAPSED</div></div>
+    `;
+  }
+  function refreshScrubber() {
+    if (sim.mode !== 'playback' || !sim.history) { scrubberContainer.innerHTML = ''; return; }
+    if (!scrubberContainer.querySelector('input')) {
+      scrubberContainer.innerHTML = `
+        <div class="scrubber-panel">
+          <button class="btn btn-small" data-pb-play>▶</button>
+          <input type="range" min="0" max="${sim.history.length-1}" value="${sim.playbackTickIdx}" data-pb-scrub>
+          <span class="mono" data-pb-time>—</span>
+        </div>
+      `;
+      const playBtn = scrubberContainer.querySelector('[data-pb-play]');
+      const scrub = scrubberContainer.querySelector('[data-pb-scrub]');
+      const timeEl = scrubberContainer.querySelector('[data-pb-time]');
+      playBtn.addEventListener('click', () => {
+        sim.playbackPlaying = !sim.playbackPlaying;
+        playBtn.textContent = sim.playbackPlaying ? '⏸' : '▶';
+      });
+      scrub.addEventListener('input', e => {
+        sim.playbackPlaying = false;
+        playBtn.textContent = '▶';
+        sim.playbackTickIdx = +e.target.value;
+      });
+      // Wire periodic time-label update.
+      const updateLabel = () => {
+        const t = sim.history[sim.playbackTickIdx];
+        if (t) {
+          const secAgo = 600 - t.s;
+          timeEl.textContent = '−' + Math.floor(secAgo/60) + 'm ' + pad(secAgo%60) + 's';
+          scrub.value = sim.playbackTickIdx;
+        }
+        requestAnimationFrame(updateLabel);
+      };
+      updateLabel();
+    }
+  }
+  function topBreachStreets(n) {
+    const counts = {};
+    for (const v of sim.vehicles) {
+      if (v.db < sim.dbThreshold) continue;
+      // attribute to nearest NS street
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < NI; i++) {
+        const d = Math.abs(v.pos[0] - NS[i].lon);
+        if (d < bd) { bd = d; best = i; }
+      }
+      const k = NS[best].name;
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k,v])=>k+' ('+v+')');
+  }
+
+  // Group stop planner.
+  plannerBtn.addEventListener('click', () => {
+    const breaches = [...sim.selBreaches].map(id => sim.vehicles.find(v=>v.id===id)).filter(Boolean);
+    const officers = [...sim.selOfficers].map(id => sim.officers.find(o=>o.id===id)).filter(Boolean);
+    if (breaches.length < 2 || officers.length < 2) return;
+    showPlannerModal(breaches, officers);
+  });
+
+  // Radio send.
+  const radioInputEl = root.querySelector('[data-radio-input]');
+  root.querySelector('[data-radio-send]').addEventListener('click', () => {
+    const v = radioInputEl.value.trim();
+    if (!v) return;
+    pushRadio('DISPATCH', v, true);
+    radioInputEl.value = '';
+  });
+  radioInputEl.addEventListener('keydown', e => { if (e.key === 'Enter') root.querySelector('[data-radio-send]').click(); });
+
+  // Clock + initial refresh.
+  const clockEl = root.querySelector('[data-clock]');
+  function ticker() { clockEl.textContent = fmtClock(new Date()); }
+  ticker();
+  const clockInt = setInterval(ticker, 1000);
+  const breachInt = setInterval(refreshBreaches, 700);
+  const officerInt = setInterval(refreshOfficers, 800);
+  const citInt = setInterval(refreshCitations, 1000);
+  const radioInt = setInterval(refreshRadio, 600);
+  const analyticsInt = setInterval(refreshAnalytics, 1200);
+  const scrubberInt = setInterval(refreshScrubber, 400);
+  refreshBreaches(); refreshOfficers(); refreshCitations(); refreshRadio(); refreshAnalytics();
+
+  const offMode = bus.on('mode:change', () => { setMapModeVisibility(handle); refreshScrubber(); });
+  return {
+    dispose() {
+      activeHandles.delete(handle);
+      handle.dispose();
+      [clockInt, breachInt, officerInt, citInt, radioInt, analyticsInt, scrubberInt].forEach(clearInterval);
+      offMode();
+    }
+  };
+}
+
+function showPlannerModal(breaches, officers) {
+  // Naive assignment: officer i ← breach i, sorted by predicted dist.
+  const pairs = officers.slice(0, breaches.length).map((o, k) => {
+    const v = breaches[k];
+    const intercept = predictPosition(v, 60);
+    return {o, v, intercept, d: dist(o.pos, intercept)};
+  });
+  const totalEta = Math.max(...pairs.map(p => Math.round(p.d / 12))) + 30;
+  const modal = renderModal({
+    title: 'GROUP STOP PLAN',
+    body: `
+      <div style="font-family:var(--mono);font-size:11px;color:var(--ink-2);line-height:1.6">
+        Coordinated interdiction across ${pairs.length} units. Officers will route to predicted intercept points and converge approximately together.
+      </div>
+      ${pairs.map(p => `
+        <div style="display:grid;grid-template-columns:80px 1fr auto;gap:10px;align-items:center;padding:8px;background:var(--bg-2);border-radius:4px;font-family:var(--mono);font-size:11px">
+          <div style="font-weight:600;color:var(--neon-cool)">${p.o.callsign}</div>
+          <div>→ ${p.v.id} <span style="color:var(--ink-3)">(${VEHICLE_TYPES[p.v.type].label})</span> at ${nearestCrossstreet(p.intercept)}</div>
+          <div style="color:var(--neon-amber)">${Math.round(p.d)}m · ${Math.round(p.d/12)}s</div>
+        </div>
+      `).join('')}
+      <div class="kv-grid">
+        <div class="k">Convergence ETA</div><div class="v">~${totalEta}s</div>
+        <div class="k">Unassigned</div><div class="v">${Math.max(0, breaches.length - officers.length)}</div>
+      </div>
+    `,
+    footer: `
+      <button class="btn ghost" data-cancel>CANCEL</button>
+      <button class="btn primary" data-dispatch>DISPATCH ALL</button>
+    `,
+    onMount(el) {
+      el.querySelector('[data-cancel]').addEventListener('click', () => closeModal(el));
+      el.querySelector('[data-dispatch]').addEventListener('click', () => {
+        pairs.forEach(p => dispatchOfficer(p.o.id, p.v.id, 'dispatcher'));
+        sim.selBreaches.clear(); sim.selOfficers.clear();
+        pushRadio('DISPATCH', `Group stop authorized — ${pairs.map(p=>p.o.callsign).join(', ')} converge.`, true);
+        closeModal(el);
+      });
+    }
+  });
+}
+
+/* ============================================================================
+ * 14. OFFICER VIEW (UNIT-12 tablet)
+ * ==========================================================================*/
+function mountOfficer(container, opts = {}) {
+  container.innerHTML = '';
+  const root = document.createElement('div');
+  root.id = 'view-officer';
+  root.innerHTML = `
+    <div class="officer-frame">
+      <div class="topbar">
+        ${opts.noBack ? '' : '<button class="topbar-back" data-back>‹ ROLE</button>'}
+        <div class="topbar-title">UNIT-12 · IN-VEHICLE TERMINAL</div>
+        <div class="topbar-badge">DEMO</div>
+        <div class="topbar-spacer"></div>
+        <div class="topbar-clock" data-clock>—</div>
+      </div>
+      <div class="officer-status-strip">
+        <div class="officer-callsign-chip">UNIT-12</div>
+        <div class="officer-status-pill" data-status-pill>AVAILABLE</div>
+        <div class="officer-meta">
+          <div class="clock" data-shift>SHIFT 0h 00m</div>
+          <div>GPS · GOOD<br>RADIO · CH 4</div>
+        </div>
+      </div>
+      <div class="officer-map-wrap">
+        <div class="officer-map" data-map></div>
+      </div>
+      <div class="officer-card-area" data-card-area></div>
+      <div class="officer-citation-bar">
+        <button class="btn-issue" data-issue>ISSUE CITATION</button>
+      </div>
+    </div>
+  `;
+  container.appendChild(root);
+
+  root.querySelector('[data-back]')?.addEventListener('click', () => { location.hash = ''; });
+
+  const mapEl = root.querySelector('[data-map]');
+  const handle = createMap(mapEl, {
+    center: CORRIDOR_CENTER,
+    zoom: OFFICER_ZOOM,
+  });
+  handle.onReady = () => {
+    setMapModeVisibility(handle);
+    // Follow UNIT-12.
+    const you = sim.officers.find(o => o.you);
+    if (you) handle.map.flyTo({center: you.pos, zoom: OFFICER_ZOOM, duration: 600});
+  };
+  activeHandles.add(handle);
+
+  // Keep map centered on UNIT-12 (gently).
+  let lastFollow = 0;
+  function followUpdate() {
+    const you = sim.officers.find(o => o.you);
+    if (!you || !handle.sources._ready) return;
+    if (now() - lastFollow > 1500) {
+      handle.map.easeTo({center: you.pos, duration: 1300, zoom: OFFICER_ZOOM});
+      lastFollow = now();
+    }
+  }
+  const followInt = setInterval(followUpdate, 800);
+
+  const statusPillEl = root.querySelector('[data-status-pill]');
+  const cardArea = root.querySelector('[data-card-area]');
+  const issueBtn = root.querySelector('[data-issue]');
+  const clockEl = root.querySelector('[data-clock]');
+  const shiftEl = root.querySelector('[data-shift]');
+  let lastCitedVehicleId = null;
+
+  function refresh() {
+    const you = sim.officers.find(o => o.you);
+    if (!you) return;
+    statusPillEl.className = 'officer-status-pill ' + you.status;
+    statusPillEl.textContent = you.status.replace('_',' ').toUpperCase();
+
+    cardArea.innerHTML = '';
+    if (you.assignmentId) {
+      const v = sim.vehicles.find(x => x.id === you.assignmentId);
+      if (v) {
+        cardArea.appendChild(renderAssignmentCard(you, v));
+        lastCitedVehicleId = v.id;
+      }
+    } else if (you.status === 'on_scene') {
+      cardArea.appendChild(renderOnSceneCard(you));
+    } else {
+      cardArea.appendChild(renderNearbyCard(you));
+    }
+    cardArea.appendChild(renderIncidentLog(you));
+
+    issueBtn.disabled = !(you.status === 'on_scene' || (lastCitedVehicleId && sim.vehicles.find(v => v.id === lastCitedVehicleId)));
+  }
+  function renderAssignmentCard(you, v) {
+    const el = document.createElement('div');
+    const onScene = you.status === 'on_scene';
+    el.className = 'assignment-card' + (onScene ? ' scene' : '');
+    const eta = Math.max(0, Math.round((you.interceptT - now()) / 1000));
+    const interceptCross = nearestCrossstreet(you.interceptPoint || v.pos);
+    const dx = (you.interceptPoint||v.pos)[0] - you.pos[0];
+    const dy = (you.interceptPoint||v.pos)[1] - you.pos[1];
+    const bearing = bearingLabel(dx, dy);
+    const distM = Math.round(dist(you.pos, you.interceptPoint || v.pos));
+    el.innerHTML = `
+      <div class="head-label">${onScene ? 'ON SCENE · ACTIVE STOP' : 'ASSIGNMENT · INTERCEPT'}</div>
+      <div class="top">
+        <div class="type-row">
+          <div class="type">${VEHICLE_TYPES[v.type].label}</div>
+          <div class="vehicle-id">VEHICLE ${v.id}${v.groupId ? ' · CONVOY '+v.groupId : ''}</div>
+        </div>
+        <div class="db-block">
+          <div class="db-now" style="color:${colorForDb(v.db)}">${Math.round(v.db)}</div>
+          <div class="db-peak">PEAK ${Math.round(v.peakDb)} dB</div>
+        </div>
+      </div>
+      <div class="intercept">
+        <div class="label">PREDICTED INTERCEPT</div>
+        <div class="where">${interceptCross}</div>
+        <div class="compass">
+          <div class="arrow">${arrowGlyph(bearing)}</div>
+          <div class="distance">${distM}m ${bearing}</div>
+          <div class="eta">ETA 0:${pad(eta)}</div>
+        </div>
+      </div>
+      <div class="stage-btns">
+        <button class="stage-btn ${you.stage==='idle'?'current':(you.stage!=='idle'?'done':'')}" data-stage="acknowledged" ${you.stage!=='idle' && you.stage!=='acknowledged'?'disabled':''}>ACKNOWLEDGE</button>
+        <button class="stage-btn ${you.stage==='acknowledged'?'current':(you.stage==='on_scene'||you.stage==='complete'?'done':'')}" data-stage="on_scene" ${you.stage==='idle'?'disabled':''}>ON SCENE</button>
+        <button class="stage-btn ${you.stage==='on_scene'?'current':''}" data-stage="complete" ${you.stage!=='on_scene'?'disabled':''}>STOP COMPLETE</button>
+      </div>
+    `;
+    el.querySelectorAll('.stage-btn').forEach(b => b.addEventListener('click', () => {
+      const target = b.dataset.stage;
+      officerStage(you, target);
+      refresh();
+    }));
+    return el;
+  }
+  function renderOnSceneCard(you) {
+    const el = document.createElement('div');
+    el.className = 'assignment-card scene';
+    el.innerHTML = `
+      <div class="head-label">ON SCENE</div>
+      <div style="font-size:13px;color:var(--ink-1)">Stop in progress. Issue citation when ready, then mark complete.</div>
+      <div class="stage-btns" style="grid-template-columns:1fr">
+        <button class="stage-btn current" data-stage="complete">STOP COMPLETE</button>
+      </div>
+    `;
+    el.querySelector('[data-stage]').addEventListener('click', () => { officerStage(you, 'complete'); refresh(); });
+    return el;
+  }
+  function renderNearbyCard(you) {
+    const nearby = sim.vehicles
+      .filter(v => sim.typeFilter[v.type] && v.db >= sim.dbThreshold && !v.assignedOfficerId)
+      .map(v => ({v, d: dist(you.pos, v.pos)}))
+      .sort((a,b)=>a.d-b.d)
+      .slice(0, 4);
+    const el = document.createElement('div');
+    el.className = 'nearby-list-card';
+    el.innerHTML = `<div class="head">NEARBY ACTIVITY <span class="count">${nearby.length}</span></div>`;
+    if (nearby.length === 0) {
+      el.innerHTML += `<div style="padding:18px;text-align:center;color:var(--ink-3);font-family:var(--mono);font-size:10px;letter-spacing:.16em">NO BREACHES IN RANGE</div>`;
+    } else {
+      for (const {v, d} of nearby) {
+        const item = document.createElement('div');
+        item.className = 'nearby-item';
+        item.innerHTML = `
+          <div class="type">${VEHICLE_TYPES[v.type].label}<span class="id">${v.id}</span></div>
+          <div class="dist">${Math.round(d)}m · ${nearestCrossstreet(v.pos)}</div>
+          <div class="db" style="color:${colorForDb(v.db)}">${Math.round(v.db)}</div>
+        `;
+        item.addEventListener('click', () => { dispatchOfficer(you.id, v.id, 'self'); refresh(); });
+        el.appendChild(item);
+      }
+    }
+    return el;
+  }
+  function renderIncidentLog(you) {
+    const el = document.createElement('div');
+    el.className = 'incident-log-card';
+    el.innerHTML = `<div class="head">INCIDENT LOG <span class="count">${you.activityLog.length}</span></div>`;
+    if (!you.activityLog.length) {
+      el.innerHTML += `<div style="font-family:var(--mono);font-size:10px;color:var(--ink-3);padding:6px 0">No activity this shift.</div>`;
+    } else {
+      for (const a of you.activityLog.slice(0, 6)) {
+        const d = new Date(a.t);
+        const entry = document.createElement('div');
+        entry.className = 'incident-entry';
+        entry.innerHTML = `<span class="when">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</span><span class="what">${a.what}</span>`;
+        el.appendChild(entry);
+      }
+    }
+    return el;
+  }
+  function arrowGlyph(b) {
+    return {N:'↑',NE:'↗',E:'→',SE:'↘',S:'↓',SW:'↙',W:'←',NW:'↖','—':'·'}[b] || '·';
+  }
+
+  // Issue citation.
+  issueBtn.addEventListener('click', () => {
+    const you = sim.officers.find(o => o.you);
+    // Prefer current assigned vehicle, else the last-known.
+    const vehId = you.assignmentId || lastCitedVehicleId;
+    const v = sim.vehicles.find(x => x.id === vehId);
+    if (!v) return;
+    showCitationModal(you, v);
+  });
+
+  // Clock.
+  function ticker() {
+    const d = new Date();
+    clockEl.textContent = fmtClock(d);
+    const shiftMin = Math.floor((now() - sim.startedAt) / 60000);
+    shiftEl.textContent = `SHIFT ${Math.floor(shiftMin/60)}h ${pad(shiftMin%60)}m`;
+  }
+  ticker();
+  const clockInt = setInterval(ticker, 1000);
+  const refreshInt = setInterval(refresh, 500);
+  refresh();
+
+  const offDispatch = bus.on('officer:dispatch', d => { if (d.officerId === 'U12') refresh(); });
+  return {
+    dispose() {
+      activeHandles.delete(handle);
+      handle.dispose();
+      clearInterval(clockInt); clearInterval(refreshInt); clearInterval(followInt);
+      offDispatch();
+    }
+  };
+}
+
+function showCitationModal(officer, vehicle) {
+  const d = new Date();
+  const proposedCaseId = fmtCaseId(d, sim.nextCitationSeq);
+  const cross = nearestCrossstreet(vehicle.pos);
+  const modal = renderModal({
+    title: 'CITATION · EVIDENCE PACKAGE',
+    body: `
+      <div class="evidence-placeholder">CAMERA SNAPSHOT — SIMULATED</div>
+      <div class="kv-grid">
+        <div class="k">Case ID</div><div class="v">${proposedCaseId}</div>
+        <div class="k">Vehicle</div><div class="v">${vehicle.id} · ${VEHICLE_TYPES[vehicle.type].label.toUpperCase()}</div>
+        <div class="k">Peak dB</div><div class="v" style="color:${colorForDb(vehicle.peakDb)}">${Math.round(vehicle.peakDb)} dB</div>
+        <div class="k">Captured At</div><div class="v">${fmtIso(d)}</div>
+        <div class="k">Crossstreet</div><div class="v">${cross}</div>
+        <div class="k">Officer</div><div class="v">${officer.callsign}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-3)">OFFICER NOTES</label>
+        <textarea data-notes placeholder="Optional observations for court file..."></textarea>
+      </div>
+    `,
+    footer: `
+      <button class="btn ghost" data-cancel>CANCEL</button>
+      <button class="btn ghost" data-export>EXPORT PDF</button>
+      <button class="btn danger" data-submit>SUBMIT CITATION</button>
+    `,
+    onMount(el) {
+      el.querySelector('[data-cancel]').addEventListener('click', () => closeModal(el));
+      el.querySelector('[data-export]').addEventListener('click', () => {
+        const b = el.querySelector('[data-export]');
+        b.textContent = 'EXPORTED · SIMULATED';
+        setTimeout(() => { b.textContent = 'EXPORT PDF'; }, 1400);
+      });
+      el.querySelector('[data-submit]').addEventListener('click', () => {
+        const m = el.closest('.modal');
+        m.classList.add('flash-red');
+        submitCitation(officer, vehicle);
+        setTimeout(() => closeModal(el), 600);
+      });
+    }
+  });
+}
+
+/* ============================================================================
+ * 15. SPLIT VIEW
+ * ==========================================================================*/
+function mountSplit(container) {
+  container.innerHTML = '';
+  const root = document.createElement('div');
+  root.id = 'view-split';
+  root.innerHTML = `
+    <div class="dispatcher-frame" data-dispatcher></div>
+    <div class="bezel-wrap"><div class="bezel" data-officer></div></div>
+  `;
+  container.appendChild(root);
+
+  const dispMount = mountDispatcher(root.querySelector('[data-dispatcher]'), {noBack: true});
+  const ofcMount  = mountOfficer(root.querySelector('[data-officer]'), {noBack: true});
+
+  // Add a single shared back button overlay.
+  const back = document.createElement('button');
+  back.className = 'topbar-back';
+  back.textContent = '‹ ROLE';
+  back.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:50';
+  back.addEventListener('click', () => { location.hash = ''; });
+  root.appendChild(back);
+
+  return {
+    dispose() { dispMount.dispose(); ofcMount.dispose(); }
+  };
+}
+
+/* ============================================================================
+ * 16. MODAL HELPERS, MODE/PLAYBACK, ROUTER, BOOT
+ * ==========================================================================*/
+function renderModal({title, body, footer, onMount}) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <div class="modal-header"><div class="modal-title">${title}</div><button class="modal-close" data-close>×</button></div>
+      <div class="modal-body">${body}</div>
+      <div class="modal-footer">${footer || ''}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').addEventListener('click', () => closeModal(overlay));
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay); });
+  if (onMount) onMount(overlay);
+  return overlay;
+}
+function closeModal(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+
+function setMode(mode) {
+  if (mode === sim.mode) return;
+  const prev = sim.mode;
+  if (mode === 'playback') {
+    pregenHistory();
+    sim.playbackTickIdx = 0;
+    sim.playbackPlaying = true;
+  }
+  sim.mode = mode;
+  // Switching back from playback into live: vehicles' paths are placeholder
+  // snapshots, so re-seed a fresh live grid so live sim has valid state.
+  if (prev === 'playback' && mode !== 'playback') {
+    sim.vehicles = [];
+    for (let k = 0; k < 6; k++) spawnVehicle();
+    sim.lastSpawnAt = now();
+  }
+  bus.emit('mode:change', mode);
+  for (const h of activeHandles) setMapModeVisibility(h);
+}
+
+function applyPlaybackTick() {
+  if (!sim.history) return;
+  if (sim.playbackPlaying) {
+    sim.playbackTickIdx = (sim.playbackTickIdx + 1) % sim.history.length;
+  }
+  const tick = sim.history[sim.playbackTickIdx];
+  if (!tick) return;
+  // Replace live vehicle/officer state with snapshot.
+  sim.vehicles = tick.v.map(rec => ({
+    id: rec.id, type: rec.type, pos: rec.pos.slice(),
+    trail: [{xy: rec.pos.slice(), t: now()}],
+    db: rec.db, baseDb: rec.db, peakDb: rec.db, speedMps: 14,
+    path: [[0,0],[0,1]], segIdx: 0, t: 0,
+    groupId: rec.gid || null,
+    assignedOfficerId: null, cited: false,
+    spawnedAt: now(),
+  }));
+  for (const orec of tick.o) {
+    const o = sim.officers.find(x => x.id === orec.id);
+    if (o) { o.pos = orec.pos.slice(); o.status = orec.status; }
+  }
+}
+
+// View management.
+let currentView = null;
+const viewRoot = document.getElementById('view-root');
+const roleChooser = document.getElementById('role-chooser');
+
+function showView(name) {
+  if (currentView) { currentView.dispose(); currentView = null; }
+  viewRoot.innerHTML = '';
+  if (name === 'chooser') {
+    roleChooser.classList.remove('hidden');
+    return;
+  }
+  roleChooser.classList.add('hidden');
+  if (name === 'dispatcher') currentView = mountDispatcher(viewRoot);
+  else if (name === 'officer') currentView = mountOfficer(viewRoot);
+  else if (name === 'split')   currentView = mountSplit(viewRoot);
+}
+
+function route() {
+  const hash = (location.hash || '').slice(1).toLowerCase();
+  if (hash === 'dispatcher') return showView('dispatcher');
+  if (hash === 'officer')    return showView('officer');
+  if (hash === 'split')      return showView('split');
+  showView('chooser');
+}
+
+// Boot.
+initOfficers();
+// Seed a few starter vehicles so the first frame isn't empty.
+for (let k = 0; k < 5; k++) spawnVehicle();
+spawnConvoy();
+sim.lastConvoyAt = now();
+
+window.addEventListener('hashchange', route);
+requestAnimationFrame(renderLoop);
+route();
+
+// Esc key returns to role chooser.
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    // Close modal if open, else go to chooser.
+    const m = document.querySelector('.modal-overlay');
+    if (m) closeModal(m);
+    else if (location.hash) location.hash = '';
+  }
+});
+
+})();
+</script>
+</body>
+</html>

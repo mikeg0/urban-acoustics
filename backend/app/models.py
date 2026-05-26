@@ -35,6 +35,10 @@ class Device(Base):
     device_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # WGS84 placement on the station map. Nullable for devices that haven't
+    # been physically sited yet; the map view filters these out.
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Per-device runtime tunables pushed from the dashboard. JSONB so adding
@@ -43,6 +47,27 @@ class Device(Base):
     runtime_config: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default="{}"
     )
+
+
+class Camera(Base):
+    __tablename__ = "cameras"
+
+    # camera_id mirrors UDOT's `Id` (their stable identifier across the
+    # roster). We persist only the subset of UDOT cameras that sit within
+    # ~100 m of an active mic device — the import script handles the
+    # filter; the API just reads the table.
+    camera_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    roadway: Mapped[str | None] = mapped_column(Text, nullable=True)
+    direction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    # First non-disabled view from UDOT's Views[]; the snapshot URL is
+    # https://www.udottraffic.utah.gov/map/Cctv/{view_id}.
+    view_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    view_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class DeviceCert(Base):

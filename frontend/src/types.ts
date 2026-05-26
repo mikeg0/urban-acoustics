@@ -120,8 +120,25 @@ export interface DeviceInfo {
   device_id: string;
   name: string | null;
   location: string | null;
+  lat: number | null;
+  lon: number | null;
   created_at: number;
   last_seen: number | null;
+}
+
+// UDOT traffic camera co-located with a mic device. The table is populated
+// out-of-band by scripts/refresh_cameras.py; see api/v1/cameras.py.
+export interface CameraInfo {
+  camera_id: number;
+  roadway: string | null;
+  direction: string | null;
+  location: string | null;
+  lat: number;
+  lon: number;
+  view_id: number | null;
+  description: string | null;
+  snapshot_url: string;   // base URL; the UI appends `?t=<unix>` for cache-busting
+  fetched_at: number;
 }
 
 export type TelemetryResolution = 'raw' | '1m' | '1h';

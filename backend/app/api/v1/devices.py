@@ -26,12 +26,16 @@ class DeviceRegistration(BaseModel):
     device_id: UUID
     name: str | None = None
     location: str | None = None
+    lat: float | None = None
+    lon: float | None = None
 
 
 class DeviceResponse(BaseModel):
     device_id: UUID
     name: str | None
     location: str | None
+    lat: float | None
+    lon: float | None
     created_at: float
     last_seen: float | None
 
@@ -41,6 +45,8 @@ def _to_response(row: Device) -> DeviceResponse:
         device_id=row.device_id,
         name=row.name,
         location=row.location,
+        lat=row.lat,
+        lon=row.lon,
         created_at=row.created_at.timestamp(),
         last_seen=row.last_seen.timestamp() if row.last_seen else None,
     )
@@ -61,6 +67,8 @@ async def register_device(
         device_id=body.device_id,
         name=body.name,
         location=body.location,
+        lat=body.lat,
+        lon=body.lon,
         created_at=datetime.now(timezone.utc),
     )
     session.add(row)

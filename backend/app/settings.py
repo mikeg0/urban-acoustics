@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     EVENT_INTENT_TTL_SECONDS: int = DEFAULT_INTENT_TTL
     EVENT_PLAYBACK_URL_TTL_SECONDS: int = DEFAULT_PLAYBACK_TTL
 
+    # --- UDOT cameras ------------------------------------------------------
+    # Only read by scripts/refresh_cameras.py. Empty disables the import
+    # entirely (the API just returns an empty cameras list).
+    UDOT_API_KEY: str = ""
+
     # --- Modes / CORS / logging --------------------------------------------
     DEMO_MODE: bool = False
     ALLOWED_ORIGINS: str = Field(default="", description="Comma-separated origin list. Never '*' in prod.")

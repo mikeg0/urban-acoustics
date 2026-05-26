@@ -17,6 +17,10 @@ services:
       network: host
     image: urban-acoustics-backend
     container_name: urban-acoustics-backend
+    # Untracked secrets (e.g. UDOT_API_KEY) live in backend/.env. Inline
+    # `environment:` below still wins over anything declared here.
+    env_file:
+      - ./backend/.env
     # Run Alembic before uvicorn so a fresh DB is migrated on first boot.
     # The migration is idempotent; --reload survives because uvicorn execs
     # the same image, just with source mounted in.

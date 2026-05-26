@@ -11,6 +11,7 @@ import {
   liveDeviceSocket,
 } from './api';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
+import { CameraSnapshot, useNearestCamera } from './cameras';
 import {
   anomaliesToUi,
   daysToMonths,
@@ -26,6 +27,7 @@ import { LiveView, RealLiveView } from './live';
 import { PALETTES } from './palettes';
 import { AnomaliesFeed, BreachRibbon, ForecastPanel, PeakHoursChart, SourceBreakdown } from './panels';
 import { SettingsButton, SettingsDialog } from './settings';
+import { StationListView, isDeviceOnline } from './stations';
 import {
   LiveSpectrogram,
   SpectrogramCanvas,
@@ -51,13 +53,14 @@ const REAL_MODE = VITE_DEMO_MODE === 'false' && !!VITE_DEVICE_ID;
 type PageKey = 'live' | 'dashboard' | 'health';
 
 function TopBar({
-  threshold, page, onPageChange, onOpenSettings, device,
+  threshold, page, onPageChange, onOpenSettings, device, onBack,
 }: {
   threshold: number;
   page: PageKey;
   onPageChange: (p: PageKey) => void;
   onOpenSettings: () => void;
   device: DeviceInfo | null;
+  onBack?: () => void;
 }) {
   const [t, setT] = useState(() => new Date());
   const { timeFormat } = useTweaks();
@@ -73,7 +76,26 @@ function TopBar({
       background: 'var(--bg-0)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div
+          onClick={onBack}
+          title={onBack ? 'Back to station map' : undefined}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: onBack ? 'pointer' : 'default',
+            padding: '4px 8px',
+            margin: '-4px -8px',
+            borderRadius: 6,
+            transition: 'background 120ms',
+          }}
+          onMouseEnter={(e) => {
+            if (onBack) e.currentTarget.style.background = 'var(--bg-2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
             <rect x="2" y="9" width="2" height="4" fill="var(--neon-cool)" />
             <rect x="5" y="6" width="2" height="10" fill="var(--neon-cool)" />
@@ -91,12 +113,27 @@ function TopBar({
         </div>
         <div style={{ width: 1, height: 28, background: 'var(--line)', marginLeft: 6 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <LiveDot />
+          {isDeviceOnline(device) ? (
+            <LiveDot />
+          ) : (
+            <span
+              title="Sensor offline · awaiting field deployment"
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                background: 'oklch(50% 0.02 60)',
+                display: 'inline-block',
+              }}
+            />
+          )}
           <div>
             <div className="mono" style={{ fontSize: 11, color: device?.location ? 'var(--ink-1)' : 'var(--ink-3)' }}>
               {device?.location ?? '— unconfigured —'}
             </div>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>STREAMING · 48 kHz · A-weighted</div>
+            <div className="mono" style={{ fontSize: 9, color: isDeviceOnline(device) ? 'var(--ink-3)' : 'oklch(78% 0.13 50)' }}>
+              {isDeviceOnline(device) ? 'STREAMING · 48 kHz · A-weighted' : 'OFFLINE · NO TELEMETRY'}
+            </div>
           </div>
         </div>
       </div>
@@ -178,6 +215,7 @@ const NOW_CARD_SPECT_FRAMES = 240;
 
 function RealNowCard({ deviceId, threshold, onOpenLive }: { deviceId: string; threshold: number; onOpenLive: () => void }) {
   const { spectroColor } = useTweaks();
+  const { camera: nearbyCamera } = useNearestCamera(deviceId);
   const [lastTick, setLastTick] = useState<{ ts: number; laeq: number } | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const spectRing = useRollingBands(NOW_CARD_SPECT_FRAMES);
@@ -239,47 +277,52 @@ function RealNowCard({ deviceId, threshold, onOpenLive }: { deviceId: string; th
 
   return (
     <Card title="LIVE · RIGHT NOW" right={<Pill tone={status.tone} icon>{status.label}</Pill>} padding={14}>
-      <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-        <div>
-          <div className="mono" style={{
-            fontSize: 40, letterSpacing: '-0.03em',
-            color: breach ? 'var(--neon-hot)' : 'var(--ink-0)',
-            lineHeight: 1,
-          }}>
-            {lastTick ? lastTick.laeq.toFixed(1) : '—'}
-          </div>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
-            dB(A) · LAeq · {lastAge != null
-              ? lastAge < 90 ? `${Math.round(lastAge)}s ago` : `${Math.round(lastAge / 60)}m ago`
-              : 'no data'}
-          </div>
-        </div>
-        <div
-          onClick={onOpenLive}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLive(); } }}
-          title="Open Live view"
-          style={{ flex: 1, position: 'relative', cursor: 'pointer' }}
-        >
-          <LiveSpectrogram
-            ring={spectRing}
-            palette={spectroColor}
-            height={70}
-            minDb={20}
-            maxDb={110}
-          />
-          {waitingSpect && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div>
             <div className="mono" style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 9, letterSpacing: '0.12em', color: 'var(--ink-3)',
-              background: 'rgba(0,0,0,0.4)', borderRadius: 4, pointerEvents: 'none',
+              fontSize: 40, letterSpacing: '-0.03em',
+              color: breach ? 'var(--neon-hot)' : 'var(--ink-0)',
+              lineHeight: 1,
             }}>
-              WAITING FOR SPECTROGRAM
+              {lastTick ? lastTick.laeq.toFixed(1) : '—'}
             </div>
-          )}
+            <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+              dB(A) · LAeq · {lastAge != null
+                ? lastAge < 90 ? `${Math.round(lastAge)}s ago` : `${Math.round(lastAge / 60)}m ago`
+                : 'no data'}
+            </div>
+          </div>
+          <div
+            onClick={onOpenLive}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenLive(); } }}
+            title="Open Live view"
+            style={{ flex: 1, position: 'relative', cursor: 'pointer' }}
+          >
+            <LiveSpectrogram
+              ring={spectRing}
+              palette={spectroColor}
+              height={70}
+              minDb={20}
+              maxDb={110}
+            />
+            {waitingSpect && (
+              <div className="mono" style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, letterSpacing: '0.12em', color: 'var(--ink-3)',
+                background: 'rgba(0,0,0,0.4)', borderRadius: 4, pointerEvents: 'none',
+              }}>
+                WAITING FOR SPECTROGRAM
+              </div>
+            )}
+          </div>
         </div>
+        {nearbyCamera && (
+          <CameraSnapshot camera={nearbyCamera} size="panel" openOnClick />
+        )}
       </div>
     </Card>
   );
@@ -488,8 +531,176 @@ function DrillFlow({ state, setState, threshold, palette, months, yearDays, devi
   );
 }
 
+// The station map is the entry point: a user lands on the pilot-corridor
+// map and selects which station's dashboard to drill into. Demo mode (no
+// real backend devices) bypasses the map and renders the synthetic
+// /api/year dashboard directly — there's nothing to pick when the only
+// "device" is the bundle.
+
+// Browser navigation is hand-rolled (no router dep). The URL is the source
+// of truth for which station / page / drill the user is on, so the back
+// and forward buttons "just work" and links are shareable. localStorage
+// mirrors it so a bare-URL visit restores the last view.
+const DEFAULT_DRILL: DrillState = { month: null, dayKey: null, hour: null };
+const NAV_KEY = 'navState';
+
+type NavState = {
+  deviceId: string | null;
+  page: PageKey;
+  drill: DrillState;
+};
+
+function isPageKey(p: unknown): p is PageKey {
+  return p === 'live' || p === 'dashboard' || p === 'health';
+}
+
+function navFromUrl(): NavState {
+  const p = new URLSearchParams(window.location.search);
+  const month = p.get('month');
+  const hour = p.get('hour');
+  const pageParam = p.get('page');
+  return {
+    deviceId: p.get('device') || null,
+    page: isPageKey(pageParam) ? pageParam : 'dashboard',
+    drill: {
+      month: month != null && month !== '' ? Number(month) : null,
+      dayKey: p.get('day') || null,
+      hour: hour != null && hour !== '' ? Number(hour) : null,
+    },
+  };
+}
+
+function navToSearch(s: NavState): string {
+  const p = new URLSearchParams();
+  if (s.deviceId) p.set('device', s.deviceId);
+  if (s.page !== 'dashboard') p.set('page', s.page);
+  if (s.drill.month != null) p.set('month', String(s.drill.month));
+  if (s.drill.dayKey) p.set('day', s.drill.dayKey);
+  if (s.drill.hour != null) p.set('hour', String(s.drill.hour));
+  return p.toString();
+}
+
+function isEmptyNav(s: NavState): boolean {
+  return !s.deviceId && s.page === 'dashboard'
+    && s.drill.month == null && !s.drill.dayKey && s.drill.hour == null;
+}
+
+function sameNav(a: NavState, b: NavState): boolean {
+  return a.deviceId === b.deviceId && a.page === b.page
+    && a.drill.month === b.drill.month
+    && a.drill.dayKey === b.drill.dayKey
+    && a.drill.hour === b.drill.hour;
+}
+
+function loadStoredNav(): NavState | null {
+  try {
+    const raw = localStorage.getItem(NAV_KEY);
+    if (!raw) return null;
+    const j = JSON.parse(raw);
+    if (!j || typeof j !== 'object') return null;
+    return {
+      deviceId: typeof j.deviceId === 'string' ? j.deviceId : null,
+      page: isPageKey(j.page) ? j.page : 'dashboard',
+      drill: {
+        month: typeof j?.drill?.month === 'number' ? j.drill.month : null,
+        dayKey: typeof j?.drill?.dayKey === 'string' ? j.drill.dayKey : null,
+        hour: typeof j?.drill?.hour === 'number' ? j.drill.hour : null,
+      },
+    };
+  } catch { return null; }
+}
+
+function applyToUrl(s: NavState, mode: 'push' | 'replace') {
+  const search = navToSearch(s);
+  const url = search ? `?${search}` : window.location.pathname;
+  if (mode === 'push') window.history.pushState(null, '', url);
+  else window.history.replaceState(null, '', url);
+}
+
+function persistNav(s: NavState) {
+  try { localStorage.setItem(NAV_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+function useNavState(): [NavState, (next: Partial<NavState>) => void] {
+  const [state, setState] = useState<NavState>(() => {
+    const fromUrl = navFromUrl();
+    // Bare URL → restore from localStorage and rewrite (replace, not push,
+    // so the back button doesn't land on a stale empty entry).
+    if (isEmptyNav(fromUrl)) {
+      const stored = loadStoredNav();
+      if (stored && !isEmptyNav(stored)) {
+        applyToUrl(stored, 'replace');
+        return stored;
+      }
+    }
+    return fromUrl;
+  });
+
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const next = navFromUrl();
+      setState(next);
+      persistNav(next);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const navigate = useCallback((next: Partial<NavState>) => {
+    const cur = stateRef.current;
+    const merged: NavState = {
+      deviceId: next.deviceId !== undefined ? next.deviceId : cur.deviceId,
+      page: next.page !== undefined ? next.page : cur.page,
+      drill: next.drill !== undefined ? next.drill : cur.drill,
+    };
+    if (sameNav(merged, cur)) return;
+    setState(merged);
+    persistNav(merged);
+    applyToUrl(merged, 'push');
+  }, []);
+
+  return [state, navigate];
+}
+
 export function App() {
-  return <DashboardApp deviceId={REAL_MODE ? VITE_DEVICE_ID : null} />;
+  const [nav, navigate] = useNavState();
+
+  const onPageChange = useCallback((p: PageKey) => navigate({ page: p }), [navigate]);
+  const onDrillStateChange = useCallback((d: DrillState) => navigate({ drill: d }), [navigate]);
+
+  if (!REAL_MODE) {
+    return (
+      <DashboardApp
+        deviceId={null}
+        page={nav.page}
+        onPageChange={onPageChange}
+        drillState={nav.drill}
+        onDrillStateChange={onDrillStateChange}
+      />
+    );
+  }
+
+  if (nav.deviceId == null) {
+    return (
+      <StationListView
+        onPick={(d) => navigate({ deviceId: d.device_id, page: 'dashboard', drill: DEFAULT_DRILL })}
+      />
+    );
+  }
+
+  return (
+    <DashboardApp
+      deviceId={nav.deviceId}
+      onBack={() => navigate({ deviceId: null, page: 'dashboard', drill: DEFAULT_DRILL })}
+      page={nav.page}
+      onPageChange={onPageChange}
+      drillState={nav.drill}
+      onDrillStateChange={onDrillStateChange}
+    />
+  );
 }
 
 // Rolling year window for the dashboard, in seconds. Capped one second below
@@ -510,7 +721,21 @@ const DEFAULT_CITY = {
 // avoids a 0-dB flash on initial render.
 const DEFAULT_DB_THRESHOLD = 80;
 
-function DashboardApp({ deviceId }: { deviceId: string | null }) {
+function DashboardApp({
+  deviceId,
+  onBack,
+  page,
+  onPageChange,
+  drillState,
+  onDrillStateChange,
+}: {
+  deviceId: string | null;
+  onBack?: () => void;
+  page: PageKey;
+  onPageChange: (p: PageKey) => void;
+  drillState: DrillState;
+  onDrillStateChange: (d: DrillState) => void;
+}) {
   const tweaks = useTweaks();
   const { spectroColor, anomalySensitivity } = tweaks;
 
@@ -591,20 +816,6 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
     document.title = name ? `Urban Acoustics · ${name}` : 'Urban Acoustics';
   }, [device?.name, deviceId]);
 
-  const [drillState, setDrillState] = useState<DrillState>(() => {
-    try {
-      const saved = localStorage.getItem('drillState');
-      return saved ? JSON.parse(saved) : { month: null, dayKey: null, hour: null };
-    } catch { return { month: null, dayKey: null, hour: null }; }
-  });
-  useEffect(() => { try { localStorage.setItem('drillState', JSON.stringify(drillState)); } catch { /* ignore */ } }, [drillState]);
-
-  const [page, setPage] = useState<PageKey>(() => {
-    const saved = localStorage.getItem('page');
-    return saved === 'live' || saved === 'dashboard' || saved === 'health' ? saved : 'dashboard';
-  });
-  useEffect(() => { try { localStorage.setItem('page', page); } catch { /* ignore */ } }, [page]);
-
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Demo-mode data, fully derived from the synthetic bundle.
@@ -629,8 +840,8 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
 
   const handleAnomalyClick = useCallback((a: Anomaly) => {
     const d = new Date(a.date + 'T00:00:00');
-    setDrillState({ month: d.getMonth(), dayKey: a.key, hour: a.hour });
-  }, []);
+    onDrillStateChange({ month: d.getMonth(), dayKey: a.key, hour: a.hour });
+  }, [onDrillStateChange]);
 
   // Decide what to render. Real mode waits for the summary (the spine of
   // every panel); the others fall back to empty arrays after their own
@@ -679,9 +890,10 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
       <TopBar
         threshold={dbThreshold}
         page={page}
-        onPageChange={setPage}
+        onPageChange={onPageChange}
         onOpenSettings={() => setSettingsOpen(true)}
         device={device}
+        onBack={onBack}
       />
 
       {page === 'live' ? (
@@ -710,8 +922,8 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
               {deviceId
-                ? <RealNowCard deviceId={deviceId} threshold={dbThreshold} onOpenLive={() => setPage('live')} />
-                : <NowCard palette={spectroColor} onOpenLive={() => setPage('live')} />}
+                ? <RealNowCard deviceId={deviceId} threshold={dbThreshold} onOpenLive={() => onPageChange('live')} />
+                : <NowCard palette={spectroColor} onOpenLive={() => onPageChange('live')} />}
               <Card
                 title="ANOMALIES FEED"
                 subtitle={`${visibleAnomalies.length} events · past 365 days`}
@@ -726,7 +938,7 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
             </div>
 
             <Card>
-              <DrillFlow state={drillState} setState={setDrillState} threshold={dbThreshold}
+              <DrillFlow state={drillState} setState={onDrillStateChange} threshold={dbThreshold}
                 palette={spectroColor} months={months} yearDays={days} deviceId={deviceId} />
             </Card>
 

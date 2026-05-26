@@ -11,6 +11,7 @@ import {
   liveDeviceSocket,
   liveSocket,
 } from './api';
+import { CameraSnapshot, useNearestCamera } from './cameras';
 import { EventsList } from './events/EventsList';
 import { EventPlayer } from './events/EventPlayer';
 import { HourPlaybackViewer } from './events/HourPlayback';
@@ -24,6 +25,7 @@ import {
   useHistoryRibbon,
   useRollingBands,
 } from './spectrogram';
+import { isDeviceOnline } from './stations';
 import { useTweaks } from './tweaks';
 import { formatClock, formatHour, formatHourTick, type TimeFormat } from './utils';
 import type {
@@ -399,8 +401,12 @@ export function BigLiveStat({ label, value, unit, tone = 'default', pulse = fals
   label: string; value: string; unit?: string; tone?: 'hot' | 'warn' | 'default'; pulse?: boolean;
 }) {
   const color = tone === 'hot' ? 'var(--neon-hot)' : tone === 'warn' ? 'oklch(82% 0.16 70)' : 'var(--ink-0)';
+  // height: 100% lets the chip fill a stretched grid/flex cell (e.g. when
+  // a neighboring camera thumbnail makes the row taller). In unconstrained
+  // parents it resolves to natural content height, so other usages are
+  // unaffected.
   return (
-    <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px', position: 'relative', overflow: 'hidden', height: '100%', boxSizing: 'border-box' }}>
       <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
         <span className="mono" style={{ fontSize: 24, color, letterSpacing: '-0.02em', fontWeight: 500 }}>{value}</span>
@@ -1064,46 +1070,19 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
       display: 'flex', flexDirection: 'column', gap: 14, padding: 14,
       height: '100%', overflow: 'auto',
     }}>
-      <DeviceBanner
+      <LiveHeaderRow
         deviceId={deviceId}
         device={device}
         deviceError={deviceError}
         wsConnected={wsConnected}
         lastSampleAge={lastSampleAge}
+        currentDb={currentDb}
+        peak={peak}
+        mean={mean}
+        breaches={breaches}
+        threshold={threshold}
+        lastPoint={lastPoint}
       />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-        <BigLiveStat
-          label="Right now"
-          value={currentDb != null ? currentDb.toFixed(1) : '—'}
-          unit="dB · LAeq"
-          tone={
-            currentDb != null && currentDb >= threshold
-              ? 'hot'
-              : currentDb != null && currentDb >= threshold - 8
-                ? 'warn'
-                : 'default'
-          }
-          pulse={wsConnected || lastPoint != null}
-        />
-        <BigLiveStat
-          label="Window peak"
-          value={peak != null ? peak.toFixed(1) : '—'}
-          unit="dB · LAFmax"
-          tone={peak != null && peak >= threshold ? 'hot' : 'default'}
-        />
-        <BigLiveStat
-          label="Window avg"
-          value={mean != null ? mean.toFixed(1) : '—'}
-          unit="dB · LAeq"
-        />
-        <BigLiveStat
-          label="Breach minutes"
-          value={String(breaches)}
-          unit={`min ≥ ${threshold} dB`}
-          tone={breaches > 0 ? 'warn' : 'default'}
-        />
-      </div>
 
       <RealLiveSpectrogramPanel
         deviceId={deviceId}
@@ -1349,6 +1328,103 @@ function AnnotationPlayback({
   );
 }
 
+// Top-of-live-view header. Banner spans the top; below it a single row
+// pairs a clickable camera thumbnail (when a nearby UDOT camera exists)
+// with the four big stat chips. Click the thumb to open a full-res
+// lightbox.
+function LiveHeaderRow({
+  deviceId,
+  device,
+  deviceError,
+  wsConnected,
+  lastSampleAge,
+  currentDb,
+  peak,
+  mean,
+  breaches,
+  threshold,
+  lastPoint,
+}: {
+  deviceId: string;
+  device: DeviceInfo | null;
+  deviceError: string | null;
+  wsConnected: boolean;
+  lastSampleAge: number | null;
+  currentDb: number | null;
+  peak: number | null;
+  mean: number | null;
+  breaches: number;
+  threshold: number;
+  lastPoint: DeviceTelemetryPoint | null;
+}) {
+  const { camera } = useNearestCamera(deviceId);
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
+      {camera && (
+        <div style={{ flex: '0 0 auto' }}>
+          <CameraSnapshot camera={camera} size="thumb" openOnClick />
+        </div>
+      )}
+      <div
+        style={{
+          flex: '1 1 0',
+          minWidth: 280,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        <DeviceBanner
+          deviceId={deviceId}
+          device={device}
+          deviceError={deviceError}
+          wsConnected={wsConnected}
+          lastSampleAge={lastSampleAge}
+        />
+        <div
+          style={{
+            flex: '1 1 0',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 10,
+          }}
+        >
+          <BigLiveStat
+            label="Right now"
+            value={currentDb != null ? currentDb.toFixed(1) : '—'}
+            unit="dB · LAeq"
+            tone={
+              currentDb != null && currentDb >= threshold
+                ? 'hot'
+                : currentDb != null && currentDb >= threshold - 8
+                  ? 'warn'
+                  : 'default'
+            }
+            pulse={wsConnected || lastPoint != null}
+          />
+          <BigLiveStat
+            label="Window peak"
+            value={peak != null ? peak.toFixed(1) : '—'}
+            unit="dB · LAFmax"
+            tone={peak != null && peak >= threshold ? 'hot' : 'default'}
+          />
+          <BigLiveStat
+            label="Window avg"
+            value={mean != null ? mean.toFixed(1) : '—'}
+            unit="dB · LAeq"
+          />
+          <BigLiveStat
+            label="Breach minutes"
+            value={String(breaches)}
+            unit={`min ≥ ${threshold} dB`}
+            tone={breaches > 0 ? 'warn' : 'default'}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DeviceBanner({
   deviceId, device, deviceError, wsConnected, lastSampleAge,
 }: {
@@ -1359,12 +1435,33 @@ function DeviceBanner({
   lastSampleAge: number | null;
 }) {
   const fresh = lastSampleAge != null && lastSampleAge < 90;
+  const offline = device != null && !isDeviceOnline(device);
+  // Offline rolls up muted gray; the warm orange "stale/waiting" treatment
+  // stays for online devices that just haven't sent a packet yet.
+  const tone = offline ? 'offline' : fresh ? 'live' : 'stale';
+  const bg = tone === 'live' ? 'var(--bg-1)'
+    : tone === 'offline' ? 'var(--bg-2)'
+      : 'oklch(22% 0.06 35)';
+  const borderColor = tone === 'live' ? 'var(--line)'
+    : tone === 'offline' ? 'var(--line)'
+      : 'oklch(50% 0.15 35)';
+  const dotColor = tone === 'live' ? 'var(--neon-ok)'
+    : tone === 'offline' ? 'oklch(55% 0.02 60)'
+      : 'oklch(78% 0.18 35)';
+  const dotGlow = tone === 'live' ? '0 0 10px var(--neon-ok)' : 'none';
+  const textColor = tone === 'live' ? 'var(--neon-ok)'
+    : tone === 'offline' ? 'var(--ink-2)'
+      : 'oklch(85% 0.16 35)';
+  const label = tone === 'offline' ? 'Offline · no telemetry'
+    : tone === 'live' ? 'Receiving telemetry'
+      : lastSampleAge == null ? 'Waiting for data'
+        : 'Stale';
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '12px 16px',
-      background: fresh ? 'var(--bg-1)' : 'oklch(22% 0.06 35)',
-      border: `1px solid ${fresh ? 'var(--line)' : 'oklch(50% 0.15 35)'}`,
+      background: bg,
+      border: `1px solid ${borderColor}`,
       borderRadius: 8,
       gap: 14, flexWrap: 'wrap',
     }}>
@@ -1372,16 +1469,16 @@ function DeviceBanner({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
             width: 10, height: 10, borderRadius: 5,
-            background: fresh ? 'var(--neon-ok)' : 'oklch(78% 0.18 35)',
-            boxShadow: fresh ? '0 0 10px var(--neon-ok)' : 'none',
-            animation: fresh ? 'live-pulse 1.4s ease-in-out infinite' : 'none',
+            background: dotColor,
+            boxShadow: dotGlow,
+            animation: tone === 'live' ? 'live-pulse 1.4s ease-in-out infinite' : 'none',
           }} />
           <span className="mono" style={{
             fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase',
-            color: fresh ? 'var(--neon-ok)' : 'oklch(85% 0.16 35)',
+            color: textColor,
             fontWeight: 600,
           }}>
-            {fresh ? 'Receiving telemetry' : lastSampleAge == null ? 'Waiting for data' : 'Stale'}
+            {label}
           </span>
         </div>
         <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>

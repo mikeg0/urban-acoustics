@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SLC Noise Trace Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://unpkg.com" crossorigin />
+<link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<style>
+:root{
+  --bg-0:#0a0a0a;--bg-1:#131313;--bg-2:#1a1a1a;--bg-3:#232323;--bg-4:#2a2a2a;
+  --ink-0:#f0f0f0;--ink-1:#c0c0c0;--ink-2:#909090;--ink-3:#606060;--ink-4:#404040;
+  --line:#2a2a2a;--line-strong:#3a3a3a;
+  --neon-cool:oklch(72% 0.13 195);--neon-warm:oklch(82% 0.16 70);
+  --neon-hot:oklch(72% 0.2 35);--neon-go:oklch(72% 0.18 145);
+  --neon-amber:oklch(78% 0.15 70);
+  --glass:rgba(10,10,10,0.82);
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --sans:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;width:100%;overflow:hidden}
+body{background:#000;color:var(--ink-0);font-family:var(--sans);font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono)}
+.hidden{display:none!important}
+button{font-family:inherit;cursor:pointer}
+
+#map{position:absolute;inset:0;background:var(--bg-0)}
+/* Subtle vignette so center action stands out */
+#vignette{position:absolute;inset:0;pointer-events:none;z-index:2;
+  background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,0.55) 100%)}
+
+/* CDN fail */
+#cdn-fail{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg-0);z-index:9999;padding:24px}
+.cdn-card{padding:32px;border:1px solid var(--line);border-radius:8px;background:var(--bg-1);max-width:440px;text-align:center}
+.cdn-card h1{font-size:18px;margin-bottom:12px;color:var(--neon-hot);letter-spacing:.04em}
+.cdn-card p{color:var(--ink-2);margin-bottom:14px}
+.cdn-card .mono{font-size:10px;color:var(--ink-3);letter-spacing:.12em}
+
+/* Top-left header */
+#hdr{position:absolute;top:14px;left:14px;z-index:10;background:var(--glass);
+  border:1px solid var(--line);border-radius:6px;padding:10px 14px;
+  display:flex;flex-direction:column;gap:4px;backdrop-filter:blur(6px);
+  max-width:280px}
+#hdr .badge{display:inline-block;font-family:var(--mono);font-size:9px;
+  letter-spacing:.18em;color:var(--neon-hot);border:1px solid var(--neon-hot);
+  padding:2px 6px;border-radius:2px;width:max-content;
+  animation:badgePulse 2.4s ease-in-out infinite}
+@keyframes badgePulse{50%{opacity:.55}}
+#hdr .title{font-weight:600;letter-spacing:.04em;font-size:13px}
+#hdr .scen{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-2);margin-top:2px}
+#hdr .clock{font-family:var(--mono);font-size:11px;color:var(--ink-1);letter-spacing:.06em;margin-top:2px}
+
+/* Top-center chip strip */
+#chips{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:10;
+  background:var(--glass);border:1px solid var(--line);border-radius:6px;
+  padding:5px;display:flex;align-items:center;gap:4px;backdrop-filter:blur(6px)}
+#chips .back{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-3);
+  background:transparent;border:0;padding:6px 10px;text-decoration:none;cursor:pointer;border-radius:3px}
+#chips .back:hover{color:var(--ink-0);background:var(--bg-3)}
+#chips .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+#chips .chip{font-family:var(--mono);font-size:10px;letter-spacing:.14em;background:transparent;
+  border:1px solid transparent;color:var(--ink-2);padding:6px 12px;border-radius:3px;font-weight:600}
+#chips .chip:hover{color:var(--ink-0);background:var(--bg-3)}
+#chips .chip.active{color:#000;background:var(--neon-amber);border-color:var(--neon-amber)}
+
+/* Top-right controls (prediction toggle only) */
+#ctrls{position:absolute;top:14px;right:14px;z-index:10;background:var(--glass);
+  border:1px solid var(--line);border-radius:6px;padding:10px 14px;display:flex;
+  align-items:center;gap:10px;backdrop-filter:blur(6px)}
+#ctrls label.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-1)}
+#ctrls .toggle input{accent-color:var(--neon-amber);width:14px;height:14px;cursor:pointer}
+
+/* Bottom-center scrubber */
+#scrub{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;
+  background:var(--glass);border:1px solid var(--line);border-radius:6px;
+  padding:9px 14px;display:flex;align-items:center;gap:12px;backdrop-filter:blur(6px);
+  width:calc(100% - 40px);max-width:760px}
+#scrub .play{background:var(--bg-3);border:1px solid var(--line-strong);color:var(--ink-0);
+  width:32px;height:28px;border-radius:4px;font-size:12px;font-family:var(--sans);
+  display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0}
+#scrub .play:hover{background:var(--bg-4)}
+#scrub .speeds{display:flex;gap:1px;background:var(--bg-2);border-radius:4px;padding:1px;flex-shrink:0}
+#scrub .speeds button{font-family:var(--mono);font-size:10px;background:transparent;
+  border:0;color:var(--ink-2);padding:5px 9px;border-radius:3px;letter-spacing:.06em}
+#scrub .speeds button:hover{color:var(--ink-0);background:var(--bg-3)}
+#scrub .speeds button.active{background:var(--bg-4);color:var(--ink-0);font-weight:600}
+#scrub .track{flex:1;height:24px;position:relative;cursor:pointer;display:flex;align-items:center;min-width:120px}
+#scrub .rail{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;pointer-events:none}
+#scrub .stops{position:absolute;inset:0;pointer-events:none}
+#scrub .stops .stop{position:absolute;top:0;bottom:0;background:oklch(60% 0.13 35 / 0.45)}
+#scrub .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,
+  oklch(72% 0.13 195) 0%, oklch(78% 0.14 130) 35%, oklch(82% 0.16 70) 70%, oklch(72% 0.2 35) 100%);
+  border-radius:3px;opacity:.55;pointer-events:none}
+#scrub .thumb{position:absolute;top:50%;width:14px;height:14px;background:var(--ink-0);
+  border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(240,240,240,0.45);
+  pointer-events:none;border:2px solid var(--bg-1)}
+#scrub .time{font-family:var(--mono);font-size:10px;color:var(--ink-1);letter-spacing:.06em;
+  min-width:88px;text-align:right;flex-shrink:0}
+
+/* Chooser overlay */
+#chooser{position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:radial-gradient(ellipse at center,rgba(0,0,0,0.4),rgba(0,0,0,0.7));
+  backdrop-filter:blur(2px)}
+.chooser-card{background:var(--glass);border:1px solid var(--line-strong);border-radius:10px;
+  padding:28px;max-width:780px;width:100%;display:flex;flex-direction:column;gap:20px;
+  backdrop-filter:blur(8px);box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.chooser-card .head{text-align:center;display:flex;flex-direction:column;gap:6px;align-items:center}
+.chooser-card .head .badge{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--neon-hot);
+  border:1px solid var(--neon-hot);padding:3px 8px;border-radius:2px;margin-bottom:8px}
+.chooser-card .head h1{font-size:24px;font-weight:600;letter-spacing:.02em}
+.chooser-card .head h2{font-size:12px;font-weight:400;color:var(--ink-2);letter-spacing:.14em;text-transform:uppercase}
+.chooser-card .head p{color:var(--ink-2);max-width:560px;margin-top:8px;font-size:13px}
+.chooser-opts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:720px){.chooser-opts{grid-template-columns:1fr}}
+.opt{background:var(--bg-1);border:1px solid var(--line);border-radius:8px;padding:18px;
+  cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:8px;transition:all 140ms;
+  color:var(--ink-0);font-family:var(--sans)}
+.opt:hover{background:var(--bg-2);border-color:var(--line-strong);transform:translateY(-2px)}
+.opt .glyph{font-size:24px;line-height:1}
+.opt .ttl{font-size:16px;font-weight:600;letter-spacing:.02em}
+.opt .desc{font-size:12px;color:var(--ink-2)}
+.opt .stats{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--ink-3);padding-top:8px;border-top:1px dashed var(--line)}
+
+/* Splash */
+#splash{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,10,10,0.85);font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--ink-1);
+  pointer-events:none;animation:splashPulse 1.2s ease-in-out infinite}
+@keyframes splashPulse{50%{opacity:.5}}
+
+/* Pulse ring + breathing for "idling" head — driven via DOM since
+   we also use them as map circle features. CSS not strictly needed. */
+
+/* MapLibre overrides */
+.maplibregl-ctrl-attrib{font-size:9px!important;background:rgba(10,10,10,.6)!important}
+.maplibregl-ctrl-attrib a{color:var(--ink-3)!important}
+.maplibregl-ctrl-attrib-button{display:none!important}
+.maplibregl-ctrl-bottom-right{z-index:3!important}
+.maplibregl-ctrl-bottom-left{z-index:3!important}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg-0)}
+::-webkit-scrollbar-thumb{background:var(--bg-3);border-radius:4px}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="vignette"></div>
+
+<div id="hdr">
+  <span class="badge">DEMO · SIMULATION</span>
+  <div class="title">SALT LAKE CITY · NOISE TRACE PREVIEW</div>
+  <div class="scen" data-scen-label>SELECT A SCENARIO</div>
+  <div class="clock" data-clock>T+ 00:00</div>
+</div>
+
+<div id="chips" class="hidden">
+  <a class="back" data-back>‹ CHOOSE</a>
+  <div class="sep"></div>
+  <button class="chip" data-chip="biker">BIKER CONVOY</button>
+  <button class="chip" data-chip="muscle">MUSCLE CAR</button>
+  <button class="chip" data-chip="pizza">PIZZA SUBARU</button>
+</div>
+
+<div id="ctrls" class="hidden">
+  <label class="toggle">
+    <input type="checkbox" data-pred checked>
+    <span>SHOW PREDICTION</span>
+  </label>
+</div>
+
+<div id="scrub" class="hidden">
+  <button class="play" data-play title="Pause / play">⏸</button>
+  <div class="speeds">
+    <button data-spd="0.5">0.5×</button>
+    <button data-spd="1" class="active">1×</button>
+    <button data-spd="2">2×</button>
+    <button data-spd="4">4×</button>
+  </div>
+  <div class="track" data-track>
+    <div class="rail">
+      <div class="fill" data-fill></div>
+    </div>
+    <div class="stops" data-stops></div>
+    <div class="thumb" data-thumb></div>
+  </div>
+  <div class="time mono" data-time>00:00 / 00:00</div>
+</div>
+
+<div id="chooser">
+  <div class="chooser-card">
+    <div class="head">
+      <div class="badge">DEMO · SIMULATION</div>
+      <h1>Salt Lake City · Noise Trace Preview</h1>
+      <h2>A city-wide microphone array · past · present · predicted</h2>
+      <p>Pick a scenario to see how the array traces a loud vehicle's path over the past ten minutes, where it is right now, and where it's predicted to go next. Trails follow real street geometry — and so does the noise.</p>
+    </div>
+    <div class="chooser-opts">
+      <button class="opt" data-opt="biker">
+        <div class="glyph">🏍</div>
+        <div class="ttl">Biker Convoy</div>
+        <div class="desc">Ten motorcycles ride from 900 South up State Street and congregate east of the Capitol.</div>
+        <div class="stats">~3 MIN · POOLS AT 8 LIGHTS · PEAK 97 dB</div>
+      </button>
+      <button class="opt" data-opt="muscle">
+        <div class="glyph">⚙</div>
+        <div class="ttl">Muscle Car</div>
+        <div class="desc">A single car cruises State Street between North Temple and 400 South, revving at every red light.</div>
+        <div class="stats">CONTINUOUS LAPS · 2 ENDPOINT STOPS · PEAK 94 dB</div>
+      </button>
+      <button class="opt" data-opt="pizza">
+        <div class="glyph">▭</div>
+        <div class="ttl">Pizza Subaru</div>
+        <div class="desc">A Subaru with a modified muffler runs delivery loops from 100 S &amp; Main, drawing a spider-web of trips.</div>
+        <div class="stats">5 DELIVERY ROUTES · RADIAL WEB · PEAK 86 dB</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="splash" class="hidden">PREPARING TRACE…</div>
+
+<div id="cdn-fail" class="hidden">
+  <div class="cdn-card">
+    <h1>MAP LIBRARY UNAVAILABLE</h1>
+    <p>The demo couldn't reach the CDN that serves its map engine. Check your network connection and reload the page.</p>
+    <div class="mono">SLC NOISE TRACE PREVIEW</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"
+        onerror="document.getElementById('cdn-fail').classList.remove('hidden');document.getElementById('chooser').classList.add('hidden');"></script>
+<script>
+if (typeof maplibregl === 'undefined') {
+  document.getElementById('cdn-fail').classList.remove('hidden');
+  document.getElementById('chooser').classList.add('hidden');
+}
+</script>
+
+<script>
+/* =============================================================================
+ * SLC NOISE TRACE PREVIEW — marketing demo
+ * Three scripted scenarios on real OSM street geometry. Each scenario is
+ * a deterministic timeline that we sample backward (trail), at (head), and
+ * forward (prediction).
+ * ===========================================================================*/
+(function() {
+'use strict';
+if (typeof maplibregl === 'undefined') return;
+
+/* ============================================================================
+ * 1. STREET DATA (snapped from OSM Overpass)
+ * Each street is a polyline along its centerline. NS streets run lat-asc
+ * (south→north); EW streets run lon-asc (west→east).
+ * ==========================================================================*/
+const STREETS = {"state":[[-111.888232,40.751084],[-111.888232,40.760005],[-111.888232,40.766991],[-111.888232,40.775866]],"main":[[-111.891119,40.751012],[-111.891119,40.758922],[-111.891119,40.766125],[-111.891119,40.776547]],"west_temple":[[-111.893958,40.751479],[-111.893958,40.761549],[-111.893958,40.767859],[-111.893958,40.774822]],"e_200":[[-111.885372,40.751125],[-111.885372,40.758203],[-111.885372,40.763582],[-111.885372,40.769347]],"e_300":[[-111.882503,40.751456],[-111.882503,40.759903],[-111.882503,40.763874],[-111.882503,40.769344]],"e_400":[[-111.879642,40.751583],[-111.879642,40.759434],[-111.879642,40.764239],[-111.879642,40.769345]],"n_temple":[[-111.899941,40.771493],[-111.896617,40.771493],[-111.892526,40.771493],[-111.888203,40.771493]],"s_100":[[-111.89994,40.767173],[-111.890914,40.767173],[-111.881952,40.767173],[-111.870289,40.767173]],"s_200":[[-111.899956,40.765005],[-111.890869,40.765005],[-111.881826,40.765005],[-111.870081,40.765005]],"s_300":[[-111.899977,40.762835],[-111.891984,40.762835],[-111.884515,40.762835],[-111.870401,40.762835]],"s_400":[[-111.899973,40.760582],[-111.890932,40.760582],[-111.880643,40.760582],[-111.870367,40.760582]],"s_500":[[-111.89994,40.758483],[-111.890884,40.758483],[-111.880316,40.758483],[-111.870032,40.758483]],"s_600":[[-111.899945,40.756299],[-111.89135,40.756299],[-111.881512,40.756299],[-111.870096,40.756299]],"s_700":[[-111.89993,40.754131],[-111.893721,40.754131],[-111.885577,40.754131],[-111.870248,40.754131]]};
+
+// Quick-lookup helpers.
+const NS_LON = {}, EW_LAT = {};
+for (const k of Object.keys(STREETS)) {
+  const pts = STREETS[k];
+  if (k === 'state' || k === 'main' || k === 'west_temple' || k.startsWith('e_')) {
+    NS_LON[k] = pts[0][0];
+  } else {
+    EW_LAT[k] = pts[0][1];
+  }
+}
+// Convenient (street, cross) → intersection coord.
+function ix(nsSlug, ewSlug) {
+  return [NS_LON[nsSlug], EW_LAT[ewSlug]];
+}
+
+// Synthetic Capitol congregation point — east side of the Capitol grounds.
+const CAPITOL_CONGREGATION = [-111.8855, 40.7770];
+
+/* ============================================================================
+ * 2. TRAFFIC SIGNALS
+ * Cycle: green 25s → yellow 3s → red 30s = 58s total.
+ * Each signal has its own phase offset so the city has both
+ * "wave" runs and "all-red" pools. The 30s red lets idle revs build up
+ * over a long enough wait to be visually dramatic.
+ * ==========================================================================*/
+const SIG_CYCLE_MS = 58000;
+const SIG_GREEN_MS = 25000;
+const SIG_YELLOW_MS = 3000;
+
+// Signals along State Street (the workhorse corridor).
+const SIGNALS = {};
+function addSignal(id, at, offset) { SIGNALS[id] = {id, at, offset}; }
+addSignal('state_s_700',    ix('state','s_700'),    2000);
+addSignal('state_s_600',    ix('state','s_600'),   18000);
+addSignal('state_s_500',    ix('state','s_500'),   36000);
+addSignal('state_s_400',    ix('state','s_400'),    8000);
+addSignal('state_s_300',    ix('state','s_300'),   28000);
+addSignal('state_s_200',    ix('state','s_200'),   44000);
+addSignal('state_s_100',    ix('state','s_100'),   12000);
+addSignal('state_n_temple', ix('state','n_temple'),32000);
+// Signals on Main (used by pizza).
+addSignal('main_s_400',     ix('main','s_400'),    21000);
+addSignal('main_s_300',     ix('main','s_300'),    41000);
+addSignal('main_s_200',     ix('main','s_200'),     6000);
+addSignal('main_s_100',     ix('main','s_100'),    15000);
+addSignal('main_n_temple',  ix('main','n_temple'),  3000);
+addSignal('main_s_500',     ix('main','s_500'),    47000);
+// Cross-street signals where pizza turns.
+addSignal('e_300_s_300',    ix('e_300','s_300'),   29000);
+addSignal('e_400_s_200',    ix('e_400','s_200'),   38000);
+addSignal('e_400_s_400',    ix('e_400','s_400'),   17000);
+addSignal('west_temple_n_temple', ix('west_temple','n_temple'), 25000);
+
+function signalState(sigId, simT_ms) {
+  const sig = SIGNALS[sigId]; if (!sig) return 'green';
+  const phase = ((simT_ms - sig.offset) % SIG_CYCLE_MS + SIG_CYCLE_MS) % SIG_CYCLE_MS;
+  if (phase < SIG_GREEN_MS) return 'green';
+  if (phase < SIG_GREEN_MS + SIG_YELLOW_MS) return 'yellow';
+  return 'red';
+}
+
+// How many seconds until the signal next turns green from time `simT_ms`.
+function waitForGreen(sigId, simT_ms) {
+  const sig = SIGNALS[sigId]; if (!sig) return 0;
+  const phase = ((simT_ms - sig.offset) % SIG_CYCLE_MS + SIG_CYCLE_MS) % SIG_CYCLE_MS;
+  if (phase < SIG_GREEN_MS) return 0;
+  return (SIG_CYCLE_MS - phase) / 1000;
+}
+
+/* ============================================================================
+ * 3. STATIC MARKERS (microphones, squad cars, pizza HQ)
+ * ==========================================================================*/
+// 40 pilot-corridor stations from backend/scripts/seed_pilot_corridor.py.
+const STATIONS = (function() {
+  const out = [];
+  const stateCrosses = [40.7706,40.7686,40.7666,40.7646,40.7626,40.7606,40.7586,40.7566,40.7546,40.7526];
+  stateCrosses.forEach((lat, i) => out.push({id: 'UQI-ST-'+String(i+1).padStart(2,'0'), lat, lon: -111.8881}));
+  const parallels = [['300W',-111.8970],['WT',-111.8941],['MAIN',-111.8910],['200E',-111.8852],['300E',-111.8823],['400E',-111.8794]];
+  const standardCrosses = [40.7686,40.7646,40.7606,40.7566,40.7526];
+  parallels.forEach(([px, lon]) => standardCrosses.forEach((lat, j) => out.push({id: 'UQI-'+px+'-'+String(j+1).padStart(2,'0'), lat, lon})));
+  return out;
+})();
+
+// 5 static squad-car pins at sensible patrol positions.
+const SQUAD_CARS = [
+  {id:'U-A', at: ix('state','s_400')},
+  {id:'U-B', at: ix('state','n_temple')},
+  {id:'U-C', at: [-111.8865, 40.7747]}, // Capitol parking
+  {id:'U-D', at: ix('main','s_200')},
+  {id:'U-E', at: ix('e_400','s_400')},
+];
+
+// Pizza HQ at 100 S & Main.
+const PIZZA_HQ = ix('main','s_100');
+
+/* ============================================================================
+ * 4. HELPERS
+ * ==========================================================================*/
+const now = () => Date.now();
+function lerp2(a, b, t) { return [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t]; }
+function dist(a, b) {
+  const dLat = (b[1]-a[1]) * 111320;
+  const dLon = (b[0]-a[0]) * 111320 * Math.cos(a[1] * Math.PI/180);
+  return Math.sqrt(dLat*dLat + dLon*dLon);
+}
+function pad(n, w=2) { return String(n).padStart(w, '0'); }
+// dB → color ramp (teal → green → amber → red), expressed as hex because
+// MapLibre 4's paint parser doesn't accept oklch.
+function colorForDb(db) {
+  if (db == null) return '#857a6a';   // offline / unknown
+  if (db >= 85) return '#ee5a3a';     // hot red — rev/roar peaks
+  if (db >= 75) return '#f48238';     // orange — cruising loud
+  if (db >= 65) return '#ecb148';     // amber — idle baseline
+  if (db >= 55) return '#9ccf5a';     // green — quiet cruise
+  return '#48c2cc';                   // teal — near-ambient
+}
+function fmtElapsed(s) {
+  s = Math.max(0, Math.floor(s));
+  return 'T+ ' + pad(Math.floor(s/60)) + ':' + pad(s%60);
+}
+
+/* ============================================================================
+ * 5. TIMELINE & SCENARIO BUILDERS
+ *
+ * A Timeline is a list of segments:
+ *   { kind: 'drive'|'idle', startT, endT, from, to,
+ *     dbCruise, dbIdle, dbPeak, revCadenceS, signalId?, roarOnExit?, label? }
+ *
+ * - 'drive' interpolates linearly between from→to over [startT,endT)
+ * - 'idle' holds position at `from` over [startT,endT), emits revs every
+ *   revCadenceS, and emits a roar at endT if roarOnExit is truthy.
+ *
+ * loopT = total duration; sampling wraps modulo loopT.
+ * ==========================================================================*/
+function newTimeline() { return {segments: [], loopT: 0}; }
+
+// Mark each drive segment with easeIn/easeOut flags based on its neighbors
+// (with loop wrap). A drive whose previous segment is an idle should
+// accelerate from a stop; one whose next segment is an idle should
+// decelerate to a stop. Drive→drive transitions use linear motion at the
+// joining end so cruising speed stays uniform across the seam.
+function finalizeTimeline(tl) {
+  const n = tl.segments.length;
+  for (let i = 0; i < n; i++) {
+    const seg = tl.segments[i];
+    if (seg.kind !== 'drive') continue;
+    const prev = tl.segments[(i - 1 + n) % n];
+    const next = tl.segments[(i + 1) % n];
+    seg.easeIn = prev.kind === 'idle';
+    seg.easeOut = next.kind === 'idle';
+  }
+  return tl;
+}
+
+// Cubic s-curve / partial-s easing applied to a drive's [0,1] parameter.
+// Full s (both ends): smoothstep — zero velocity at both ends, peak in the
+// middle. Ease in only: quadratic ramp from rest. Ease out only: mirror.
+function easeDriveU(u, easeIn, easeOut) {
+  if (easeIn && easeOut) return u * u * (3 - 2 * u);
+  if (easeIn)  return u * u;
+  if (easeOut) { const v = 1 - u; return 1 - v * v; }
+  return u;
+}
+
+function addDrive(tl, from, to, speedMps, dbCruise) {
+  const d = dist(from, to);
+  const dt = d / speedMps;
+  tl.segments.push({
+    kind: 'drive', startT: tl.loopT, endT: tl.loopT + dt,
+    from, to, dbCruise,
+  });
+  tl.loopT += dt;
+}
+
+function addIdle(tl, at, durationS, opts = {}) {
+  tl.segments.push({
+    kind: 'idle', startT: tl.loopT, endT: tl.loopT + durationS,
+    from: at, to: at,
+    dbIdle: opts.dbIdle ?? 65,
+    dbPeak: opts.dbPeak ?? 92,
+    revCadenceS: opts.revCadenceS ?? 4.5,
+    signalId: opts.signalId || null,
+    roarOnExit: !!opts.roarOnExit,
+    label: opts.label || null,
+  });
+  tl.loopT += durationS;
+}
+
+// Drive to `to`, then if signal at `to` is red on arrival, idle until green.
+// `minStopS` floors each stop so noise has time to build up visibly.
+function addDriveAndStopIfRed(tl, from, to, speedMps, dbCruise, opts = {}) {
+  addDrive(tl, from, to, speedMps, dbCruise);
+  if (!opts.signalId) return;
+  const arrivalMs = tl.loopT * 1000;
+  const state = signalState(opts.signalId, arrivalMs);
+  if (state === 'green') return; // sail through
+  let waitS = waitForGreen(opts.signalId, arrivalMs);
+  if (opts.minStopS) waitS = Math.max(waitS, opts.minStopS);
+  if (waitS < 1) return;
+  addIdle(tl, to, waitS, {
+    dbIdle: opts.dbIdle, dbPeak: opts.dbPeak, revCadenceS: opts.revCadenceS,
+    signalId: opts.signalId, roarOnExit: true,
+  });
+}
+
+/* ----- Scenario A: biker convoy -------------------------------------------*/
+function buildBikerLeaderTimeline() {
+  const tl = newTimeline();
+  const v = 13; // ~30 mph cruise
+  const idleArgs = {dbIdle: 73, dbPeak: 97, revCadenceS: 3.8, minStopS: 30};
+  const path = [
+    {at: ix('state','s_700'),    sig: 'state_s_700'},
+    {at: ix('state','s_600'),    sig: 'state_s_600'},
+    {at: ix('state','s_500'),    sig: 'state_s_500'},
+    {at: ix('state','s_400'),    sig: 'state_s_400'},
+    {at: ix('state','s_300'),    sig: 'state_s_300'},
+    {at: ix('state','s_200'),    sig: 'state_s_200'},
+    {at: ix('state','s_100'),    sig: 'state_s_100'},
+    {at: ix('state','n_temple'), sig: 'state_n_temple'},
+  ];
+  const startPos = [-111.888232, 40.751084]; // ~900 S area on State
+  let cur = startPos;
+  for (const p of path) {
+    addDriveAndStopIfRed(tl, cur, p.at, v, 92, {...idleArgs, signalId: p.sig});
+    cur = p.at;
+  }
+  // Final approach: continue north on State to the top of our polyline,
+  // then synthetic eastward to congregation point.
+  const stateNorth = [-111.888232, 40.775866];
+  addDrive(tl, cur, stateNorth, v, 92);
+  addDrive(tl, stateNorth, CAPITOL_CONGREGATION, v * 0.7, 92);
+  // Hold at congregation for a while, periodic revs but no roar-off.
+  addIdle(tl, CAPITOL_CONGREGATION, 45, {
+    dbIdle: 76, dbPeak: 95, revCadenceS: 3.6, signalId: 'congregation', roarOnExit: false, label: 'CONGREGATION'
+  });
+  return finalizeTimeline(tl);
+}
+
+/* ----- Scenario B: muscle car ---------------------------------------------*/
+function buildMuscleTimeline() {
+  const tl = newTimeline();
+  const v = 10; // slow cruise
+  const STOP_S = 30;
+  const idleArgs = {dbIdle: 66, dbPeak: 94, revCadenceS: 5, signalId: null, roarOnExit: true};
+  // Cruising loop along State Street: stop at every signalized intersection
+  // between N Temple and 400 S, in both directions. The muscle car always
+  // stops — never sails through a green — so the noise pool at each
+  // intersection builds up consistently every lap.
+  const southboundPath = [
+    {at: ix('state','s_100'), sig: 'state_s_100'},
+    {at: ix('state','s_200'), sig: 'state_s_200'},
+    {at: ix('state','s_300'), sig: 'state_s_300'},
+    {at: ix('state','s_400'), sig: 'state_s_400'},
+  ];
+  const northboundPath = [
+    {at: ix('state','s_300'), sig: 'state_s_300'},
+    {at: ix('state','s_200'), sig: 'state_s_200'},
+    {at: ix('state','s_100'), sig: 'state_s_100'},
+    {at: ix('state','n_temple'), sig: 'state_n_temple'},
+  ];
+  let cur = ix('state','n_temple');
+  for (const wp of southboundPath) {
+    addDrive(tl, cur, wp.at, v, 88);
+    if (wp.sig === 'state_s_400') {
+      // 400 S is the southern U-turn point — the muscle car rolls through
+      // on the green, pausing just long enough (2 s) to swing the U-turn,
+      // then heads back north. No roar-off (it never came to a full stop).
+      addIdle(tl, wp.at, 2, {
+        dbIdle: 70, dbPeak: 0, revCadenceS: 999,
+        signalId: wp.sig, roarOnExit: false, label: 'U-TURN',
+      });
+    } else {
+      addIdle(tl, wp.at, STOP_S, {...idleArgs, signalId: wp.sig});
+    }
+    cur = wp.at;
+  }
+  for (const wp of northboundPath) {
+    addDrive(tl, cur, wp.at, v, 88);
+    addIdle(tl, wp.at, STOP_S, {...idleArgs, signalId: wp.sig});
+    cur = wp.at;
+  }
+  return finalizeTimeline(tl);
+}
+
+/* ----- Scenario C: pizza Subaru -------------------------------------------*/
+function buildPizzaTimeline() {
+  const tl = newTimeline();
+  const v = 9;
+  const idleArgs = {dbIdle: 62, dbPeak: 86, revCadenceS: 6};
+  const HQ = PIZZA_HQ;
+  // Each delivery: route to destination via a chain of intersections, idle 25s
+  // (parked, no revs), route back via different chain, idle 35s at home.
+  // Five different delivery patterns.
+  const deliveries = [
+    // 1) HQ → 300 S & 200 E. Path: Main south to 300 S, east on 300 S to 200 E.
+    {dest: ix('e_200','s_300'),
+     forward: [
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: ix('main','s_300'), sig: 'main_s_300'},
+       {at: ix('e_200','s_300'), sig: 'e_300_s_300'},
+     ],
+     back: [
+       {at: ix('main','s_300'), sig: 'main_s_300'},
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: HQ,                  sig: 'main_s_100'},
+     ]},
+    // 2) HQ → N Temple & West Temple
+    {dest: ix('west_temple','n_temple'),
+     forward: [
+       {at: ix('main','n_temple'), sig: 'main_n_temple'},
+       {at: ix('west_temple','n_temple'), sig: 'west_temple_n_temple'},
+     ],
+     back: [
+       {at: ix('main','n_temple'), sig: 'main_n_temple'},
+       {at: HQ,                    sig: 'main_s_100'},
+     ]},
+    // 3) HQ → 500 S & State
+    {dest: ix('state','s_500'),
+     forward: [
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: ix('main','s_300'), sig: 'main_s_300'},
+       {at: ix('main','s_400'), sig: 'main_s_400'},
+       {at: ix('main','s_500'), sig: 'main_s_500'},
+       {at: ix('state','s_500'), sig: 'state_s_500'},
+     ],
+     back: [
+       {at: ix('main','s_500'), sig: 'main_s_500'},
+       {at: ix('main','s_400'), sig: 'main_s_400'},
+       {at: ix('main','s_300'), sig: 'main_s_300'},
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: HQ,                  sig: 'main_s_100'},
+     ]},
+    // 4) HQ → 200 S & 400 E
+    {dest: ix('e_400','s_200'),
+     forward: [
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: ix('e_400','s_200'), sig: 'e_400_s_200'},
+     ],
+     back: [
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: HQ,                  sig: 'main_s_100'},
+     ]},
+    // 5) HQ → 400 S & 400 E
+    {dest: ix('e_400','s_400'),
+     forward: [
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: ix('main','s_300'), sig: 'main_s_300'},
+       {at: ix('main','s_400'), sig: 'main_s_400'},
+       {at: ix('e_400','s_400'), sig: 'e_400_s_400'},
+     ],
+     back: [
+       {at: ix('main','s_400'), sig: 'main_s_400'},
+       {at: ix('main','s_300'), sig: 'main_s_300'},
+       {at: ix('main','s_200'), sig: 'main_s_200'},
+       {at: HQ,                  sig: 'main_s_100'},
+     ]},
+  ];
+  for (const dlv of deliveries) {
+    let cur = HQ;
+    for (const wp of dlv.forward) {
+      addDriveAndStopIfRed(tl, cur, wp.at, v, 82, {...idleArgs, signalId: wp.sig});
+      cur = wp.at;
+    }
+    // Park at delivery destination — no revs.
+    addIdle(tl, dlv.dest, 25, {dbIdle: 0, dbPeak: 0, revCadenceS: 999, signalId: null, roarOnExit: false, label: 'DELIVERY'});
+    cur = dlv.dest;
+    for (const wp of dlv.back) {
+      addDriveAndStopIfRed(tl, cur, wp.at, v, 82, {...idleArgs, signalId: wp.sig});
+      cur = wp.at;
+    }
+    // Idle at HQ between deliveries.
+    addIdle(tl, HQ, 35, {dbIdle: 60, dbPeak: 84, revCadenceS: 8, signalId: null, roarOnExit: false, label: 'AT HQ'});
+  }
+  return finalizeTimeline(tl);
+}
+
+/* ============================================================================
+ * 6. SCENARIO REGISTRY
+ * Each scenario owns:
+ *   - actors: list of {id, type, label, timelineFn, offsetS, framing}
+ *   - mapView: {center, zoom}
+ * ==========================================================================*/
+const SCENARIOS = {
+  biker: {
+    slug: 'biker', label: 'BIKER CONVOY',
+    mapView: {center: [-111.8881, 40.7700], zoom: 13.6},
+    build() {
+      // The convoy is a single actor rendered as a morphing sprite: a
+      // streak-line while in motion (the bikes spread along the road) that
+      // contracts into a circle at each signal stop (the pack gathered) and
+      // stretches back out when the light turns green. One actor instead of
+      // ten cuts trail/head/ring rendering by ~10×.
+      const leader = buildBikerLeaderTimeline();
+      return {
+        actors: [{
+          id: 'CONVOY',
+          type: 'motorcycle_convoy',
+          label: 'BIKER CONVOY · 10 BIKES',
+          timeline: leader,
+          offsetS: 0,
+          spriteKind: 'convoy_streak',
+        }],
+        loopT: leader.loopT,
+      };
+    },
+  },
+  muscle: {
+    slug: 'muscle', label: 'MUSCLE CAR',
+    mapView: {center: [-111.8881, 40.7666], zoom: 14.6},
+    build() {
+      const tl = buildMuscleTimeline();
+      return {actors: [{id:'MUSCLE', type:'muscle', label:'MUSCLE CAR · CRUISING', timeline: tl, offsetS: 0}], loopT: tl.loopT};
+    },
+  },
+  pizza: {
+    slug: 'pizza', label: 'PIZZA SUBARU',
+    mapView: {center: [-111.8895, 40.7676], zoom: 14.2},
+    build() {
+      const tl = buildPizzaTimeline();
+      return {actors: [{id:'SUBARU', type:'subaru', label:'MUFFLER MOD · DELIVERY', timeline: tl, offsetS: 0}], loopT: tl.loopT};
+    },
+  },
+};
+
+const SCEN_CACHE = {};
+function getScenario(slug) {
+  if (!SCEN_CACHE[slug]) {
+    const def = SCENARIOS[slug];
+    SCEN_CACHE[slug] = {...def, ...def.build()};
+  }
+  return SCEN_CACHE[slug];
+}
+
+/* ============================================================================
+ * 7. TIMELINE SAMPLING
+ * sampleAt(timeline, t) returns {pos, kind, db, signalId, segment, segT}.
+ * t is in seconds (sim time); wraps modulo timeline.loopT.
+ * ==========================================================================*/
+// Returns rev event times (segT, peakDb) for the idle `seg`. Both the
+// shape of each burst (solo blip, tight double-tap, slower double, triple
+// or quad roll) and the gap between bursts are randomized so the pattern
+// reads as a real impatient driver rather than a metronome. Long silences
+// are also injected occasionally. Burst intensity and shape complexity
+// both ramp with idle progress.
+//
+// The PRNG is seeded by the segment's start time so backward/forward
+// sampling produces identical rev patterns (required for cumulative trail
+// rendering and prediction).
+function idleRevTimes(seg) {
+  if (!seg.revCadenceS || !seg.dbPeak) return [];
+  const dur = seg.endT - seg.startT;
+  const cad = seg.revCadenceS;
+  const dbIdle = seg.dbIdle || 60;
+  const seedBase = (seg.startT * 1000) | 0;
+  const rand01 = (k) => {
+    let x = (seedBase ^ Math.imul(k + 1, 2654435761)) | 0;
+    x = Math.imul(x ^ (x >>> 15), 2246822507) | 0;
+    x = Math.imul(x ^ (x >>> 13), 3266489917) | 0;
+    x = (x ^ (x >>> 16)) >>> 0;
+    return (x % 100000) / 100000;
+  };
+  const out = [];
+  // First burst at a random offset so different stops don't all start in
+  // lockstep.
+  let t = 0.3 + rand01(0) * 1.4;
+  let burstIdx = 1;
+  while (t < dur) {
+    const progress = Math.min(1, t / Math.max(10, dur * 0.85));
+    const burstPeak = dbIdle + (seg.dbPeak - dbIdle) * (0.4 + 0.6 * progress);
+    // Pick a burst shape from a progress-weighted distribution. As the
+    // driver waits longer the mix shifts toward longer rolls.
+    const rShape = rand01(burstIdx * 11);
+    let shape;
+    if (progress < 0.35) {
+      if      (rShape < 0.40) shape = 'solo';
+      else if (rShape < 0.75) shape = 'double_quick';
+      else if (rShape < 0.90) shape = 'double_slow';
+      else                    shape = 'triple';
+    } else if (progress < 0.7) {
+      if      (rShape < 0.20) shape = 'solo';
+      else if (rShape < 0.50) shape = 'double_quick';
+      else if (rShape < 0.65) shape = 'double_slow';
+      else if (rShape < 0.88) shape = 'triple';
+      else                    shape = 'quad';
+    } else {
+      if      (rShape < 0.10) shape = 'solo';
+      else if (rShape < 0.35) shape = 'double_quick';
+      else if (rShape < 0.50) shape = 'double_slow';
+      else if (rShape < 0.78) shape = 'triple';
+      else                    shape = 'quad';
+    }
+    let offsets;
+    if (shape === 'solo') {
+      offsets = [0];
+    } else if (shape === 'double_quick') {
+      offsets = [0, 0.13 + rand01(burstIdx * 11 + 1) * 0.07];
+    } else if (shape === 'double_slow') {
+      offsets = [0, 0.45 + rand01(burstIdx * 11 + 1) * 0.40];
+    } else if (shape === 'triple') {
+      const s1 = 0.13 + rand01(burstIdx * 11 + 1) * 0.07;
+      const s2 = s1 + 0.30 + rand01(burstIdx * 11 + 2) * 0.50;
+      offsets = [0, s1, s2];
+    } else { // quad
+      const s1 = 0.13 + rand01(burstIdx * 11 + 1) * 0.07;
+      const s2 = s1 + 0.30 + rand01(burstIdx * 11 + 2) * 0.50;
+      const s3 = s2 + 0.12 + rand01(burstIdx * 11 + 3) * 0.10;
+      offsets = [0, s1, s2, s3];
+    }
+    for (let k = 0; k < offsets.length; k++) {
+      const kt = t + offsets[k];
+      if (kt >= dur) break;
+      const knockPeak = burstPeak - k * 1.6;
+      out.push({segT: kt, peakDb: knockPeak, progress});
+    }
+    // Burst-to-burst gap: wide variance with an occasional long silence
+    // so the rhythm doesn't lock to the cadence number.
+    const rGap = rand01(burstIdx * 11 + 4);
+    let gap;
+    if (rGap < 0.13) {
+      // 13 % chance of a long silence: 2.0–3.5× cadence.
+      gap = cad * (2.0 + rGap / 0.13 * 1.5);
+    } else {
+      // Otherwise 0.35–1.7× cadence — much wider than the previous ±25 %.
+      gap = cad * (0.35 + (rGap - 0.13) / 0.87 * 1.35);
+    }
+    t += gap;
+    burstIdx++;
+  }
+  return out;
+}
+
+function sampleAt(tl, t) {
+  const loopT = tl.loopT;
+  let wt = ((t % loopT) + loopT) % loopT;
+  // Linear scan is fine: each timeline has ≤30 segments.
+  for (const seg of tl.segments) {
+    if (wt >= seg.startT && wt < seg.endT) {
+      if (seg.kind === 'drive') {
+        const uRaw = (wt - seg.startT) / (seg.endT - seg.startT);
+        const u = easeDriveU(uRaw, seg.easeIn, seg.easeOut);
+        return {pos: lerp2(seg.from, seg.to, u), kind:'drive', db: seg.dbCruise, segment: seg, segT: wt - seg.startT};
+      } else {
+        // Idle: rhythmic revs at constant cadence; each rev louder than the
+        // last; ambient between-rev floor also rises slowly. So the dB
+        // readout climbs monotonically over the wait — the visible "buildup".
+        const segDur = seg.endT - seg.startT;
+        const segT = wt - seg.startT;
+        const buildup = Math.min(1, segT / Math.max(10, segDur * 0.85));
+        const floor = (seg.dbIdle || 60) + buildup * 3.5;
+        let db = floor;
+        if (seg.revCadenceS && seg.dbPeak > 0) {
+          // Find the most recent rev's window; ramp dB through it.
+          const revs = idleRevTimes(seg);
+          for (let i = revs.length - 1; i >= 0; i--) {
+            const r = revs[i];
+            const dt = segT - r.segT;
+            if (dt < 0) continue;
+            if (dt > 0.9) break;
+            const u = dt < 0.35 ? dt / 0.35 : 1 - (dt - 0.35) / 0.55;
+            db = floor + Math.max(0, u) * (r.peakDb - floor);
+            break;
+          }
+        }
+        return {pos: seg.from.slice(), kind:'idle', db, signalId: seg.signalId, segment: seg, segT, buildup};
+      }
+    }
+  }
+  // Fallback (numerical edge): return last segment's end position.
+  const last = tl.segments[tl.segments.length-1];
+  return {pos: last.to.slice(), kind: last.kind, db: last.dbCruise || last.dbIdle || 60, segment: last, segT: 0};
+}
+
+// Forward-prediction polyline: sample at [t, t+lookaheadS] every stepS.
+function predictPath(tl, t, lookaheadS = 300, stepS = 2) {
+  const pts = [];
+  const stops = [];
+  for (let dt = 0; dt <= lookaheadS; dt += stepS) {
+    const s = sampleAt(tl, t + dt);
+    pts.push(s.pos);
+    if (s.kind === 'idle' && s.segT < stepS && s.signalId) {
+      // Just entered an idle (stop) — mark it.
+      stops.push({at: s.pos.slice(), t: t + dt});
+    }
+  }
+  return {pts, stops};
+}
+
+// Trail polyline + per-point colors: sample at [t-lookbackS, t] every stepS.
+function trailSamples(tl, t, lookbackS = 600, stepS = 0.5) {
+  const out = [];
+  for (let dt = -lookbackS; dt <= 0; dt += stepS) {
+    const s = sampleAt(tl, t + dt);
+    out.push({pos: s.pos, db: s.db, kind: s.kind});
+  }
+  return out;
+}
+
+// Events (rev/roar/arrive) within a backward window, used to render pulse rings.
+function eventsBetween(tl, t, lookbackS = 5) {
+  const out = [];
+  const t0 = t - lookbackS;
+  const loopT = tl.loopT;
+  const baseK = Math.floor(t / loopT);
+  for (const seg of tl.segments) {
+    if (seg.kind !== 'idle') continue;
+    const segDur = seg.endT - seg.startT;
+    for (const k of [baseK - 1, baseK, baseK + 1]) {
+      const segStartAbs = seg.startT + k * loopT;
+      // Revs with progressive intensity.
+      const revs = idleRevTimes(seg);
+      for (const r of revs) {
+        const eT = segStartAbs + r.segT;
+        if (eT > t0 && eT <= t) out.push({
+          t: eT, pos: seg.from, kind: 'rev',
+          db: r.peakDb, signalId: seg.signalId,
+          progress: r.progress,
+        });
+      }
+      // Arrive (a softer "arrival" pulse when entering an idle)
+      const arrT = segStartAbs;
+      if (arrT > t0 && arrT <= t) out.push({t: arrT, pos: seg.from, kind: 'arrive', db: (seg.dbPeak || 80) - 6, signalId: seg.signalId, progress: 0});
+      // Roar — fires a "wave" of 8–12 rings as the car peels off the
+      // stop and accelerates down the street. Each ring spawns at the
+      // actor's actual position at spawn time, so the wave visibly
+      // trails the accelerating car for several seconds. Peak dB and
+      // ring size both taper across the wave so the leading edge reads
+      // as the loudest impact.
+      if (seg.roarOnExit) {
+        const seed = (seg.startT * 1000) | 0;
+        const roarRand = (j) => {
+          let x = (seed ^ Math.imul(j + 1, 1597334677)) | 0;
+          x = Math.imul(x ^ (x >>> 15), 2246822507) | 0;
+          x = Math.imul(x ^ (x >>> 13), 3266489917) | 0;
+          x = (x ^ (x >>> 16)) >>> 0;
+          return (x % 100000) / 100000;
+        };
+        const ringCount = 8 + Math.floor(roarRand(0) * 5); // 8–12
+        let acc = 0;
+        for (let j = 0; j < ringCount; j++) {
+          const eT = segStartAbs + segDur + acc;
+          if (eT > t0 && eT <= t) {
+            const pos = sampleAt(tl, eT).pos;
+            const taper = j / Math.max(1, ringCount - 1); // 0 → 1 across wave
+            out.push({
+              t: eT, pos, kind: 'roar',
+              db: (seg.dbPeak || 90) - taper * 6,
+              signalId: seg.signalId, progress: 1,
+              waveTaper: taper,
+            });
+          }
+          // 0.25–0.55 s between rings — wave spans ~3–5 s total.
+          acc += 0.25 + roarRand(j + 1) * 0.30;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/* ============================================================================
+ * 8. SIM STATE
+ * ==========================================================================*/
+const sim = {
+  scenarioSlug: null,
+  scenarioActivatedAtMs: 0,    // wall-clock when activated
+  scenarioElapsedS: 0,         // accumulated sim seconds with speed applied
+  scenarioPreSeedS: 0,         // initial offset so trails are immediately full
+  lastFrameMs: 0,
+  playbackSpeed: 1,
+  paused: false,
+  predictionVisible: true,
+  seeking: false,              // true while user is dragging the scrubber
+};
+
+/* ============================================================================
+ * 9. MAP SETUP
+ * ==========================================================================*/
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+const map = new maplibregl.Map({
+  container: 'map',
+  style: MAP_STYLE,
+  center: [-111.8881, 40.7700],
+  zoom: 13.6,
+  minZoom: 11,
+  maxZoom: 17,
+  maxBounds: [[-111.910, 40.748], [-111.865, 40.792]],
+  attributionControl: false,
+  interactive: false,
+});
+map.addControl(new maplibregl.AttributionControl({compact: true}), 'bottom-right');
+
+let mapReady = false;
+const sources = {};
+map.on('load', () => {
+  // ===== Microphones =====
+  sources.microphones = map.addSource('microphones', {type:'geojson',
+    data: {type:'FeatureCollection', features: STATIONS.map(s => ({
+      type:'Feature', geometry:{type:'Point', coordinates:[s.lon, s.lat]}, properties:{id: s.id},
+    }))}
+  }).getSource('microphones');
+  map.addLayer({
+    id: 'microphones-layer', type:'circle', source:'microphones',
+    paint:{
+      'circle-radius': 3.5,
+      'circle-color': '#3e7e7e',
+      'circle-opacity': 0.55,
+      'circle-stroke-width': 1,
+      'circle-stroke-color': '#1c4242',
+    },
+  });
+
+  // ===== Noise pools (under everything else) =====
+  map.addSource('noisepools', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'noisepools-layer', type:'circle', source:'noisepools',
+    paint:{
+      'circle-radius': ['get', 'radius'],
+      'circle-color': ['get', 'color'],
+      'circle-opacity': ['get', 'opacity'],
+      'circle-blur': 0.7,
+    },
+  });
+
+  // ===== Trails — three-layer Strava-style glow stack =====
+  // wide outer bloom + medium glow + bright inner core. Stacked translucent
+  // layers approximate additive blending on the dark basemap.
+  map.addSource('trails', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'trails-bloom', type:'line', source:'trails',
+    layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': 18,
+      'line-blur': 14,
+      'line-opacity': ['*', ['get', 'opacity'], 0.30],
+    },
+  });
+  map.addLayer({
+    id: 'trails-glow', type:'line', source:'trails',
+    layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': 8,
+      'line-blur': 4,
+      'line-opacity': ['*', ['get', 'opacity'], 0.65],
+    },
+  });
+  map.addLayer({
+    id: 'trails-line', type:'line', source:'trails',
+    layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': 3,
+      'line-opacity': ['get', 'opacity'],
+    },
+  });
+
+  // ===== Predictions (dashed forward path) =====
+  map.addSource('predictions', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'predictions-layer', type:'line', source:'predictions',
+    layout: {'line-cap':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': 2,
+      'line-opacity': 0.55,
+      'line-dasharray': [2, 2.5],
+    },
+  });
+  map.addSource('predstops', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'predstops-outer', type:'circle', source:'predstops',
+    paint:{
+      'circle-radius': 5,
+      'circle-color': 'rgba(0,0,0,0)',
+      'circle-stroke-width': 1.6,
+      'circle-stroke-color': '#d0a060',
+      'circle-stroke-opacity': 0.85,
+    },
+  });
+  map.addLayer({
+    id: 'predstops-inner', type:'circle', source:'predstops',
+    paint:{
+      'circle-radius': 1.6,
+      'circle-color': '#d0a060',
+      'circle-opacity': 0.9,
+    },
+  });
+
+  // ===== Convoy streak (morphing sprite — biker scenario only) =====
+  map.addSource('streak', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'streak-bloom', type:'line', source:'streak',
+    layout:{'line-cap':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': ['*', ['get', 'lineness'], 22],
+      'line-blur': 14,
+      'line-opacity': ['*', ['get', 'lineness'], 0.45],
+    },
+  });
+  map.addLayer({
+    id: 'streak-glow', type:'line', source:'streak',
+    layout:{'line-cap':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': ['*', ['get', 'lineness'], 12],
+      'line-blur': 5,
+      'line-opacity': ['*', ['get', 'lineness'], 0.7],
+    },
+  });
+  map.addLayer({
+    id: 'streak-line', type:'line', source:'streak',
+    layout:{'line-cap':'round'},
+    paint:{
+      'line-color': ['get', 'color'],
+      'line-width': ['*', ['get', 'lineness'], 5],
+      'line-opacity': ['get', 'lineness'],
+    },
+  });
+
+  // ===== Pulse rings (rev/roar/arrive) =====
+  // Bloom residue sits under the ring strokes: each ring leaves a soft
+  // blurred dot at its spawn position that fades over ~6 s, so the wave
+  // trailing the accelerating car deposits a chain of warm glows along
+  // the street.
+  map.addSource('ringBloom', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'ring-bloom-layer', type:'circle', source:'ringBloom',
+    paint:{
+      'circle-radius': ['get', 'radius'],
+      'circle-color': ['get', 'color'],
+      'circle-opacity': ['get', 'opacity'],
+      'circle-blur': 0.85,
+    },
+  });
+  map.addSource('rings', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'rings-layer', type:'circle', source:'rings',
+    paint:{
+      'circle-radius': ['get', 'radius'],
+      'circle-color': 'rgba(0,0,0,0)',
+      'circle-stroke-color': ['get', 'color'],
+      'circle-stroke-width': ['get', 'strokeW'],
+      'circle-stroke-opacity': ['get', 'opacity'],
+    },
+  });
+
+  // ===== Squad cars (static blue squares) =====
+  map.addSource('squad', {type:'geojson', data: {type:'FeatureCollection', features:
+    SQUAD_CARS.map(c => ({type:'Feature', geometry:{type:'Point', coordinates: c.at}, properties:{id: c.id}}))
+  }});
+  map.addLayer({
+    id: 'squad-shadow', type:'circle', source:'squad',
+    paint:{
+      'circle-radius': 11, 'circle-color': '#4080c0', 'circle-opacity': 0.18, 'circle-blur': 0.6,
+    },
+  });
+  map.addLayer({
+    id: 'squad-layer', type:'circle', source:'squad',
+    paint:{
+      'circle-radius': 5.5,
+      'circle-color': '#5095d0',
+      'circle-stroke-width': 1.5,
+      'circle-stroke-color': '#0a0a0a',
+    },
+  });
+
+  // ===== Pizza HQ (only visible during pizza scenario) =====
+  map.addSource('hq', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'hq-layer', type:'circle', source:'hq',
+    paint:{
+      'circle-radius': 7,
+      'circle-color': '#d09a40',
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#0a0a0a',
+    },
+  });
+  map.addLayer({
+    id: 'hq-label', type:'symbol', source:'hq',
+    layout:{
+      'text-field': 'CAPITOL PIZZA',
+      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-size': 9,
+      'text-offset': [0, 1.4],
+      'text-anchor': 'top',
+      'text-allow-overlap': true,
+    },
+    paint:{
+      'text-color': '#d09a40',
+      'text-halo-color': '#0a0a0a',
+      'text-halo-width': 1.5,
+    },
+  });
+
+  // ===== Heads (current positions) — drawn on top =====
+  // radiusBase is per-feature so the biker convoy can scale up when clustered.
+  map.addSource('heads', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'heads-halo', type:'circle', source:'heads',
+    paint:{
+      'circle-radius': ['*', ['get', 'breath'], ['*', ['get', 'radiusBase'], 2]],
+      'circle-color': ['get', 'color'],
+      'circle-opacity': 0.25,
+      'circle-blur': 0.5,
+    },
+  });
+  map.addLayer({
+    id: 'heads-layer', type:'circle', source:'heads',
+    paint:{
+      'circle-radius': ['*', ['get', 'breath'], ['get', 'radiusBase']],
+      'circle-color': ['get', 'color'],
+      'circle-stroke-width': 1.5,
+      'circle-stroke-color': '#0a0a0a',
+    },
+  });
+  // Labels float above heads (only for actors with a label).
+  map.addLayer({
+    id: 'heads-label', type:'symbol', source:'heads',
+    filter: ['!=', ['get', 'label'], ''],
+    layout:{
+      'text-field': ['get', 'label'],
+      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+      'text-size': 9,
+      'text-offset': [0, -1.6],
+      'text-anchor': 'bottom',
+      'text-allow-overlap': true,
+    },
+    paint:{
+      'text-color': '#f0f0f0',
+      'text-halo-color': '#0a0a0a',
+      'text-halo-width': 1.5,
+    },
+  });
+
+  for (const id of ['microphones','noisepools','trails','predictions','predstops','ringBloom','rings','squad','hq','heads','streak']) {
+    sources[id] = map.getSource(id);
+  }
+  mapReady = true;
+});
+
+/* ============================================================================
+ * 10. RENDER FRAME
+ * ==========================================================================*/
+function activeScenario() { return sim.scenarioSlug ? getScenario(sim.scenarioSlug) : null; }
+
+function renderFrame() {
+  if (!mapReady) return;
+  const scen = activeScenario();
+  if (!scen) {
+    sources.trails.setData({type:'FeatureCollection', features:[]});
+    sources.heads.setData({type:'FeatureCollection', features:[]});
+    sources.rings.setData({type:'FeatureCollection', features:[]});
+    sources.ringBloom.setData({type:'FeatureCollection', features:[]});
+    sources.noisepools.setData({type:'FeatureCollection', features:[]});
+    sources.predictions.setData({type:'FeatureCollection', features:[]});
+    sources.predstops.setData({type:'FeatureCollection', features:[]});
+    sources.hq.setData({type:'FeatureCollection', features:[]});
+    sources.streak.setData({type:'FeatureCollection', features:[]});
+    return;
+  }
+  const t = sim.scenarioElapsedS;
+
+  // ----- Trails -----
+  // Lookback grows with elapsed time so the trail (and its bloom) accumulates
+  // as the scenario plays. At t=0 there's no trail at all; after one full
+  // loop the trail starts overlapping its own past passes and the layered
+  // bloom builds up like a Strava heatmap on heavily-traveled streets.
+  const lookbackS = Math.min(600, sim.scenarioElapsedS);
+  const trailFts = [];
+  for (const actor of scen.actors) {
+    if (lookbackS < 1) continue;
+    const samples = trailSamples(actor.timeline, t - actor.offsetS, lookbackS, 1.5);
+    if (samples.length < 2) continue;
+    const CHUNK = 25;
+    for (let i = 0; i < samples.length - 1; i += CHUNK) {
+      const slice = samples.slice(i, Math.min(samples.length, i + CHUNK + 1));
+      if (slice.length < 2) continue;
+      const avgDb = slice.reduce((a, s) => a + s.db, 0) / slice.length;
+      const ageFrac = i / Math.max(1, samples.length - 1); // 0 = oldest, ~1 = newest
+      // Higher floor so even 10-min-old samples remain glowy (Strava style).
+      const opacity = 0.35 + 0.65 * ageFrac;
+      trailFts.push({
+        type:'Feature',
+        geometry:{type:'LineString', coordinates: slice.map(s => s.pos)},
+        properties:{color: colorForDb(avgDb), opacity, actorId: actor.id},
+      });
+    }
+  }
+  sources.trails.setData({type:'FeatureCollection', features: trailFts});
+
+  // ----- Heads + (convoy) streak sprite -----
+  const headFts = [];
+  const streakFts = [];
+  for (const actor of scen.actors) {
+    const s = sampleAt(actor.timeline, t - actor.offsetS);
+    const idling = s.kind === 'idle';
+    const breath = idling ? 1 + Math.sin(t * 4 + actor.id.charCodeAt(0)) * 0.18 : 1;
+    let radiusBase = 5.5;
+    if (actor.spriteKind === 'convoy_streak') {
+      // lineness: 1 = fully stretched streak, 0 = collapsed circle.
+      // Grow over the first 1s of a drive segment; shrink over the first 1s
+      // of an idle segment.
+      const MORPH_S = 1.0;
+      const lineness = s.kind === 'drive'
+        ? Math.min(1, s.segT / MORPH_S)
+        : Math.max(0, 1 - s.segT / MORPH_S);
+      // Direction: drive segment uses its own vector; idle inherits the
+      // direction of the most recent drive segment so the streak retracts
+      // along the lane.
+      let dir = [0, 1];
+      if (s.kind === 'drive') {
+        dir = [s.segment.to[0] - s.segment.from[0], s.segment.to[1] - s.segment.from[1]];
+      } else {
+        const segs = actor.timeline.segments;
+        const idx = segs.indexOf(s.segment);
+        for (let k = idx - 1; k >= 0; k--) {
+          if (segs[k].kind === 'drive') {
+            dir = [segs[k].to[0] - segs[k].from[0], segs[k].to[1] - segs[k].from[1]];
+            break;
+          }
+        }
+      }
+      const mag = Math.hypot(dir[0], dir[1]) || 1;
+      const streakMeters = 32 * lineness;
+      const dLat = (streakMeters / 111320) * (dir[1] / mag);
+      const dLon = (streakMeters / 84600)  * (dir[0] / mag);
+      const tail = [s.pos[0] - dLon, s.pos[1] - dLat];
+      if (lineness > 0.04) {
+        streakFts.push({
+          type:'Feature',
+          geometry:{type:'LineString', coordinates: [tail, s.pos]},
+          properties:{color: colorForDb(s.db), lineness},
+        });
+      }
+      // Head grows into a bigger pulsing circle as it clusters.
+      const clusterness = 1 - lineness;
+      radiusBase = 5.5 + clusterness * 4.5; // 5.5 → 10 px
+    }
+    headFts.push({
+      type:'Feature', geometry:{type:'Point', coordinates: s.pos},
+      properties:{
+        actorId: actor.id, color: colorForDb(s.db),
+        breath, idling: idling ? 1 : 0,
+        label: actor.label || '',
+        radiusBase,
+      },
+    });
+  }
+  sources.heads.setData({type:'FeatureCollection', features: headFts});
+  sources.streak.setData({type:'FeatureCollection', features: streakFts});
+
+  // ----- Pulse rings -----
+  // Revs scale with the rev's `progress` within its idle segment: early revs
+  // are small, late revs are big — so the visual pulse rate stays rhythmic
+  // but each ring's punch grows over the wait.
+  const ringFts = [];
+  for (const actor of scen.actors) {
+    const events = eventsBetween(actor.timeline, t - actor.offsetS, 4);
+    for (const e of events) {
+      const age = (t - actor.offsetS) - e.t;
+      if (age < 0) continue;
+      const isRoar = e.kind === 'roar';
+      const isArrive = e.kind === 'arrive';
+      const maxAge = isRoar ? 3.2 : (isArrive ? 1.4 : 1.7);
+      if (age > maxAge) continue;
+      const prog = e.progress != null ? e.progress : 1;
+      let radius, opacity, strokeW;
+      if (isRoar) {
+        radius = 10 + age * 28; opacity = (1 - age/maxAge) * 0.95; strokeW = 3;
+      } else if (isArrive) {
+        radius = 4 + age * 12;  opacity = (1 - age/maxAge) * 0.35;  strokeW = 1.6;
+      } else {
+        // rev — grows from small at start of wait to large by end of wait.
+        const sizeBase = 4 + prog * 5;            // 4 → 9 px starting radius
+        const growth = 12 + prog * 16;            // 12 → 28 px/sec
+        radius = sizeBase + age * growth;
+        opacity = (1 - age/maxAge) * (0.45 + prog * 0.45);
+        strokeW = 1.6 + prog * 1.4;
+      }
+      ringFts.push({
+        type:'Feature', geometry:{type:'Point', coordinates: e.pos},
+        properties:{ radius, opacity, color: colorForDb(e.db), strokeW },
+      });
+    }
+  }
+  sources.rings.setData({type:'FeatureCollection', features: ringFts});
+
+  // ----- Noise pools -----
+  // Pool radius/opacity scale with how long the actor has been idling — the
+  // signature "builds up over time" effect. The convoy gets a multiplier
+  // since its sprite represents 10 bikes.
+  const buckets = new Map();
+  for (const actor of scen.actors) {
+    const s = sampleAt(actor.timeline, t - actor.offsetS);
+    if (s.kind !== 'idle' || !s.signalId) continue;
+    if (!s.segment.dbPeak) continue; // no-rev idles (e.g., delivery park) skip
+    const buildup = Math.min(1, s.segT / 25); // ramps over 25s
+    const mult = actor.spriteKind === 'convoy_streak' ? 6 : 1;
+    const energy = buildup * mult * Math.max(0, s.segment.dbPeak - 60);
+    const b = buckets.get(s.signalId) || {at: s.pos, energy: 0, buildup: 0, peak: 0};
+    b.energy += energy;
+    b.buildup = Math.max(b.buildup, buildup);
+    b.peak = Math.max(b.peak, s.segment.dbPeak * (0.55 + 0.45 * buildup));
+    buckets.set(s.signalId, b);
+  }
+  const poolFts = [];
+  for (const [sigId, info] of buckets) {
+    if (info.buildup < 0.04) continue;
+    // Steady growth with buildup; energy adds heft on top.
+    const radius = Math.min(72, 12 + info.energy * 0.5 + info.buildup * 28);
+    const opacity = Math.min(0.55, 0.05 + info.buildup * 0.4 + (info.peak - 65) / 240);
+    poolFts.push({
+      type:'Feature', geometry:{type:'Point', coordinates: info.at},
+      properties:{ sigId, radius, opacity, color: colorForDb(info.peak) },
+    });
+  }
+  sources.noisepools.setData({type:'FeatureCollection', features: poolFts});
+
+  // ----- Predictions -----
+  if (sim.predictionVisible) {
+    const predLines = [];
+    const predStops = [];
+    const seenTimelines = new Set();
+    for (const actor of scen.actors) {
+      // For multi-actor scenarios sharing a timeline (biker convoy followers),
+      // only render one prediction overlay (from the leader).
+      if (seenTimelines.has(actor.timeline) && actor.offsetS !== 0) continue;
+      seenTimelines.add(actor.timeline);
+      const {pts, stops} = predictPath(actor.timeline, t - actor.offsetS, 300, 2.5);
+      const headSample = sampleAt(actor.timeline, t - actor.offsetS);
+      const col = colorForDb(headSample.db);
+      predLines.push({type:'Feature', geometry:{type:'LineString', coordinates: pts}, properties:{color: col, actorId: actor.id}});
+      // Cap to first 4 predicted stops so the map doesn't get noisy.
+      for (const s of stops.slice(0, 4)) {
+        predStops.push({type:'Feature', geometry:{type:'Point', coordinates: s.at}, properties:{actorId: actor.id}});
+      }
+    }
+    sources.predictions.setData({type:'FeatureCollection', features: predLines});
+    sources.predstops.setData({type:'FeatureCollection', features: predStops});
+  } else {
+    sources.predictions.setData({type:'FeatureCollection', features:[]});
+    sources.predstops.setData({type:'FeatureCollection', features:[]});
+  }
+
+  // ----- Pizza HQ pin (only when pizza scenario active) -----
+  if (sim.scenarioSlug === 'pizza') {
+    sources.hq.setData({type:'FeatureCollection', features: [{
+      type:'Feature', geometry:{type:'Point', coordinates: PIZZA_HQ},
+    }]});
+  } else {
+    sources.hq.setData({type:'FeatureCollection', features: []});
+  }
+
+  // ----- Top-left clock (time since scenario was selected) -----
+  const clockEl = document.querySelector('[data-clock]');
+  if (clockEl) clockEl.textContent = fmtElapsed(t - sim.scenarioPreSeedS);
+}
+
+/* ============================================================================
+ * 11. ANIMATION LOOP
+ * ==========================================================================*/
+function tick() {
+  const nowMs = now();
+  if (sim.scenarioSlug && !sim.paused && !sim.seeking) {
+    const dtMs = Math.min(100, nowMs - sim.lastFrameMs);
+    sim.scenarioElapsedS += (dtMs / 1000) * sim.playbackSpeed;
+  }
+  sim.lastFrameMs = nowMs;
+  renderFrame();
+  updateScrubberUI();
+  requestAnimationFrame(tick);
+}
+
+/* ============================================================================
+ * 12. VIEW CONTROLLER (chooser, chips, hash, controls)
+ * ==========================================================================*/
+const chooserEl = document.getElementById('chooser');
+const chipsEl = document.getElementById('chips');
+const ctrlsEl = document.getElementById('ctrls');
+const scrubEl = document.getElementById('scrub');
+const splashEl = document.getElementById('splash');
+const scenLabelEl = document.querySelector('[data-scen-label]');
+
+function setScenario(slug) {
+  if (!SCENARIOS[slug]) {
+    showChooser();
+    return;
+  }
+  const scen = getScenario(slug);
+  // Brief splash to cover the layer flush.
+  splashEl.classList.remove('hidden');
+  setTimeout(() => splashEl.classList.add('hidden'), 220);
+
+  // Start every scenario fresh — no pre-seeded trail. The trail grows from
+  // nothing as the actor moves, and once the actor loops over the same
+  // streets, the overlapping trail features visually bloom into a thicker
+  // glow (Strava heatmap-style cumulative density).
+  sim.scenarioSlug = slug;
+  sim.scenarioPreSeedS = 0;
+  sim.scenarioElapsedS = 0;
+  sim.lastFrameMs = now();
+  sim.scenarioActivatedAtMs = sim.lastFrameMs;
+
+  // UI
+  chooserEl.classList.add('hidden');
+  chipsEl.classList.remove('hidden');
+  ctrlsEl.classList.remove('hidden');
+  scrubEl.classList.remove('hidden');
+  sim.paused = false;
+  updatePlayBtn();
+  renderScrubStops(scen);
+  for (const b of chipsEl.querySelectorAll('button.chip')) {
+    b.classList.toggle('active', b.dataset.chip === slug);
+  }
+  scenLabelEl.textContent = scen.label;
+  // Frame the map.
+  map.easeTo({center: scen.mapView.center, zoom: scen.mapView.zoom, duration: 900});
+  // Sync hash.
+  if (location.hash !== '#' + slug) {
+    history.replaceState(null, '', '#' + slug);
+  }
+}
+
+function showChooser() {
+  sim.scenarioSlug = null;
+  sim.scenarioElapsedS = 0;
+  sim.paused = false;
+  chooserEl.classList.remove('hidden');
+  chipsEl.classList.add('hidden');
+  ctrlsEl.classList.add('hidden');
+  scrubEl.classList.add('hidden');
+  scenLabelEl.textContent = 'SELECT A SCENARIO';
+  if (location.hash) history.replaceState(null, '', location.pathname);
+  // Reset map view to the biker (widest) framing as a neutral background.
+  map.easeTo({center: SCENARIOS.biker.mapView.center, zoom: SCENARIOS.biker.mapView.zoom, duration: 600});
+}
+
+// Chooser opts
+chooserEl.querySelectorAll('[data-opt]').forEach(btn => {
+  btn.addEventListener('click', () => setScenario(btn.dataset.opt));
+});
+// Chip switching
+chipsEl.querySelectorAll('[data-chip]').forEach(btn => {
+  btn.addEventListener('click', () => setScenario(btn.dataset.chip));
+});
+chipsEl.querySelector('[data-back]').addEventListener('click', e => {
+  e.preventDefault();
+  showChooser();
+});
+// Prediction toggle (top-right).
+const predToggle = ctrlsEl.querySelector('[data-pred]');
+predToggle.addEventListener('change', () => { sim.predictionVisible = predToggle.checked; });
+
+// Scrubber controls (bottom-center).
+const playBtn = scrubEl.querySelector('[data-play]');
+const trackEl = scrubEl.querySelector('[data-track]');
+const fillEl = scrubEl.querySelector('[data-fill]');
+const thumbEl = scrubEl.querySelector('[data-thumb]');
+const stopsEl = scrubEl.querySelector('[data-stops]');
+const timeEl = scrubEl.querySelector('[data-time]');
+
+function updatePlayBtn() { playBtn.textContent = sim.paused ? '▶' : '⏸'; }
+playBtn.addEventListener('click', () => { sim.paused = !sim.paused; updatePlayBtn(); });
+
+scrubEl.querySelectorAll('[data-spd]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    sim.playbackSpeed = parseFloat(btn.dataset.spd);
+    scrubEl.querySelectorAll('[data-spd]').forEach(b => b.classList.toggle('active', b === btn));
+  });
+});
+
+// Render idle-segment "stop" markers along the track so viewers can see where
+// the loud stops happen in the loop at a glance. Called when scenario changes.
+function renderScrubStops(scen) {
+  stopsEl.innerHTML = '';
+  if (!scen) return;
+  // Use the leader's timeline (first actor's). Idle segments with a signalId
+  // get a tick mark; the congregation idle gets a wider marker.
+  const tl = scen.actors[0].timeline;
+  const loopT = scen.loopT;
+  for (const seg of tl.segments) {
+    if (seg.kind !== 'idle' || seg.dbPeak <= 0) continue;
+    const left = (seg.startT / loopT) * 100;
+    const width = Math.max(0.7, ((seg.endT - seg.startT) / loopT) * 100);
+    const el = document.createElement('div');
+    el.className = 'stop';
+    el.style.left = left + '%';
+    el.style.width = width + '%';
+    stopsEl.appendChild(el);
+  }
+}
+
+function loopFraction() {
+  const scen = activeScenario();
+  if (!scen) return 0;
+  const cycle = ((sim.scenarioElapsedS - sim.scenarioPreSeedS) % scen.loopT + scen.loopT) % scen.loopT;
+  return cycle / scen.loopT;
+}
+
+function updateScrubberUI() {
+  const scen = activeScenario();
+  if (!scen) return;
+  const frac = loopFraction();
+  const pct = (frac * 100).toFixed(2) + '%';
+  fillEl.style.width = pct;
+  thumbEl.style.left = pct;
+  const cur = frac * scen.loopT;
+  timeEl.textContent =
+    pad(Math.floor(cur/60)) + ':' + pad(Math.floor(cur%60)) +
+    ' / ' + pad(Math.floor(scen.loopT/60)) + ':' + pad(Math.floor(scen.loopT%60));
+}
+
+function seekToFraction(frac) {
+  const scen = activeScenario();
+  if (!scen) return;
+  frac = Math.max(0, Math.min(1, frac));
+  sim.scenarioElapsedS = sim.scenarioPreSeedS + frac * scen.loopT;
+}
+
+function trackFractionFromEvent(e) {
+  const rect = trackEl.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  return (clientX - rect.left) / rect.width;
+}
+
+trackEl.addEventListener('pointerdown', e => {
+  trackEl.setPointerCapture(e.pointerId);
+  sim.seeking = true;
+  seekToFraction(trackFractionFromEvent(e));
+});
+trackEl.addEventListener('pointermove', e => {
+  if (!sim.seeking) return;
+  seekToFraction(trackFractionFromEvent(e));
+});
+const endSeek = e => {
+  if (!sim.seeking) return;
+  sim.seeking = false;
+  try { trackEl.releasePointerCapture(e.pointerId); } catch (_) {}
+};
+trackEl.addEventListener('pointerup', endSeek);
+trackEl.addEventListener('pointercancel', endSeek);
+
+// Initial routing.
+function fromHash() {
+  const slug = (location.hash || '').replace('#','');
+  if (slug && SCENARIOS[slug]) setScenario(slug);
+  else showChooser();
+}
+window.addEventListener('hashchange', fromHash);
+
+map.on('load', () => {
+  fromHash();
+  requestAnimationFrame(tick);
+});
+
+// Esc returns to chooser.
+window.addEventListener('keydown', e => { if (e.key === 'Escape') showChooser(); });
+
+})();
+</script>
+
+</body>
+</html>

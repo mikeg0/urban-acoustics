@@ -19,6 +19,7 @@ from . import data as data_lib
 from . import seed as seed_mod
 from .api.v1 import annotations as annotations_router
 from .api.v1 import anomalies as anomalies_router
+from .api.v1 import cameras as cameras_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
 from .api.v1 import device_led as device_led_router
@@ -161,6 +162,7 @@ app.include_router(
     device_runtime_config_router.router, prefix=V1, tags=["runtime-config"]
 )
 app.include_router(device_led_router.router, prefix=V1, tags=["led"])
+app.include_router(cameras_router.router, prefix=V1, tags=["cameras"])
 
 # --- legacy /api/health (kept per acceptance criteria) ----------------------
 

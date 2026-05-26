@@ -1,5 +1,6 @@
 import type {
   AnomaliesResponse,
+  CameraInfo,
   DailySummaryResponse,
   Day,
   DeviceEvent,
@@ -63,6 +64,19 @@ export const liveSocket = (): WebSocket => {
 
 export const fetchDevice = (deviceId: string): Promise<DeviceInfo> =>
   getJson<DeviceInfo>(`/api/v1/devices/${deviceId}`);
+
+export const fetchDevices = (): Promise<DeviceInfo[]> =>
+  getJson<DeviceInfo[]>('/api/v1/devices');
+
+// UDOT cameras roster (the subset we've imported — populated by
+// scripts/refresh_cameras.py). Returns [] when the table is empty.
+export const fetchCameras = (): Promise<CameraInfo[]> =>
+  getJson<CameraInfo[]>('/api/v1/cameras');
+
+// Returns the camera within ~150 m of the device, or null when there
+// isn't one (or the device is unplaced).
+export const fetchNearestCamera = (deviceId: string): Promise<CameraInfo | null> =>
+  getJson<CameraInfo | null>(`/api/v1/devices/${deviceId}/nearest-camera`);
 
 // Per-device runtime tunables. Pushed live to the Pi over MQTT by the
 // backend on PUT; the GET surfaces whatever the device currently has so
