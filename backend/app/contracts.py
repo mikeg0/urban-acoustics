@@ -172,6 +172,35 @@ class EventIntentRequest(_Forward):
     size: int = Field(gt=0, le=EVENT_MAX_SIZE_BYTES)
     content_type: Literal["audio/flac"]
     nonce: str = Field(min_length=8, max_length=64)
+    # Pi-side preliminary classification (Track 1). Optional — devices
+    # without a loaded classifier model send these as None and the
+    # backend stores NULL on the events row. When present, the backend
+    # writes them straight to events.classification / confidence /
+    # model_version on insert (no async worker). A future Track 2
+    # backend audio model may later overwrite them with a higher-
+    # accuracy label; the ``model_version`` string ("pi-vN" vs "vN") is
+    # how callers tell them apart.
+    prelim_classification: EventLabel | None = None
+    prelim_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    prelim_model_version: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _prelim_consistency(self) -> "EventIntentRequest":
+        # All-or-nothing: a label without a confidence (or version) is
+        # almost certainly a bug on the device, and the events row would
+        # carry incomplete data. We reject loudly rather than store a
+        # row that's hard to interpret later.
+        present = (
+            (self.prelim_classification is not None)
+            + (self.prelim_confidence is not None)
+            + (self.prelim_model_version is not None)
+        )
+        if present not in (0, 3):
+            raise ValueError(
+                "prelim_classification, prelim_confidence, and "
+                "prelim_model_version must all be set together or all be null"
+            )
+        return self
 
 
 class EventIntentResponse(BaseModel):

@@ -586,6 +586,11 @@ function DashboardApp({ deviceId }: { deviceId: string | null }) {
       .catch(() => { /* fall back to synthetic city.sensor */ });
   }, [deviceId]);
 
+  useEffect(() => {
+    const name = device?.name ?? (deviceId ? null : DEFAULT_CITY.name);
+    document.title = name ? `Urban Acoustics · ${name}` : 'Urban Acoustics';
+  }, [device?.name, deviceId]);
+
   const [drillState, setDrillState] = useState<DrillState>(() => {
     try {
       const saved = localStorage.getItem('drillState');

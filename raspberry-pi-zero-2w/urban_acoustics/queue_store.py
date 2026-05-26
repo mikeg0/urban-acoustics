@@ -66,10 +66,22 @@ CREATE TABLE IF NOT EXISTS event_uploads (
     attempt_count INTEGER NOT NULL DEFAULT 0,
     next_attempt_at REAL NOT NULL DEFAULT 0,
     created_at  REAL NOT NULL,
-    updated_at  REAL NOT NULL
+    updated_at  REAL NOT NULL,
+    -- Pi-side classifier prelim. All three set or all three NULL.
+    prelim_classification TEXT,
+    prelim_confidence     REAL,
+    prelim_model_version  TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_event_uploads_due ON event_uploads(status, next_attempt_at);
 """
+
+# Columns we ADD via ALTER TABLE on existing databases. SQLite has no
+# IF NOT EXISTS form for ADD COLUMN, so we probe pragma_table_info first.
+_EVENT_UPLOAD_OPTIONAL_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("prelim_classification", "TEXT"),
+    ("prelim_confidence", "REAL"),
+    ("prelim_model_version", "TEXT"),
+)
 
 
 @dataclass(frozen=True)
@@ -93,6 +105,26 @@ class QueuedUpload:
     status: str
     storage_key: str | None
     attempt_count: int
+    # Optional Pi-side prelim classification, attached at materialise
+    # time. All three are set together or all are None — the SQLite
+    # row stores NULL for "no classifier loaded".
+    prelim_classification: str | None = None
+    prelim_confidence: float | None = None
+    prelim_model_version: str | None = None
+
+
+def _ensure_event_upload_columns(conn: sqlite3.Connection) -> None:
+    """ALTER TABLE on existing dbs so the prelim columns appear.
+
+    SQLite has no ``ADD COLUMN IF NOT EXISTS``, so we read
+    ``pragma_table_info`` and only emit ``ADD COLUMN`` for the ones
+    missing. Idempotent and safe to call on every open.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(event_uploads)")}
+    for name, typ in _EVENT_UPLOAD_OPTIONAL_COLUMNS:
+        if name in cols:
+            continue
+        conn.execute(f"ALTER TABLE event_uploads ADD COLUMN {name} {typ}")
 
 
 def _backoff_seconds(attempt: int, *, base: float = 2.0, cap: float = 300.0) -> float:
@@ -123,6 +155,7 @@ class QueueStore:
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
         conn.executescript(_SCHEMA)
+        _ensure_event_upload_columns(conn)
         self._conn = conn
         log.info("queue store opened at %s (WAL, max_bytes=%d)", self.db_path, self.max_bytes)
 
@@ -188,6 +221,9 @@ class QueueStore:
         sha256: str,
         size: int,
         flac_path: pathlib.Path,
+        prelim_classification: str | None = None,
+        prelim_confidence: float | None = None,
+        prelim_model_version: str | None = None,
     ) -> None:
         async with self._lock:
             await self._enforce_cap()
@@ -195,16 +231,22 @@ class QueueStore:
             self.conn.execute(
                 "INSERT OR REPLACE INTO event_uploads "
                 "(event_id, ts, duration_s, peak_db, sha256, size, flac_path, status, "
-                " storage_key, attempt_count, next_attempt_at, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, 0, ?, ?, ?)",
-                (event_id, ts, duration_s, peak_db, sha256, size, str(flac_path), now, now, now),
+                " storage_key, attempt_count, next_attempt_at, created_at, updated_at, "
+                " prelim_classification, prelim_confidence, prelim_model_version) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NULL, 0, ?, ?, ?, ?, ?, ?)",
+                (
+                    event_id, ts, duration_s, peak_db, sha256, size, str(flac_path),
+                    now, now, now,
+                    prelim_classification, prelim_confidence, prelim_model_version,
+                ),
             )
 
     async def list_pending_uploads(self, *, now: float, limit: int = 8) -> list[QueuedUpload]:
         async with self._lock:
             rows = self.conn.execute(
                 "SELECT event_id, ts, duration_s, peak_db, sha256, size, flac_path, "
-                "status, storage_key, attempt_count "
+                "status, storage_key, attempt_count, "
+                "prelim_classification, prelim_confidence, prelim_model_version "
                 "FROM event_uploads WHERE status != 'done' AND next_attempt_at <= ? "
                 "ORDER BY created_at ASC LIMIT ?",
                 (now, limit),
@@ -216,6 +258,9 @@ class QueueStore:
                     event_id=r[0], ts=r[1], duration_s=r[2], peak_db=r[3],
                     sha256=r[4], size=r[5], flac_path=pathlib.Path(r[6]),
                     status=r[7], storage_key=r[8], attempt_count=r[9],
+                    prelim_classification=r[10],
+                    prelim_confidence=r[11],
+                    prelim_model_version=r[12],
                 )
             )
         return out

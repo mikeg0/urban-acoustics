@@ -27,8 +27,11 @@ import signal
 import time
 from uuid import uuid4
 
+import numpy as np
+
 from .calibration import from_config as calibration_from_config
 from .capture import AudioCapture, PcmBlock
+from .classifier import Classifier, load_classifier
 from .config import (
     Config,
     MUTABLE_FIELDS,
@@ -122,6 +125,16 @@ class Supervisor:
         self._spect_frame_counter: int = 0
         self._pending_events: list[EventCandidate] = []
         self._last_capture_at = self._started_at
+
+        # Pi-side classifier (Track 1). Optional — if the weights file
+        # is missing or unreadable, this stays None and the supervisor
+        # behaves exactly as it did before classification existed.
+        self.classifier: Classifier | None = load_classifier(cfg.classifier_path)
+        if cfg.upload_all_events:
+            log.info(
+                "supervisor: URBAN_ACOUSTICS_UPLOAD_ALL_EVENTS is on — "
+                "no events will be suppressed by the classifier"
+            )
 
     # --- lifecycle --------------------------------------------------------
 
@@ -449,6 +462,24 @@ class Supervisor:
             log.warning("event %.3f: no audio available in ring buffer", cand.triggered_ts)
             return
 
+        # --- Pi-side prelim classification ---
+        # Run the classifier BEFORE we encode FLAC: if we're going to
+        # suppress this event, there's no point spending CPU on the
+        # encode or disk on the spool file. ``classify`` returns None
+        # when the classifier is disabled (no weights loaded) — in
+        # that case we always upload, the "fail open" property of
+        # Track 1.
+        prelim = await asyncio.to_thread(self._classify_event_window, samples, actual_start)
+        if prelim is not None and self._should_suppress(prelim, cand.duration_s):
+            log.info(
+                "event %.3f: suppressing (label=%s confidence=%.2f duration=%.1fs)",
+                cand.triggered_ts,
+                prelim.label,
+                prelim.confidence,
+                cand.duration_s,
+            )
+            return
+
         try:
             encoded = await asyncio.to_thread(encode_flac, samples, self.cfg.sample_rate)
         except FlacEncoderError as exc:
@@ -463,6 +494,9 @@ class Supervisor:
             log.error("event %s: failed to spool FLAC: %s", event_id, exc)
             return
 
+        prelim_class = prelim.label if prelim is not None else None
+        prelim_conf = prelim.confidence if prelim is not None else None
+        prelim_model = prelim.model_version if prelim is not None else None
         await self.queue.add_event_upload(
             event_id=event_id,
             ts=actual_start,
@@ -471,6 +505,9 @@ class Supervisor:
             sha256=encoded.sha256,
             size=encoded.size,
             flac_path=flac_path,
+            prelim_classification=prelim_class,
+            prelim_confidence=prelim_conf,
+            prelim_model_version=prelim_model,
         )
         # Announce inline so the cloud sees it ASAP; if the broker is down
         # the publish gets queued. The actual PUT happens in the uploader.
@@ -487,12 +524,57 @@ class Supervisor:
             status="pending",
             storage_key=None,
             attempt_count=0,
+            prelim_classification=prelim_class,
+            prelim_confidence=prelim_conf,
+            prelim_model_version=prelim_model,
         )
         await self.uploader.announce(upload)
         log.info(
-            "event %s: spooled %d B (sha=%s peak=%.1f dB duration=%.1fs)",
+            "event %s: spooled %d B (sha=%s peak=%.1f dB duration=%.1fs prelim=%s)",
             event_id, encoded.size, encoded.sha256[:8], cand.peak_db, encoded.duration_s,
+            prelim_class or "none",
         )
+
+    def _classify_event_window(self, samples: np.ndarray, ts_start: float):
+        """Compute bands over the event audio and run the classifier.
+
+        Runs in a worker thread (called via ``asyncio.to_thread``) so
+        the few ms of STFT work doesn't stall the capture loop. Returns
+        None when classification is disabled or the band buffer is too
+        short to be meaningful.
+        """
+        if self.classifier is None:
+            return None
+        # Fresh bander so we don't mutate the live one's sliding buffer.
+        # Calibration is identical to the live path, so the bands match
+        # what the backend stored in spectrogram_frames at training time.
+        bander = STFTBander(sample_rate=self.cfg.sample_rate, calib=self.calibration)
+        frames = bander.feed(samples, ts_start)
+        if not frames:
+            return None
+        bands = np.stack([b for _ts, b in frames])
+        try:
+            return self.classifier.predict(bands)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("classifier: predict raised: %s", exc)
+            return None
+
+    def _should_suppress(self, prelim, duration_s: float) -> bool:
+        """Suppression check matching the plan's wind/rain/thunder rule.
+
+        Three short-circuits, in order:
+        1. Debug env var overrides everything — upload all events.
+        2. Predicted class isn't on the suppress list — upload.
+        3. Confidence is below threshold — upload, the classifier isn't
+           confident enough for us to throw away the audio.
+        """
+        if self.cfg.upload_all_events:
+            return False
+        if prelim.label not in self.cfg.classifier_suppress_labels:
+            return False
+        if prelim.confidence < self.cfg.classifier_suppress_min_confidence:
+            return False
+        return True
 
     # --- periodic loops ---------------------------------------------------
 

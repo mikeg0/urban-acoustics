@@ -22,6 +22,9 @@ log = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH = pathlib.Path("/etc/urban-acoustics/config.json")
 DEFAULT_DATA_DIR = pathlib.Path("/var/lib/urban-acoustics")
 DEFAULT_AUDIO_DIR = DEFAULT_DATA_DIR / "audio"
+# Trained Pi-side classifier weights. Shipped with the firmware deploy or
+# fetched out of band; absent file simply disables auto-labeling.
+DEFAULT_CLASSIFIER_PATH = pathlib.Path("/etc/urban-acoustics/pi_head.npz")
 # Cloud-pushed tunables land here. The systemd unit grants write access to
 # /var/lib/urban-acoustics (see systemd/urban-acoustics.service), so the
 # supervisor can persist commands without relaxing the /etc read-only
@@ -70,6 +73,20 @@ class Config:
     # false events.
     paused: bool = False
 
+    # --- classifier (Track 1) ---
+    classifier_path: pathlib.Path = DEFAULT_CLASSIFIER_PATH
+    # Labels for which the supervisor SHOULD NOT upload audio when the
+    # classifier predicts them (with high-enough confidence). Defaults
+    # match the plan: noise classes that we want filtered before
+    # bandwidth/storage is spent on them.
+    classifier_suppress_labels: tuple[str, ...] = ("wind", "rain", "thunder")
+    # Minimum confidence required to suppress an event. Below this we
+    # upload anyway, so a wobbly classifier can't lose data.
+    classifier_suppress_min_confidence: float = 0.5
+    # Debug override: when true, every detected event uploads regardless
+    # of its predicted class. Toggled via URBAN_ACOUSTICS_UPLOAD_ALL_EVENTS.
+    upload_all_events: bool = False
+
     # --- MQTT ---
     mqtt_broker_host: str = "mqtt.urban-acoustics.conexed.com"
     mqtt_broker_port: int = 8883
@@ -111,6 +128,16 @@ class Config:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "config_version", _hash_config(self))
+
+
+def _parse_bool_env(v: str) -> bool:
+    """Parse a boolean env var the way every other config file does it.
+
+    Accepts the obvious truthy strings (case-insensitive); everything
+    else is False. Returns False for the empty string so unsetting the
+    var via ``URBAN_ACOUSTICS_UPLOAD_ALL_EVENTS=`` flips off, not on.
+    """
+    return v.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _hash_config(cfg: Config) -> str:
@@ -168,6 +195,8 @@ def load_config(
         raw["mqtt_broker_port"] = int(v)
     if (v := os.environ.get("URBAN_ACOUSTICS_API_BASE")):
         raw["api_base"] = v
+    if (v := os.environ.get("URBAN_ACOUSTICS_UPLOAD_ALL_EVENTS")) is not None:
+        raw["upload_all_events"] = _parse_bool_env(v)
 
     try:
         raw["device_id"] = UUID(str(raw["device_id"]))
@@ -176,7 +205,7 @@ def load_config(
 
     for path_key in (
         "mqtt_ca_file", "mqtt_cert_file", "mqtt_key_file",
-        "data_dir", "audio_dir", "queue_db_path",
+        "data_dir", "audio_dir", "queue_db_path", "classifier_path",
     ):
         if path_key in raw:
             raw[path_key] = pathlib.Path(raw[path_key])

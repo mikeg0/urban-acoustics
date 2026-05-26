@@ -119,6 +119,17 @@ class EventUploader:
             # window.
             "nonce": secrets.token_hex(8),
         }
+        # Attach the Pi-side prelim classification if we have one. Three
+        # fields travel together per the EventIntentRequest validator;
+        # omitting them entirely is fine (older firmware / no model).
+        if (
+            upload.prelim_classification is not None
+            and upload.prelim_confidence is not None
+            and upload.prelim_model_version is not None
+        ):
+            body["prelim_classification"] = upload.prelim_classification
+            body["prelim_confidence"] = upload.prelim_confidence
+            body["prelim_model_version"] = upload.prelim_model_version
         try:
             resp = await self._api.post_intent(body)
         except httpx.HTTPError as exc:

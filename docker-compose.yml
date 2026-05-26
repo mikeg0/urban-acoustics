@@ -41,6 +41,10 @@ services:
       - ./backend/alembic.ini:/app/alembic.ini:ro
       - ./backend/certs:/app/certs:ro
       - ./backend/data:/app/data
+      # Pi tree exposed read-only so the Pi-side classifier unit tests
+      # (tests/test_pi_classifier.py) can import the on-device module
+      # via importlib and verify train/serve parity.
+      - ./raspberry-pi-zero-2w:/raspberry-pi-zero-2w:ro
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: "postgresql+asyncpg://urban_acoustics:urban_acoustics_dev@postgres:5432/urban_acoustics"

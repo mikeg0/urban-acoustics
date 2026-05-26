@@ -31,6 +31,36 @@ router = APIRouter()
 log = logging.getLogger("urban-acoustics.events")
 
 
+def _can_overwrite_classification(
+    existing_version: str | None, incoming_version: str | None
+) -> bool:
+    """Don't let a Pi prelim regress a backend (Track 2) classification.
+
+    Pi versions are written as ``"pi-vN"``; backend versions are ``"vN"``
+    (no ``pi-`` prefix). Once a backend classification is on the row, a
+    re-announce from the Pi must not overwrite it. The intent endpoint
+    is idempotent and devices retry it, so this guard is what keeps the
+    final label stable.
+    """
+    if existing_version is None:
+        return True
+    if existing_version.startswith("pi-"):
+        # Pi can overwrite its own version, or a newer Pi version can
+        # replace an older one. Trying to overwrite "pi-v5" with "pi-v3"
+        # on a stale retry is fine to skip.
+        if incoming_version is None or not incoming_version.startswith("pi-"):
+            return False
+        return _version_int(incoming_version) >= _version_int(existing_version)
+    # Existing is a backend version — never overwrite from Pi.
+    return False
+
+
+def _version_int(v: str) -> int:
+    """Parse the integer suffix of ``vN`` / ``pi-vN``; -1 on garbage."""
+    digits = "".join(c for c in v if c.isdigit())
+    return int(digits) if digits else -1
+
+
 async def _verify_uploaded(row: Event, storage: Storage, session: AsyncSession) -> None:
     """If the event is ``uploaded`` and the object is present in storage,
     transition to ``available``. The MQTT worker can only confirm the
@@ -138,6 +168,16 @@ async def create_event_intent(
             existing.storage_key = storage_key
         if is_valid_event_transition(EventStatus(existing.status), EventStatus.UPLOAD_INTENT_CREATED):
             existing.status = EventStatus.UPLOAD_INTENT_CREATED.value
+        # Honour a prelim that arrived on a retry too, but only if the
+        # row doesn't already have a more-specific (non-pi) classifier
+        # version recorded. A future backend audio model (Track 2) is
+        # authoritative and must not be regressed by a re-announce.
+        if body.prelim_classification is not None and _can_overwrite_classification(
+            existing.model_version, body.prelim_model_version
+        ):
+            existing.classification = body.prelim_classification
+            existing.confidence = body.prelim_confidence
+            existing.model_version = body.prelim_model_version
         existing.updated_at = now
     else:
         storage_key = storage.event_key(device.device_id, body.event_id, event_ts)
@@ -152,6 +192,9 @@ async def create_event_intent(
             content_type=body.content_type,
             storage_key=storage_key,
             status=EventStatus.UPLOAD_INTENT_CREATED.value,
+            classification=body.prelim_classification,
+            confidence=body.prelim_confidence,
+            model_version=body.prelim_model_version,
             created_at=now,
             updated_at=now,
         )

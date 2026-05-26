@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTweaks } from '../tweaks';
 import { formatClock } from '../utils';
 import type { RecentEntry } from '../types';
@@ -11,10 +12,30 @@ interface Props {
   threshold: number;
 }
 
+// Classifier outputs we suppress from the default view when no user
+// label has been applied. Mirrors the Pi-side suppress list in
+// raspberry-pi-zero-2w/urban_acoustics/config.py — there events of
+// these classes typically never upload at all, so the filter here is
+// the residual case (debug uploads, historical data, Track 2 backfill).
+const NOISE_CLASSIFICATIONS = new Set(['wind', 'rain', 'thunder']);
+
+function isHiddenNoise(entry: RecentEntry): boolean {
+  if (entry.kind !== 'event') return false;
+  const e = entry.event;
+  if (e.label) return false; // user-applied label always wins
+  return e.classification != null && NOISE_CLASSIFICATIONS.has(e.classification);
+}
+
 export function EventsList({
   entries, selectedEventId, selectedAnnotationId,
   onSelectEvent, onSelectAnnotation, threshold,
 }: Props) {
+  const [showNoise, setShowNoise] = useState(false);
+  const hiddenCount = showNoise ? 0 : entries.filter(isHiddenNoise).length;
+  const visibleEntries = showNoise
+    ? entries
+    : entries.filter((entry) => !isHiddenNoise(entry));
+
   if (!entries.length) {
     return (
       <div className="mono" style={{ padding: 16, fontSize: 11, color: 'var(--ink-3)' }}>
@@ -24,7 +45,19 @@ export function EventsList({
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
-      {entries.map((entry) =>
+      {hiddenCount > 0 && (
+        <NoiseFilterBar
+          hiddenCount={hiddenCount}
+          onShow={() => setShowNoise(true)}
+        />
+      )}
+      {showNoise && entries.some(isHiddenNoise) && (
+        <NoiseFilterBar
+          showing
+          onHide={() => setShowNoise(false)}
+        />
+      )}
+      {visibleEntries.map((entry) =>
         entry.kind === 'event' ? (
           <EventRow
             key={`event-${entry.event.event_id}`}
@@ -42,6 +75,55 @@ export function EventsList({
           />
         ),
       )}
+    </div>
+  );
+}
+
+function NoiseFilterBar({
+  hiddenCount, onShow, showing, onHide,
+}: {
+  hiddenCount?: number;
+  showing?: boolean;
+  onShow?: () => void;
+  onHide?: () => void;
+}) {
+  const label = showing
+    ? 'Showing wind / rain / thunder. Hide them?'
+    : `${hiddenCount} noise event${hiddenCount === 1 ? '' : 's'} hidden (wind / rain / thunder)`;
+  const action = showing
+    ? { text: 'hide', onClick: onHide }
+    : { text: 'show all', onClick: onShow };
+  return (
+    <div
+      className="mono"
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '6px 14px',
+        background: 'var(--bg-2)',
+        borderBottom: '1px solid var(--line)',
+        fontSize: 10,
+        color: 'var(--ink-3)',
+      }}
+    >
+      <span>{label}</span>
+      <button
+        onClick={action.onClick}
+        className="mono"
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--line)',
+          borderRadius: 3,
+          padding: '2px 8px',
+          fontSize: 10,
+          color: 'var(--ink-1)',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        {action.text}
+      </button>
     </div>
   );
 }
