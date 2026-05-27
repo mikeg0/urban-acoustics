@@ -19,11 +19,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...auth.user import require_permission
 from ...contracts import HealthPoint, HealthReadResponse, HealthResolution
 from ...db import get_session
 from ...models import Device
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 # Resolution → (Postgres interval literal, max window in seconds). Window caps
 # match telemetry's: 24 h / 30 d / 365 d.

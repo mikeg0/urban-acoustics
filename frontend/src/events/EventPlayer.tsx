@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteEvent, fetchEventPlaybackUrl } from '../api';
+import { useHasPermission } from '../auth';
+import { PERM } from '../permissions';
 import { SpectrogramCanvas, computeEventSpectrogram } from '../spectrogram';
 import { useTweaks } from '../tweaks';
 import { formatClock } from '../utils';
@@ -29,6 +31,7 @@ function formatTime(sec: number): string {
 }
 
 export function EventPlayer({ event, onDeleted, onNext, onPrev }: Props) {
+  const canDelete = useHasPermission(PERM.EVENT_DELETE);
   const { spectroColor, clipAutoPlay, timeFormat } = useTweaks();
   // Latch the latest value in a ref so onLoadedMetadata (memoised once) reads
   // the current setting without re-binding the <audio> handler on every flip.
@@ -399,6 +402,7 @@ export function EventPlayer({ event, onDeleted, onNext, onPrev }: Props) {
         </div>
 
         {/* Delete: removes the DB row and the FLAC object in storage. */}
+        {canDelete && (
         <button
           onClick={handleDelete}
           disabled={deleting}
@@ -422,6 +426,7 @@ export function EventPlayer({ event, onDeleted, onNext, onPrev }: Props) {
             <path d="M9.5 7 V12" />
           </svg>
         </button>
+        )}
 
         <a
           href={url}

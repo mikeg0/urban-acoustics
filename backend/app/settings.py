@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     # --- Auth --------------------------------------------------------------
     JWT_SECRET: str
     JWT_TTL_SECONDS: int = 3600
+    # When True (production), the access_token cookie is marked Secure so it
+    # only ever rides over HTTPS. Set False in dev where the Vite proxy
+    # serves over plain HTTP.
+    COOKIE_SECURE: bool = True
+    # Optional admin bootstrap. If both are set and no admin user exists at
+    # startup, an admin user is created. Rotate the password via the admin
+    # UI and clear these env vars after first run.
+    ADMIN_EMAIL: str = ""
+    ADMIN_PASSWORD: str = ""
 
     # --- Cert / event policy ----------------------------------------------
     DEVICE_CERT_TTL_DAYS: int = 365

@@ -23,11 +23,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...auth.user import require_permission
 from ...contracts import ForecastPoint, ForecastResponse
 from ...db import get_session
 from ...models import Device
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 _LOOKBACK_DAYS = 28
 

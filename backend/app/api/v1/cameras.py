@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...db import get_session
 from ...models import Camera, Device
 
@@ -70,7 +70,7 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 @router.get("/cameras", response_model=list[CameraResponse])
 async def list_cameras(
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[CameraResponse]:
     result = await session.execute(select(Camera).order_by(Camera.camera_id))
@@ -83,7 +83,7 @@ async def list_cameras(
 )
 async def nearest_camera_for_device(
     device_id: UUID,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> CameraResponse | None:
     device = await session.get(Device, device_id)

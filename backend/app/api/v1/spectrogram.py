@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...auth.user import require_permission
 from ...contracts import (
     SpectrogramFrameOut,
     SpectrogramHistoryResponse,
@@ -36,7 +37,7 @@ from ...spectrogram_tiles import (
 )
 from ...storage import Storage, get_storage
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 # Cap matches the dashboard ribbon's design window (1 hour). Raising
 # requires adding aggregation — see module docstring.

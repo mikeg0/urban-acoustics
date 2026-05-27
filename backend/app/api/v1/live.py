@@ -32,6 +32,9 @@ from uuid import UUID
 import asyncpg
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
+from ...auth.cookies import COOKIE_NAME
+from ...auth.jwt_tokens import decode_access_token
+from ...auth.permissions import has_permission
 from ...contracts import NOTIFY_SPECTROGRAM_CHANNEL
 from ...db import get_sessionmaker
 from ...models import Device
@@ -75,6 +78,17 @@ async def _device_exists(device_id: UUID) -> bool:
 
 @router.websocket("/devices/{device_id}/live")
 async def live_telemetry_ws(websocket: WebSocket, device_id: UUID) -> None:
+    # Auth: require live.realtime via the same JWT cookie used for HTTP.
+    # We trust the JWT signature for WS — long-lived connections don't need
+    # a per-message DB hit, and revocation will surface on the next HTTP
+    # request anyway.
+    token = websocket.cookies.get(COOKIE_NAME)
+    payload = decode_access_token(token) if token else None
+    if payload is None or not has_permission(payload.role, "live.realtime"):
+        # 4401 is the conventional app-level "unauthorized" close code.
+        await websocket.close(code=4401)
+        return
+
     if not await _device_exists(device_id):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return

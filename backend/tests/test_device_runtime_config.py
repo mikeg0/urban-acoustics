@@ -27,11 +27,11 @@ DEVICE_A = UUID("00000000-0000-4000-8000-00000000000a")
 
 
 def _admin() -> ResolvedUser:
-    return ResolvedUser(user_id="dev", is_admin=True)
+    return ResolvedUser(user_id="dev", email="dev@local", role="admin")
 
 
 def _viewer() -> ResolvedUser:
-    return ResolvedUser(user_id="viewer", is_admin=False)
+    return ResolvedUser(user_id="viewer", email="viewer@local", role="guest")
 
 
 class _StubSession:
@@ -125,20 +125,6 @@ async def test_put_publishes_and_commits(monkeypatch: pytest.MonkeyPatch) -> Non
     assert kwargs["device_id"] == DEVICE_A
     assert kwargs["cmd"] == "config"
     assert kwargs["args"] == {"event_threshold_db": 78.5}
-
-
-@pytest.mark.asyncio
-async def test_put_403_for_non_admin(monkeypatch: pytest.MonkeyPatch) -> None:
-    session = _StubSession(device=_device_row({}))
-    monkeypatch.setattr(rc, "get_command_publisher", lambda: MagicMock(connected=True))
-
-    body = rc.RuntimeConfigUpdate(event_threshold_db=78.0)
-    with pytest.raises(HTTPException) as ei:
-        await rc.put_runtime_config(
-            DEVICE_A, body=body, user=_viewer(), session=session,  # type: ignore[arg-type]
-        )
-    assert ei.value.status_code == 403
-    assert session.committed is False
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,7 @@
 import type { DeviceEvent, SpectrogramAnnotation } from '../types';
 import type { PaletteKey } from '../palettes';
+import { useHasPermission } from '../auth';
+import { PERM } from '../permissions';
 import { HourTileBackdrop } from '../spectrogram';
 import { useTweaks } from '../tweaks';
 import { formatClock } from '../utils';
@@ -33,9 +35,10 @@ export function HourPlaybackViewer({
   const { timeFormat } = useTweaks();
   const fmtClock = (ts: number) => formatClock(ts, timeFormat);
   const fmtClockSec = (ts: number) => formatClock(ts, timeFormat, { withSeconds: true });
+  const canDelete = useHasPermission(PERM.EVENT_DELETE);
   const totalBreaches = events.filter((e) => e.peak_db >= threshold).length;
   const unlabeledCount = events.filter((e) => e.label == null).length;
-  const canDeleteUnlabeled = unlabeledCount > 0 && !deletingUnlabeled && !loading;
+  const canDeleteUnlabeled = canDelete && unlabeledCount > 0 && !deletingUnlabeled && !loading;
 
   return (
     <div style={{

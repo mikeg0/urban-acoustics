@@ -14,11 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...auth.user import require_permission
 from ...contracts import SourceCount, SourcesResponse
 from ...db import get_session
 from ...models import Device
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 _MAX_WINDOW_SECONDS = 366 * 24 * 3600
 

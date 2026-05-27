@@ -23,29 +23,51 @@ import type {
   YearBundle,
 } from './types';
 
+// All fetches send the HttpOnly session cookie so the backend's auth
+// dependency can resolve the user. ApiAuthError lets callers distinguish
+// 401 (logged out) from 403 (logged in but not allowed) when they want
+// to surface different UI; default throw-on-non-ok is unchanged.
+
+export class ApiAuthError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function throwForStatus(url: string, status: number): never {
+  if (status === 401 || status === 403) {
+    throw new ApiAuthError(status, `${url} → ${status}`);
+  }
+  throw new Error(`${url} → ${status}`);
+}
+
 async function getJson<T>(url: string): Promise<T> {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  const r = await fetch(url, { credentials: 'include' });
+  if (!r.ok) throwForStatus(url, r.status);
   return r.json();
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const r = await fetch(url, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  if (!r.ok) throwForStatus(url, r.status);
   return r.json();
 }
 
 async function putJson<T>(url: string, body: unknown): Promise<T> {
   const r = await fetch(url, {
     method: 'PUT',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  if (!r.ok) throwForStatus(url, r.status);
   return r.json();
 }
 
@@ -136,8 +158,8 @@ export const fetchSpectrogramHistory24h = (
   );
 
 export const fetchSpectrogramTile = async (url: string): Promise<ImageBitmap> => {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  const r = await fetch(url, { credentials: 'include' });
+  if (!r.ok) throwForStatus(url, r.status);
   const blob = await r.blob();
   return createImageBitmap(blob);
 };
@@ -182,8 +204,8 @@ export const fetchEventPlaybackUrl = (eventId: string): Promise<PlaybackUrl> =>
 
 export const deleteEvent = async (eventId: string): Promise<void> => {
   const url = `/api/v1/events/${eventId}`;
-  const r = await fetch(url, { method: 'DELETE' });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  const r = await fetch(url, { method: 'DELETE', credentials: 'include' });
+  if (!r.ok) throwForStatus(url, r.status);
 };
 
 export const submitEventLabel = (
@@ -215,6 +237,7 @@ export const submitAnnotation = async (
   const url = `/api/v1/devices/${deviceId}/annotations`;
   const r = await fetch(url, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
@@ -250,8 +273,8 @@ export const listAnnotations = (
 
 export const deleteAnnotation = async (annotationId: number): Promise<void> => {
   const url = `/api/v1/annotations/${annotationId}`;
-  const r = await fetch(url, { method: 'DELETE' });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  const r = await fetch(url, { method: 'DELETE', credentials: 'include' });
+  if (!r.ok) throwForStatus(url, r.status);
 };
 
 // --- dashboard rollup endpoints --------------------------------------------
@@ -305,4 +328,30 @@ export const spectrogramTileUrl = (deviceId: string, hourEpoch: number): string 
 export const liveDeviceSocket = (deviceId: string): WebSocket => {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return new WebSocket(`${proto}//${window.location.host}/api/v1/devices/${deviceId}/live`);
+};
+
+// --- guest preview (procedurally-generated mock data) -----------------------
+// Routes under /api/v1/preview/* return DailySummaryResponse / AnomaliesResponse /
+// ForecastResponse / SourcesResponse shapes so the dashboard adapters work
+// without modification. The live WS emits the same {type:"tick"} /
+// {type:"spect"} envelope as the real device WS.
+
+export const fetchPreviewDailySummary = (): Promise<DailySummaryResponse> =>
+  getJson<DailySummaryResponse>('/api/v1/preview/summary/daily');
+
+export const fetchPreviewAnomalies = (): Promise<AnomaliesResponse> =>
+  getJson<AnomaliesResponse>('/api/v1/preview/anomalies');
+
+export const fetchPreviewForecast = (): Promise<ForecastResponse> =>
+  getJson<ForecastResponse>('/api/v1/preview/forecast');
+
+export const fetchPreviewSources = (): Promise<SourcesResponse> =>
+  getJson<SourcesResponse>('/api/v1/preview/sources');
+
+export const fetchPreviewThreshold = (): Promise<{ threshold_db: number }> =>
+  getJson<{ threshold_db: number }>('/api/v1/preview/threshold');
+
+export const previewLiveSocket = (): WebSocket => {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return new WebSocket(`${proto}//${window.location.host}/api/v1/preview/live`);
 };

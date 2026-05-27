@@ -41,11 +41,11 @@ button{font-family:inherit;cursor:pointer}
 .cdn-card p{color:var(--ink-2);margin-bottom:14px}
 .cdn-card .mono{font-size:10px;color:var(--ink-3);letter-spacing:.12em}
 
-/* Top-left header */
-#hdr{position:absolute;top:14px;left:14px;z-index:10;background:var(--glass);
+/* Left-side full-height console panel */
+#hdr{position:absolute;top:14px;left:14px;bottom:14px;z-index:10;background:var(--glass);
   border:1px solid var(--line);border-radius:6px;padding:10px 14px;
   display:flex;flex-direction:column;gap:4px;backdrop-filter:blur(6px);
-  max-width:280px}
+  width:min(380px, calc(100vw - 28px))}
 #hdr .badge{display:inline-block;font-family:var(--mono);font-size:9px;
   letter-spacing:.18em;color:var(--neon-hot);border:1px solid var(--neon-hot);
   padding:2px 6px;border-radius:2px;width:max-content;
@@ -54,6 +54,36 @@ button{font-family:inherit;cursor:pointer}
 #hdr .title{font-weight:600;letter-spacing:.04em;font-size:13px}
 #hdr .scen{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--ink-2);margin-top:2px}
 #hdr .clock{font-family:var(--mono);font-size:11px;color:var(--ink-1);letter-spacing:.06em;margin-top:2px}
+
+/* Terminal console panel inside the header. Flex-grows to fill the
+   remaining vertical space of the full-height #hdr panel. */
+#hdr .term-wrap{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line);
+  display:flex;flex-direction:column;gap:3px;flex:1;min-height:0}
+#hdr .term-scroll{font-family:var(--mono);font-size:10.5px;line-height:1.55;color:#dcdcdc;
+  flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:4px;
+  scrollbar-width:thin;scrollbar-color:#333 transparent;
+  text-shadow:0 0 6px rgba(150,255,150,0.04)}
+#hdr .term-scroll::-webkit-scrollbar{width:5px}
+#hdr .term-scroll::-webkit-scrollbar-track{background:transparent}
+#hdr .term-scroll::-webkit-scrollbar-thumb{background:#2c2c2c;border-radius:3px}
+#hdr .tline{white-space:pre-wrap;word-break:break-word;letter-spacing:0}
+#hdr .t-user{color:#5fff5f;font-weight:600}
+#hdr .t-path{color:#5f87ff;font-weight:600}
+#hdr .t-sep,#hdr .t-sym{color:#cccccc}
+#hdr .t-ok{color:#5fff5f}
+#hdr .t-alert{color:#ff5f5f;font-weight:600}
+#hdr .t-warn{color:#ffaf5f}
+#hdr .t-info{color:#5fd7ff}
+#hdr .t-match{color:#d7d75f}
+#hdr .t-dim{color:#8a8a8a}
+#hdr .t-acc{color:#ffffff}
+#hdr .term-active{font-family:var(--mono);font-size:10.5px;color:#dcdcdc;
+  display:flex;align-items:center;gap:7px;padding-top:4px;border-top:1px dotted #222}
+#hdr .t-spin{color:#5fd7ff;display:inline-block;width:10px;text-align:center;font-weight:600}
+#hdr .t-active-msg{color:#c8c8c8}
+#hdr .t-cursor{display:inline-block;width:6px;height:11px;background:#dcdcdc;
+  vertical-align:text-bottom;margin-left:2px;animation:termBlink 1s steps(2) infinite}
+@keyframes termBlink{50%{opacity:0}}
 
 /* Top-center chip strip */
 #chips{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:10;
@@ -67,13 +97,6 @@ button{font-family:inherit;cursor:pointer}
   border:1px solid transparent;color:var(--ink-2);padding:6px 12px;border-radius:3px;font-weight:600}
 #chips .chip:hover{color:var(--ink-0);background:var(--bg-3)}
 #chips .chip.active{color:#000;background:var(--neon-amber);border-color:var(--neon-amber)}
-
-/* Top-right controls (prediction toggle only) */
-#ctrls{position:absolute;top:14px;right:14px;z-index:10;background:var(--glass);
-  border:1px solid var(--line);border-radius:6px;padding:10px 14px;display:flex;
-  align-items:center;gap:10px;backdrop-filter:blur(6px)}
-#ctrls label.toggle{display:flex;align-items:center;gap:8px;cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-1)}
-#ctrls .toggle input{accent-color:var(--neon-amber);width:14px;height:14px;cursor:pointer}
 
 /* Bottom-center scrubber */
 #scrub{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;
@@ -115,6 +138,8 @@ button{font-family:inherit;cursor:pointer}
   border:1px solid var(--neon-hot);padding:3px 8px;border-radius:2px;margin-bottom:8px}
 .chooser-card .head h1{font-size:24px;font-weight:600;letter-spacing:.02em}
 .chooser-card .head h2{font-size:12px;font-weight:400;color:var(--ink-2);letter-spacing:.14em;text-transform:uppercase}
+.chooser-card .head .mission{font-size:15px;line-height:1.5;color:var(--ink-1);max-width:600px;margin-top:14px;letter-spacing:.005em}
+.chooser-card .head .mission strong{color:var(--neon-amber);font-weight:600}
 .chooser-card .head p{color:var(--ink-2);max-width:560px;margin-top:8px;font-size:13px}
 .chooser-opts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 @media(max-width:720px){.chooser-opts{grid-template-columns:1fr}}
@@ -154,9 +179,17 @@ button{font-family:inherit;cursor:pointer}
 
 <div id="hdr">
   <span class="badge">DEMO · SIMULATION</span>
-  <div class="title">SALT LAKE CITY · NOISE TRACE PREVIEW</div>
+  <div class="title">SALT LAKE CITY NOISE TRACER</div>
   <div class="scen" data-scen-label>SELECT A SCENARIO</div>
   <div class="clock" data-clock>T+ 00:00</div>
+  <div class="term-wrap">
+    <div class="term-scroll" data-term></div>
+    <div class="term-active">
+      <span class="t-spin" data-spinner>⠋</span>
+      <span class="t-active-msg" data-active-msg>awaiting scenario</span>
+      <span class="t-cursor"></span>
+    </div>
+  </div>
 </div>
 
 <div id="chips" class="hidden">
@@ -167,20 +200,13 @@ button{font-family:inherit;cursor:pointer}
   <button class="chip" data-chip="pizza">PIZZA SUBARU</button>
 </div>
 
-<div id="ctrls" class="hidden">
-  <label class="toggle">
-    <input type="checkbox" data-pred checked>
-    <span>SHOW PREDICTION</span>
-  </label>
-</div>
-
 <div id="scrub" class="hidden">
   <button class="play" data-play title="Pause / play">⏸</button>
   <div class="speeds">
-    <button data-spd="0.5">0.5×</button>
-    <button data-spd="1" class="active">1×</button>
+    <button data-spd="1">1×</button>
     <button data-spd="2">2×</button>
-    <button data-spd="4">4×</button>
+    <button data-spd="4" class="active">4×</button>
+    <button data-spd="8">8×</button>
   </div>
   <div class="track" data-track>
     <div class="rail">
@@ -196,27 +222,29 @@ button{font-family:inherit;cursor:pointer}
   <div class="chooser-card">
     <div class="head">
       <div class="badge">DEMO · SIMULATION</div>
-      <h1>Salt Lake City · Noise Trace Preview</h1>
-      <h2>A city-wide microphone array · past · present · predicted</h2>
-      <p>Pick a scenario to see how the array traces a loud vehicle's path over the past ten minutes, where it is right now, and where it's predicted to go next. Trails follow real street geometry — and so does the noise.</p>
+      <h1>Salt Lake City · Noise Tracer</h1>
+      <h2>A city-wide microphone array</h2>
+      <p class="mission">Noise ordinance violators leave a digital fingerprint.</p>
+      <p class="mission"><strong>AI can predict the routes of repeat offenders.</strong></p>
+      <p>Pick a scenario to see how the array traces a loud vehicle's path over the past ten minutes, displays where it is right now and predicts its future location.</p>
     </div>
     <div class="chooser-opts">
       <button class="opt" data-opt="biker">
         <div class="glyph">🏍</div>
         <div class="ttl">Biker Convoy</div>
-        <div class="desc">Ten motorcycles ride from 900 South up State Street and congregate east of the Capitol.</div>
+        <div class="desc">Ten motorcycles ride from 900 South up State Street and congregate east of the Capitol late at night.</div>
         <div class="stats">~3 MIN · POOLS AT 8 LIGHTS · PEAK 97 dB</div>
       </button>
       <button class="opt" data-opt="muscle">
         <div class="glyph">⚙</div>
         <div class="ttl">Muscle Car</div>
-        <div class="desc">A single car cruises State Street between North Temple and 400 South, revving at every red light.</div>
+        <div class="desc">A single car with an illegal glasspack muffler cruises State Street between North Temple and 400 South, revving at every red light.</div>
         <div class="stats">CONTINUOUS LAPS · 2 ENDPOINT STOPS · PEAK 94 dB</div>
       </button>
       <button class="opt" data-opt="pizza">
         <div class="glyph">▭</div>
         <div class="ttl">Pizza Subaru</div>
-        <div class="desc">A Subaru with a modified muffler runs delivery loops from 100 S &amp; Main, drawing a spider-web of trips.</div>
+        <div class="desc">A Subaru with a modified muffler runs late night delivery loops at 2AM from 100 S &amp; Main, drawing a spider-web of trips.</div>
         <div class="stats">5 DELIVERY ROUTES · RADIAL WEB · PEAK 86 dB</div>
       </button>
     </div>
@@ -246,8 +274,7 @@ if (typeof maplibregl === 'undefined') {
 /* =============================================================================
  * SLC NOISE TRACE PREVIEW — marketing demo
  * Three scripted scenarios on real OSM street geometry. Each scenario is
- * a deterministic timeline that we sample backward (trail), at (head), and
- * forward (prediction).
+ * a deterministic timeline that we sample backward (trail) and at (head).
  * ===========================================================================*/
 (function() {
 'use strict';
@@ -275,8 +302,82 @@ function ix(nsSlug, ewSlug) {
   return [NS_LON[nsSlug], EW_LAT[ewSlug]];
 }
 
-// Synthetic Capitol congregation point — east side of the Capitol grounds.
-const CAPITOL_CONGREGATION = [-111.8855, 40.7770];
+// OSM-aligned curve from the north end of State Street up the east side
+// of the Capitol grounds to where the bikers congregate on East Capitol
+// Boulevard. Points are pulled from real Overpass `highway` ways
+// (State Street → 300 North → East Capitol Boulevard) so the streamer
+// follows the actual curving road instead of a synthetic diagonal.
+const CAPITOL_CURVE = [
+  [-111.888232, 40.775866],  // top of STREETS.state
+  [-111.888156, 40.775870],  // State Street terminus (OSM)
+  [-111.888094, 40.775991],  // curve onto 300 N
+  [-111.887384, 40.775943],  // 300 N heading E
+  [-111.886728, 40.775967],  // 300 N meets East Capitol Blvd
+  [-111.886690, 40.775985],
+  [-111.886628, 40.776029],
+  [-111.886589, 40.776074],
+  [-111.886566, 40.776120],
+  [-111.886493, 40.776286],
+  [-111.886418, 40.776371],
+  [-111.886350, 40.776540],
+  [-111.886289, 40.776713],
+  [-111.886235, 40.776886],
+  [-111.886256, 40.776955],
+  [-111.886215, 40.777128],
+  [-111.886180, 40.777301],
+  [-111.886154, 40.777478],  // congregation: east side of Capitol
+];
+const CAPITOL_CONGREGATION = CAPITOL_CURVE[CAPITOL_CURVE.length - 1];
+
+// Forecasted route for the biker convoy. Starts at the 200 South
+// intersection on State (well ahead of the convoy when the prediction
+// first fires) and extends north through s_100 and N Temple, then
+// snakes up the Capitol curve to the congregation. The visible portion
+// is dynamically clipped each frame to start at the leader's current
+// position, so the trace always points ahead of the bikes and is
+// "erased" from the back as they walk over it.
+const FORECASTED_ROUTE = [
+  ix('state','s_200'),
+  ix('state','s_100'),
+  ix('state','n_temple'),
+  ...CAPITOL_CURVE,
+];
+
+// Staging intersections where the forked "lightning bolt" prediction
+// recalculates. Each crossing increments a stage counter that tightens
+// confidence in the Capitol branch and dims the east/west alternatives.
+const BRANCH_INTERSECTIONS = [
+  {lat: 40.762835, lon: -111.888232, name: 's_300'},
+  {lat: 40.765005, lon: -111.888232, name: 's_200'},
+  {lat: 40.767173, lon: -111.888232, name: 's_100'},
+  {lat: 40.771493, lon: -111.888232, name: 'n_temple'},
+];
+
+// Endpoint longitudes for the east and west alternative branches.
+// Each branch forks from the next BRANCH_INTERSECTIONS point ahead of
+// the convoy and runs ~5-6 blocks before kinking off, giving the
+// "this could go to a different part of town" feel.
+const ALT_BRANCH_END_LON_E = -111.879642;  // east, near 400 East corridor
+const ALT_BRANCH_END_LON_W = -111.895900;  // west, past West Temple
+
+// Per-stage confidences. Sum to ~1; opacity is driven directly off the
+// `capitol` / `east` / `west` field for the matching branch. Stage 0
+// is the initial reveal (no intersections passed); stage N corresponds
+// to N intersections passed.
+const ROUTE_CONFIDENCE_STAGES = [
+  {capitol: 0.72, east: 0.42, west: 0.30},   // stage 0: speculative
+  {capitol: 0.82, east: 0.30, west: 0.18},   // stage 1: s_300 passed
+  {capitol: 0.90, east: 0.18, west: 0.10},   // stage 2: s_200 passed
+  {capitol: 0.96, east: 0.08, west: 0.04},   // stage 3: s_100 passed
+  {capitol: 1.00, east: 0.00, west: 0.00},   // stage 4: n_temple passed — locked
+];
+
+function nextBranchAhead(bikePos) {
+  for (const b of BRANCH_INTERSECTIONS) {
+    if (b.lat > bikePos[1] + 8/111320) return b;
+  }
+  return null;
+}
 
 /* ============================================================================
  * 2. TRAFFIC SIGNALS
@@ -330,26 +431,51 @@ function waitForGreen(sigId, simT_ms) {
 }
 
 /* ============================================================================
- * 3. STATIC MARKERS (microphones, squad cars, pizza HQ)
+ * 3. STATIC MARKERS (microphones, pizza HQ)
  * ==========================================================================*/
-// 40 pilot-corridor stations from backend/scripts/seed_pilot_corridor.py.
-const STATIONS = (function() {
-  const out = [];
-  const stateCrosses = [40.7706,40.7686,40.7666,40.7646,40.7626,40.7606,40.7586,40.7566,40.7546,40.7526];
-  stateCrosses.forEach((lat, i) => out.push({id: 'UQI-ST-'+String(i+1).padStart(2,'0'), lat, lon: -111.8881}));
-  const parallels = [['300W',-111.8970],['WT',-111.8941],['MAIN',-111.8910],['200E',-111.8852],['300E',-111.8823],['400E',-111.8794]];
-  const standardCrosses = [40.7686,40.7646,40.7606,40.7566,40.7526];
-  parallels.forEach(([px, lon]) => standardCrosses.forEach((lat, j) => out.push({id: 'UQI-'+px+'-'+String(j+1).padStart(2,'0'), lat, lon})));
-  return out;
-})();
-
-// 5 static squad-car pins at sensible patrol positions.
-const SQUAD_CARS = [
-  {id:'U-A', at: ix('state','s_400')},
-  {id:'U-B', at: ix('state','n_temple')},
-  {id:'U-C', at: [-111.8865, 40.7747]}, // Capitol parking
-  {id:'U-D', at: ix('main','s_200')},
-  {id:'U-E', at: ix('e_400','s_400')},
+// 40 pilot-corridor microphones — exact lat/lon from the backend devices
+// table (verified at implementation time against the production DB).
+const STATIONS = [
+  {id:'UQI-ST-01',   lat:40.771538, lon:-111.888264},
+  {id:'UQI-ST-02',   lat:40.767176, lon:-111.888238},
+  {id:'UQI-ST-03',   lat:40.765028, lon:-111.888230},
+  {id:'UQI-ST-04',   lat:40.762822, lon:-111.888245},
+  {id:'UQI-ST-05',   lat:40.760645, lon:-111.888244},
+  {id:'UQI-ST-06',   lat:40.758475, lon:-111.888247},
+  {id:'UQI-ST-07',   lat:40.756300, lon:-111.888232},
+  {id:'UQI-ST-08',   lat:40.754128, lon:-111.888233},
+  {id:'UQI-ST-09',   lat:40.751948, lon:-111.888239},
+  {id:'UQI-ST-10',   lat:40.749812, lon:-111.888232},
+  {id:'UQI-300W-01', lat:40.767185, lon:-111.899689},
+  {id:'UQI-300W-02', lat:40.762820, lon:-111.899693},
+  {id:'UQI-300W-03', lat:40.758480, lon:-111.899685},
+  {id:'UQI-300W-04', lat:40.754122, lon:-111.899684},
+  {id:'UQI-300W-05', lat:40.749763, lon:-111.899685},
+  {id:'UQI-WT-01',   lat:40.767175, lon:-111.893955},
+  {id:'UQI-WT-02',   lat:40.762822, lon:-111.893954},
+  {id:'UQI-WT-03',   lat:40.758480, lon:-111.893948},
+  {id:'UQI-WT-04',   lat:40.754120, lon:-111.893958},
+  {id:'UQI-WT-05',   lat:40.749787, lon:-111.894013},
+  {id:'UQI-MAIN-01', lat:40.767172, lon:-111.891107},
+  {id:'UQI-MAIN-02', lat:40.762816, lon:-111.891097},
+  {id:'UQI-MAIN-03', lat:40.758483, lon:-111.891088},
+  {id:'UQI-MAIN-04', lat:40.754130, lon:-111.891090},
+  {id:'UQI-MAIN-05', lat:40.749813, lon:-111.891083},
+  {id:'UQI-200E-01', lat:40.767170, lon:-111.885373},
+  {id:'UQI-200E-02', lat:40.762815, lon:-111.885370},
+  {id:'UQI-200E-03', lat:40.758464, lon:-111.885368},
+  {id:'UQI-200E-04', lat:40.754130, lon:-111.885386},
+  {id:'UQI-200E-05', lat:40.749812, lon:-111.885375},
+  {id:'UQI-300E-01', lat:40.767174, lon:-111.882512},
+  {id:'UQI-300E-02', lat:40.762828, lon:-111.882509},
+  {id:'UQI-300E-03', lat:40.758483, lon:-111.882531},
+  {id:'UQI-300E-04', lat:40.754131, lon:-111.882503},
+  {id:'UQI-300E-05', lat:40.749798, lon:-111.882508},
+  {id:'UQI-400E-01', lat:40.767169, lon:-111.879647},
+  {id:'UQI-400E-02', lat:40.762835, lon:-111.879637},
+  {id:'UQI-400E-03', lat:40.758487, lon:-111.879646},
+  {id:'UQI-400E-04', lat:40.754138, lon:-111.879640},
+  {id:'UQI-400E-05', lat:40.749801, lon:-111.879636},
 ];
 
 // Pizza HQ at 100 S & Main.
@@ -364,6 +490,34 @@ function dist(a, b) {
   const dLat = (b[1]-a[1]) * 111320;
   const dLon = (b[0]-a[0]) * 111320 * Math.cos(a[1] * Math.PI/180);
   return Math.sqrt(dLat*dLat + dLon*dLon);
+}
+// Project a point onto a polyline. Returns the segment index, the
+// parameter t∈[0,1] of the projection along that segment, the
+// projected coordinate, and the perpendicular distance (meters).
+// Used to clip the forecasted-route line so its start follows the
+// convoy: routeAhead(line, segIdx, t) returns the polyline from the
+// projection forward to the end.
+function projectOnPolyline(p, line) {
+  let best = {segIdx: 0, t: 0, pt: line[0].slice(), distM: Infinity};
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i+1];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len2 = dx*dx + dy*dy;
+    let t = 0;
+    if (len2 > 0) {
+      t = ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+    }
+    const pt = [a[0] + t*dx, a[1] + t*dy];
+    const d = dist(p, pt);
+    if (d < best.distM) best = {segIdx: i, t, pt, distM: d};
+  }
+  return best;
+}
+function routeAhead(line, segIdx, t) {
+  const a = line[segIdx], b = line[segIdx + 1];
+  const startPt = [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
+  return [startPt, ...line.slice(segIdx + 1)];
 }
 function pad(n, w=2) { return String(n).padStart(w, '0'); }
 // dB → color ramp (teal → green → amber → red), expressed as hex because
@@ -380,6 +534,29 @@ function fmtElapsed(s) {
   s = Math.max(0, Math.floor(s));
   return 'T+ ' + pad(Math.floor(s/60)) + ':' + pad(s%60);
 }
+function hexLerp(a, b, u) {
+  const av = parseInt(a.slice(1), 16), bv = parseInt(b.slice(1), 16);
+  const ar = (av >> 16) & 0xff, ag = (av >> 8) & 0xff, ab = av & 0xff;
+  const br = (bv >> 16) & 0xff, bg = (bv >> 8) & 0xff, bb = bv & 0xff;
+  const r = Math.round(ar + (br - ar) * u);
+  const g = Math.round(ag + (bg - ag) * u);
+  const b2 = Math.round(ab + (bb - ab) * u);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b2).toString(16).slice(1);
+}
+// Microphone activation color ramp: teal (idle) → orange → red → white-hot.
+// Mic activation colour. At low intensity the mic stays teal (idle); at
+// moderate intensity it adopts the streamer's own colour (`colorForDb`)
+// so the mic visually mirrors the streamer it is detecting; at very
+// high intensity it ramps to white-hot.
+function micColor(intensity, actorDb) {
+  intensity = Math.max(0, Math.min(1, intensity));
+  if (intensity <= 0.03) return '#2dd4bf';
+  const baseDb = 50 + Math.min(1, intensity / 0.70) * ((actorDb || 60) - 50);
+  const sc = colorForDb(baseDb);
+  if (intensity < 0.70) return sc;
+  return hexLerp(sc, '#ffffff', (intensity - 0.70) / 0.30);
+}
+
 
 /* ============================================================================
  * 5. TIMELINE & SCENARIO BUILDERS
@@ -443,6 +620,8 @@ function addIdle(tl, at, durationS, opts = {}) {
     revCadenceS: opts.revCadenceS ?? 4.5,
     signalId: opts.signalId || null,
     roarOnExit: !!opts.roarOnExit,
+    roarOnEntry: !!opts.roarOnEntry,
+    entryPeak: opts.entryPeak ?? null,
     label: opts.label || null,
   });
   tl.loopT += durationS;
@@ -486,16 +665,179 @@ function buildBikerLeaderTimeline() {
     addDriveAndStopIfRed(tl, cur, p.at, v, 92, {...idleArgs, signalId: p.sig});
     cur = p.at;
   }
-  // Final approach: continue north on State to the top of our polyline,
-  // then synthetic eastward to congregation point.
-  const stateNorth = [-111.888232, 40.775866];
-  addDrive(tl, cur, stateNorth, v, 92);
-  addDrive(tl, stateNorth, CAPITOL_CONGREGATION, v * 0.7, 92);
+  // Final approach: bridge N Temple → top of State Street, then snake
+  // along the OSM-aligned Capitol curve. Without the bridge drive the
+  // convoy teleports ~490 m from the n_temple stop straight to the
+  // start of CAPITOL_CURVE (which sits north of the n_temple lat).
+  addDrive(tl, cur, CAPITOL_CURVE[0], v, 92);
+  for (let i = 1; i < CAPITOL_CURVE.length; i++) {
+    addDrive(tl, CAPITOL_CURVE[i - 1], CAPITOL_CURVE[i], v * 0.75, 92);
+  }
   // Hold at congregation for a while, periodic revs but no roar-off.
   addIdle(tl, CAPITOL_CONGREGATION, 45, {
     dbIdle: 76, dbPeak: 95, revCadenceS: 3.6, signalId: 'congregation', roarOnExit: false, label: 'CONGREGATION'
   });
   return finalizeTimeline(tl);
+}
+
+/* ----- Biker swarm: ten per-bike profiles for the convoy_swarm sprite. ----
+ * Each bike samples the convoy timeline at (t + dt) so positive-dt bikes
+ * lead the pack and negative-dt bikes lag behind. The mechanical result:
+ * at a red light all ten converge on the same intersection point; on
+ * departure the leaders pull away first and the laggards trickle out
+ * last; some bikes reach the next light noticeably sooner than others.
+ * A small perpendicular `lat` offset (meters) keeps them off the same
+ * pixel during the regroup, so the cluster reads as a swarm rather than
+ * a single dot. Profiles are deterministic (seeded) so the visual is
+ * stable across frames and across backward sampling.
+ */
+const CONVOY_BIKES = (() => {
+  const out = [];
+  const seed = 0x1357abc;
+  const rand = (k) => {
+    let x = (seed ^ Math.imul(k + 1, 2654435761)) | 0;
+    x = Math.imul(x ^ (x >>> 15), 2246822507) | 0;
+    x = Math.imul(x ^ (x >>> 13), 3266489917) | 0;
+    x = (x ^ (x >>> 16)) >>> 0;
+    return (x % 100000) / 100000;
+  };
+  // dt range ±6.5 s × 13 m/s cruise ≈ ±85 m of road spread, so the full
+  // convoy stretches ~170 m on the move — about a Salt Lake City block.
+  // 30 s minimum stop still dwarfs the 13 s arrival window, so all ten
+  // are inside the idle segment for ~17 s of every stop (the "grouped
+  // at the light" phase). Endpoints are slightly stretched so two bikes
+  // read as the visible leader / sweeper.
+  const dtBase = [-6.5, -5.0, -3.5, -2.1, -0.7, 0.7, 2.1, 3.5, 5.0, 6.5];
+  // Per-bike ring intensity. Some bikes have small, polite rings; a
+  // couple are noticeably louder (modded exhausts) and drive the wave's
+  // peaks. Decoupled from dt so the loud bikes can be anywhere in the
+  // pack — leader, laggard, or middle.
+  const scaleBase = [0.62, 0.82, 1.05, 0.71, 1.32, 0.88, 1.15, 0.65, 0.95, 1.22];
+  for (let i = 0; i < 10; i++) {
+    const dt = dtBase[i] + (rand(i * 3) - 0.5) * 0.4;
+    const lat = (rand(i * 3 + 1) - 0.5) * 4.5;
+    // Queue index: largest dt (i=9) arrives first at a light → queue
+    // front (idx 0); smallest dt (i=0) lags → queue back (idx 9). Used
+    // by sampleBike to stack bikes along the approach during signal
+    // idles since ten bikes don't fit on a single start line.
+    out.push({dt, lat, scale: scaleBase[i], queueIdx: 9 - i});
+  }
+  return out;
+})();
+// Lookup by queueIdx so sampleBike can recursively find the bike
+// directly in front of any given bike.
+const CONVOY_BY_QUEUE = (() => {
+  const arr = new Array(10);
+  for (const b of CONVOY_BIKES) arr[b.queueIdx] = b;
+  return arr;
+})();
+
+/* Sample a bike's position and state at sim-time `eventT`, applying the
+ * bike's time offset (dt) and lateral road-perpendicular offset (lat).
+ * Shared by the swarm head sprite and the per-bike ring emission so
+ * both stay visually in lockstep.
+ */
+function sampleBike(timeline, eventT, bike) {
+  // Clamp the dt-shifted sample time to [0, loopT) so individual bikes
+  // never wrap into the previous or next loop iteration. Without this,
+  // bikes with positive dt "anticipate" the next loop (jumping back to
+  // startPos while the leader is still at the Capitol congregation) and
+  // bikes with negative dt do the inverse — both cause the cluster to
+  // disappear/split at the loop seams. The clamp keeps the whole
+  // convoy bounded inside the current iteration so it stays on screen
+  // at every loop boundary, including the paused end-of-loop state.
+  const bikeT = Math.max(0, Math.min(timeline.loopT - 0.001, eventT + bike.dt));
+  const sB = sampleAt(timeline, bikeT);
+  let dir = [0, 1];
+  if (sB.kind === 'drive') {
+    dir = [sB.segment.to[0] - sB.segment.from[0],
+           sB.segment.to[1] - sB.segment.from[1]];
+  } else {
+    const segs = timeline.segments;
+    const idx = segs.indexOf(sB.segment);
+    for (let k = idx - 1; k >= 0; k--) {
+      if (segs[k].kind === 'drive') {
+        dir = [segs[k].to[0] - segs[k].from[0], segs[k].to[1] - segs[k].from[1]];
+        break;
+      }
+    }
+  }
+  const mag = Math.hypot(dir[0], dir[1]) || 1;
+  const perpLon = -dir[1] / mag;
+  const perpLat =  dir[0] / mag;
+  // Tighter lateral spread when stopped at a signal so the queue reads
+  // as a tight stack instead of a wide cluster.
+  const inSignalIdle = sB.kind === 'idle' && sB.signalId && sB.signalId !== 'congregation';
+  const latScale = inSignalIdle ? 0.35 : 1;
+  const dLat = (bike.lat * latScale / 111320) * perpLat;
+  const dLon = (bike.lat * latScale / 84600)  * perpLon;
+  let pos = [sB.pos[0] + dLon, sB.pos[1] + dLat];
+  // No-passing rule: this bike cannot occupy the same spot as, or pass,
+  // the bike directly in front of it (queueIdx − 1). We recursively
+  // sample the front bike, then project (this − front) onto the FRONT
+  // bike's direction. If projection > −SPACING_M (too close or ahead),
+  // snap this bike to the slot exactly SPACING_M behind the front along
+  // its direction, reapplying the bike's lateral offset on the front's
+  // perpendicular axis so the queue stays on-road even when this bike's
+  // own sample wrapped to a different segment (e.g. the Capitol curve
+  // at the very start of the loop).
+  if (bike.queueIdx != null && bike.queueIdx > 0) {
+    const frontBike = CONVOY_BY_QUEUE[bike.queueIdx - 1];
+    const front = sampleBike(timeline, eventT, frontBike);
+    const SPACING_M = 3;
+    // Derive front's direction from its segment (drive seg if driving,
+    // most recent drive seg if idling). Falls back to north.
+    let fdir = [0, 1];
+    if (front.segment) {
+      if (front.kind === 'drive') {
+        fdir = [front.segment.to[0] - front.segment.from[0],
+                front.segment.to[1] - front.segment.from[1]];
+      } else {
+        const segs = timeline.segments;
+        const fidx = segs.indexOf(front.segment);
+        for (let k = fidx - 1; k >= 0; k--) {
+          if (segs[k].kind === 'drive') {
+            fdir = [segs[k].to[0] - segs[k].from[0], segs[k].to[1] - segs[k].from[1]];
+            break;
+          }
+        }
+      }
+    }
+    const fdirLonM = fdir[0] * 84600;
+    const fdirLatM = fdir[1] * 111320;
+    const fdirMagM = Math.hypot(fdirLonM, fdirLatM) || 1;
+    const dxLonM = (pos[0] - front.pos[0]) * 84600;
+    const dxLatM = (pos[1] - front.pos[1]) * 111320;
+    const projM = (dxLonM * fdirLonM + dxLatM * fdirLatM) / fdirMagM;
+    if (projM > -SPACING_M) {
+      const fmag = Math.hypot(fdir[0], fdir[1]) || 1;
+      const fperpLon = -fdir[1] / fmag;
+      const fperpLat =  fdir[0] / fmag;
+      const slotLon = front.pos[0] - fdirLonM / fdirMagM * SPACING_M / 84600;
+      const slotLat = front.pos[1] - fdirLatM / fdirMagM * SPACING_M / 111320;
+      pos = [
+        slotLon + (bike.lat * 0.35 / 84600) * fperpLon,
+        slotLat + (bike.lat * 0.35 / 111320) * fperpLat,
+      ];
+    }
+  }
+  return {
+    pos,
+    kind: sB.kind, db: sB.db, segment: sB.segment, segT: sB.segT,
+  };
+}
+
+/* Deterministic random bike index (0–9) for a given event timestamp.
+ * Each ring is attributed to exactly one bike, drawn uniformly from the
+ * pack by hashing the event time. Determinism matters because trails
+ * and rings are recomputed from past events every frame — a non-stable
+ * selection would make rings jitter between bikes between frames.
+ */
+function bikeIdxForEvent(eT) {
+  let x = ((eT * 10000) | 0) ^ 0xa53c91;
+  x = Math.imul(x ^ (x >>> 16), 2246822507) | 0;
+  x = Math.imul(x ^ (x >>> 13), 3266489917) | 0;
+  return ((x ^ (x >>> 16)) >>> 0) % 10;
 }
 
 /* ----- Scenario B: muscle car ---------------------------------------------*/
@@ -524,12 +866,17 @@ function buildMuscleTimeline() {
   for (const wp of southboundPath) {
     addDrive(tl, cur, wp.at, v, 88);
     if (wp.sig === 'state_s_400') {
-      // 400 S is the southern U-turn point — the muscle car rolls through
-      // on the green, pausing just long enough (2 s) to swing the U-turn,
-      // then heads back north. No roar-off (it never came to a full stop).
+      // 400 S is the southern U-turn point. The approach drive into the
+      // turn should be silent (no gear shifts), the brief U-turn itself
+      // gets a tight rev burst right at the start (the screech), and
+      // nothing during the rest of the 2 s swing. Acceleration out the
+      // other side resumes normal gear shifts.
+      tl.segments[tl.segments.length - 1].noShifts = true;
       addIdle(tl, wp.at, 2, {
         dbIdle: 70, dbPeak: 0, revCadenceS: 999,
-        signalId: wp.sig, roarOnExit: false, label: 'U-TURN',
+        signalId: wp.sig, roarOnExit: false,
+        roarOnEntry: true, entryPeak: 94,
+        label: 'U-TURN',
       });
     } else {
       addIdle(tl, wp.at, STOP_S, {...idleArgs, signalId: wp.sig});
@@ -631,7 +978,7 @@ function buildPizzaTimeline() {
       cur = wp.at;
     }
     // Idle at HQ between deliveries.
-    addIdle(tl, HQ, 35, {dbIdle: 60, dbPeak: 84, revCadenceS: 8, signalId: null, roarOnExit: false, label: 'AT HQ'});
+    addIdle(tl, HQ, 35, {dbIdle: 60, dbPeak: 84, revCadenceS: 8, signalId: null, roarOnExit: true, label: 'AT HQ'});
   }
   return finalizeTimeline(tl);
 }
@@ -647,11 +994,13 @@ const SCENARIOS = {
     slug: 'biker', label: 'BIKER CONVOY',
     mapView: {center: [-111.8881, 40.7700], zoom: 13.6},
     build() {
-      // The convoy is a single actor rendered as a morphing sprite: a
-      // streak-line while in motion (the bikes spread along the road) that
-      // contracts into a circle at each signal stop (the pack gathered) and
-      // stretches back out when the light turns green. One actor instead of
-      // ten cuts trail/head/ring rendering by ~10×.
+      // The convoy is a single timeline (the "leader") rendered as ten
+      // individual bike dots. Each dot samples the timeline at (t + dt_i)
+      // so positive-dt dots run ahead of the leader and negative-dt dots
+      // trail; they reconverge naturally during the long signal-stop
+      // idles because |dt| << idle duration. Trails, rings, and idle
+      // events still run off the single timeline (one source of truth,
+      // ~10× cheaper than ten independent timelines).
       const leader = buildBikerLeaderTimeline();
       return {
         actors: [{
@@ -660,7 +1009,7 @@ const SCENARIOS = {
           label: 'BIKER CONVOY · 10 BIKES',
           timeline: leader,
           offsetS: 0,
-          spriteKind: 'convoy_streak',
+          spriteKind: 'convoy_swarm',
         }],
         loopT: leader.loopT,
       };
@@ -679,7 +1028,7 @@ const SCENARIOS = {
     mapView: {center: [-111.8895, 40.7676], zoom: 14.2},
     build() {
       const tl = buildPizzaTimeline();
-      return {actors: [{id:'SUBARU', type:'subaru', label:'MUFFLER MOD · DELIVERY', timeline: tl, offsetS: 0}], loopT: tl.loopT};
+      return {actors: [{id:'SUBARU', type:'subaru', label:'Muffler Mod - 2AM Delivery', timeline: tl, offsetS: 0}], loopT: tl.loopT};
     },
   },
 };
@@ -705,9 +1054,9 @@ function getScenario(slug) {
 // are also injected occasionally. Burst intensity and shape complexity
 // both ramp with idle progress.
 //
-// The PRNG is seeded by the segment's start time so backward/forward
-// sampling produces identical rev patterns (required for cumulative trail
-// rendering and prediction).
+// The PRNG is seeded by the segment's start time so backward sampling
+// produces the same rev pattern as the live forward pass (required for
+// cumulative trail rendering).
 function idleRevTimes(seg) {
   if (!seg.revCadenceS || !seg.dbPeak) return [];
   const dur = seg.endT - seg.startT;
@@ -832,20 +1181,6 @@ function sampleAt(tl, t) {
   return {pos: last.to.slice(), kind: last.kind, db: last.dbCruise || last.dbIdle || 60, segment: last, segT: 0};
 }
 
-// Forward-prediction polyline: sample at [t, t+lookaheadS] every stepS.
-function predictPath(tl, t, lookaheadS = 300, stepS = 2) {
-  const pts = [];
-  const stops = [];
-  for (let dt = 0; dt <= lookaheadS; dt += stepS) {
-    const s = sampleAt(tl, t + dt);
-    pts.push(s.pos);
-    if (s.kind === 'idle' && s.segT < stepS && s.signalId) {
-      // Just entered an idle (stop) — mark it.
-      stops.push({at: s.pos.slice(), t: t + dt});
-    }
-  }
-  return {pts, stops};
-}
 
 // Trail polyline + per-point colors: sample at [t-lookbackS, t] every stepS.
 function trailSamples(tl, t, lookbackS = 600, stepS = 0.5) {
@@ -857,12 +1192,22 @@ function trailSamples(tl, t, lookbackS = 600, stepS = 0.5) {
   return out;
 }
 
-// Events (rev/roar/arrive) within a backward window, used to render pulse rings.
+// Events (rev/roar/arrive/pulse) within a backward window, used to
+// render pulse rings. Pulse fires continuously for all actors during
+// drive segments — cadence and intensity are both driven by the
+// segment's acceleration phase (dense + loud at easeIn/easeOut edges,
+// sparse + quiet through cruise). Idles still use the rev knock bursts
+// for stop-light revving and the entry/exit roar bursts.
 function eventsBetween(tl, t, lookbackS = 5) {
   const out = [];
   const t0 = t - lookbackS;
   const loopT = tl.loopT;
   const baseK = Math.floor(t / loopT);
+  // Mid-drive gear-shift bursts were removed: the front-loaded launch
+  // wave below (fired at the start of every drive that leaves a signal
+  // idle) covers the loud acceleration phase densely, and the rest of
+  // the drive stays quiet. The swarm pulse (convoy only) keeps a low
+  // baseline ring stream so the cluster always reads as alive.
   for (const seg of tl.segments) {
     if (seg.kind !== 'idle') continue;
     const segDur = seg.endT - seg.startT;
@@ -881,38 +1226,92 @@ function eventsBetween(tl, t, lookbackS = 5) {
       // Arrive (a softer "arrival" pulse when entering an idle)
       const arrT = segStartAbs;
       if (arrT > t0 && arrT <= t) out.push({t: arrT, pos: seg.from, kind: 'arrive', db: (seg.dbPeak || 80) - 6, signalId: seg.signalId, progress: 0});
-      // Roar — fires a "wave" of 8–12 rings as the car peels off the
-      // stop and accelerates down the street. Each ring spawns at the
-      // actor's actual position at spawn time, so the wave visibly
-      // trails the accelerating car for several seconds. Peak dB and
-      // ring size both taper across the wave so the leading edge reads
-      // as the loudest impact.
-      if (seg.roarOnExit) {
-        const seed = (seg.startT * 1000) | 0;
-        const roarRand = (j) => {
-          let x = (seed ^ Math.imul(j + 1, 1597334677)) | 0;
-          x = Math.imul(x ^ (x >>> 15), 2246822507) | 0;
+      // Entry rev — a tight burst right at the moment the car arrives
+      // (used for the 400 S U-turn where the rev should fire at the
+      // start of the turn, not at the end). Fires 4–6 rings spaced
+      // ~0.12–0.22 s apart so the burst is contained inside the brief
+      // idle, all at the idle position.
+      if (seg.roarOnEntry) {
+        const seed = ((seg.startT * 1000) | 0) ^ 0x1357;
+        const entryRand = (j) => {
+          let x = (seed ^ Math.imul(j + 1, 2246822507)) | 0;
+          x = Math.imul(x ^ (x >>> 15), 1597334677) | 0;
           x = Math.imul(x ^ (x >>> 13), 3266489917) | 0;
           x = (x ^ (x >>> 16)) >>> 0;
           return (x % 100000) / 100000;
         };
-        const ringCount = 8 + Math.floor(roarRand(0) * 5); // 8–12
+        const ringCount = 4 + Math.floor(entryRand(0) * 3); // 4–6
         let acc = 0;
         for (let j = 0; j < ringCount; j++) {
-          const eT = segStartAbs + segDur + acc;
+          const eT = segStartAbs + acc;
           if (eT > t0 && eT <= t) {
-            const pos = sampleAt(tl, eT).pos;
-            const taper = j / Math.max(1, ringCount - 1); // 0 → 1 across wave
+            const taper = j / Math.max(1, ringCount - 1);
             out.push({
-              t: eT, pos, kind: 'roar',
-              db: (seg.dbPeak || 90) - taper * 6,
+              t: eT, pos: seg.from, kind: 'roar',
+              db: (seg.entryPeak ?? seg.dbPeak ?? 90) - taper * 3,
               signalId: seg.signalId, progress: 1,
               waveTaper: taper,
             });
           }
-          // 0.25–0.55 s between rings — wave spans ~3–5 s total.
-          acc += 0.25 + roarRand(j + 1) * 0.30;
+          acc += 0.12 + entryRand(j + 1) * 0.10;
         }
+      }
+    }
+  }
+  // ----- Continuous drive pulse (all actors) -----
+  // Rings fire continuously while the vehicle is moving. Cadence and
+  // intensity are both driven by the segment's acceleration phase:
+  //   - easeIn (after a stop): dense + loud at u=0, tapering to cruise.
+  //   - easeOut (approaching a stop): cruise → dense + loud at u=1.
+  //   - Full s-curve drive: dense at both edges, sparse in the middle.
+  //   - Drive→drive seam (no easing, e.g. the Capitol curve mid-segments):
+  //     low constant cadence — quiet cruise.
+  // Cadence ∈ [0.10 s, 0.55 s] · intensity drives ring size, opacity,
+  // strokeW and the per-event bloom contribution in the renderer.
+  for (const seg of tl.segments) {
+    if (seg.kind !== 'drive') continue;
+    const segDur = seg.endT - seg.startT;
+    if (segDur < 0.3) continue;
+    const pulseSeed = ((seg.startT * 1000) | 0) ^ 0xb1a5e1;
+    const pulseRand = (j) => {
+      let x = (pulseSeed ^ Math.imul(j + 1, 1597334677)) | 0;
+      x = Math.imul(x ^ (x >>> 15), 2246822507) | 0;
+      x = Math.imul(x ^ (x >>> 13), 3266489917) | 0;
+      x = (x ^ (x >>> 16)) >>> 0;
+      return (x % 100000) / 100000;
+    };
+    // Acceleration factor at position u ∈ [0,1]. Squared falloff so the
+    // dense window is concentrated near the seg edges, not spread thin.
+    const accelAt = (u) => {
+      let f = 0;
+      if (seg.easeIn)  { const a = Math.max(0, 1 - 2 * u);   f = Math.max(f, a * a); }
+      if (seg.easeOut) { const a = Math.max(0, 2 * u - 1);   f = Math.max(f, a * a); }
+      if (!seg.easeIn && !seg.easeOut) f = 0.25; // mid-route cruise baseline
+      return f;
+    };
+    const dbCruise = seg.dbCruise || 80;
+    const MIN_CAD = 0.10;
+    const MAX_CAD = 0.55;
+    for (const k of [baseK - 1, baseK, baseK + 1]) {
+      const segStartAbs = seg.startT + k * loopT;
+      let acc = 0;
+      let pulseIdx = 0;
+      while (acc < segDur) {
+        const eT = segStartAbs + acc;
+        const u = acc / segDur;
+        const accel = accelAt(u);
+        if (eT > t0 && eT <= t) {
+          out.push({
+            t: eT, pos: sampleAt(tl, eT).pos, kind: 'pulse',
+            db: dbCruise + accel * 6, progress: 1, accel,
+          });
+        }
+        // Dense at high accel, sparse at low accel. Small jitter so the
+        // pattern doesn't feel mechanical.
+        const cadence = MIN_CAD + (MAX_CAD - MIN_CAD) * (1 - accel);
+        const jitter = 0.85 + pulseRand(pulseIdx + 1) * 0.30;
+        acc += cadence * jitter;
+        pulseIdx++;
       }
     }
   }
@@ -928,10 +1327,10 @@ const sim = {
   scenarioElapsedS: 0,         // accumulated sim seconds with speed applied
   scenarioPreSeedS: 0,         // initial offset so trails are immediately full
   lastFrameMs: 0,
-  playbackSpeed: 1,
+  playbackSpeed: 4,
   paused: false,
-  predictionVisible: true,
   seeking: false,              // true while user is dragging the scrubber
+  loopComplete: false,         // hit end of loop — next play click restarts
 };
 
 /* ============================================================================
@@ -955,19 +1354,32 @@ let mapReady = false;
 const sources = {};
 map.on('load', () => {
   // ===== Microphones =====
+  // Each mic carries `color`, `haloOpacity`, and `intensity` properties
+  // that the render loop updates per frame as nearby actors activate it.
+  // Idle = teal; hot = white. Halo also brightens when activated.
   sources.microphones = map.addSource('microphones', {type:'geojson',
     data: {type:'FeatureCollection', features: STATIONS.map(s => ({
-      type:'Feature', geometry:{type:'Point', coordinates:[s.lon, s.lat]}, properties:{id: s.id},
+      type:'Feature', geometry:{type:'Point', coordinates:[s.lon, s.lat]},
+      properties:{id: s.id, color: '#2dd4bf', haloOpacity: 0.10, intensity: 0},
     }))}
   }).getSource('microphones');
   map.addLayer({
+    id: 'microphones-halo', type:'circle', source:'microphones',
+    paint:{
+      'circle-radius': 11,
+      'circle-color': ['get', 'color'],
+      'circle-opacity': ['get', 'haloOpacity'],
+      'circle-blur': 0.85,
+    },
+  });
+  map.addLayer({
     id: 'microphones-layer', type:'circle', source:'microphones',
     paint:{
-      'circle-radius': 3.5,
-      'circle-color': '#3e7e7e',
-      'circle-opacity': 0.55,
-      'circle-stroke-width': 1,
-      'circle-stroke-color': '#1c4242',
+      'circle-radius': 4.5,
+      'circle-color': ['get', 'color'],
+      'circle-opacity': 0.92,
+      'circle-stroke-width': 1.4,
+      'circle-stroke-color': '#0a0a0a',
     },
   });
 
@@ -980,6 +1392,45 @@ map.on('load', () => {
       'circle-color': ['get', 'color'],
       'circle-opacity': ['get', 'opacity'],
       'circle-blur': 0.7,
+    },
+  });
+
+  // ===== Predicted route (fuchsia Strava-style stack) =====
+  // Sits beneath the actual trail so that as the convoy walks the
+  // predicted path, the warm trail visibly overtakes the fuchsia ghost.
+  // Fuchsia was chosen because it's the most-distant hue from both the
+  // warm orange/red streamer trail and the teal mic baseline — it reads
+  // unambiguously as "prediction" against the dark map.
+  // Feature `opacity` is updated per-frame from prediction certainty:
+  // far away → opaque (speculative); near/on the route → faded.
+  map.addSource('predRoute', {type:'geojson', data: {type:'FeatureCollection', features: []}});
+  map.addLayer({
+    id: 'predRoute-bloom', type:'line', source:'predRoute',
+    layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{
+      'line-color': '#d946ef',
+      'line-width': 30,
+      'line-blur': 22,
+      'line-opacity': ['*', ['get', 'opacity'], 0.65],
+    },
+  });
+  map.addLayer({
+    id: 'predRoute-glow', type:'line', source:'predRoute',
+    layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{
+      'line-color': '#e879f9',
+      'line-width': 13,
+      'line-blur': 7,
+      'line-opacity': ['*', ['get', 'opacity'], 0.92],
+    },
+  });
+  map.addLayer({
+    id: 'predRoute-line', type:'line', source:'predRoute',
+    layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{
+      'line-color': '#fdf4ff',
+      'line-width': 3.4,
+      'line-opacity': ['get', 'opacity'],
     },
   });
 
@@ -1017,70 +1468,6 @@ map.on('load', () => {
     },
   });
 
-  // ===== Predictions (dashed forward path) =====
-  map.addSource('predictions', {type:'geojson', data: {type:'FeatureCollection', features: []}});
-  map.addLayer({
-    id: 'predictions-layer', type:'line', source:'predictions',
-    layout: {'line-cap':'round'},
-    paint:{
-      'line-color': ['get', 'color'],
-      'line-width': 2,
-      'line-opacity': 0.55,
-      'line-dasharray': [2, 2.5],
-    },
-  });
-  map.addSource('predstops', {type:'geojson', data: {type:'FeatureCollection', features: []}});
-  map.addLayer({
-    id: 'predstops-outer', type:'circle', source:'predstops',
-    paint:{
-      'circle-radius': 5,
-      'circle-color': 'rgba(0,0,0,0)',
-      'circle-stroke-width': 1.6,
-      'circle-stroke-color': '#d0a060',
-      'circle-stroke-opacity': 0.85,
-    },
-  });
-  map.addLayer({
-    id: 'predstops-inner', type:'circle', source:'predstops',
-    paint:{
-      'circle-radius': 1.6,
-      'circle-color': '#d0a060',
-      'circle-opacity': 0.9,
-    },
-  });
-
-  // ===== Convoy streak (morphing sprite — biker scenario only) =====
-  map.addSource('streak', {type:'geojson', data: {type:'FeatureCollection', features: []}});
-  map.addLayer({
-    id: 'streak-bloom', type:'line', source:'streak',
-    layout:{'line-cap':'round'},
-    paint:{
-      'line-color': ['get', 'color'],
-      'line-width': ['*', ['get', 'lineness'], 22],
-      'line-blur': 14,
-      'line-opacity': ['*', ['get', 'lineness'], 0.45],
-    },
-  });
-  map.addLayer({
-    id: 'streak-glow', type:'line', source:'streak',
-    layout:{'line-cap':'round'},
-    paint:{
-      'line-color': ['get', 'color'],
-      'line-width': ['*', ['get', 'lineness'], 12],
-      'line-blur': 5,
-      'line-opacity': ['*', ['get', 'lineness'], 0.7],
-    },
-  });
-  map.addLayer({
-    id: 'streak-line', type:'line', source:'streak',
-    layout:{'line-cap':'round'},
-    paint:{
-      'line-color': ['get', 'color'],
-      'line-width': ['*', ['get', 'lineness'], 5],
-      'line-opacity': ['get', 'lineness'],
-    },
-  });
-
   // ===== Pulse rings (rev/roar/arrive) =====
   // Bloom residue sits under the ring strokes: each ring leaves a soft
   // blurred dot at its spawn position that fades over ~6 s, so the wave
@@ -1105,26 +1492,6 @@ map.on('load', () => {
       'circle-stroke-color': ['get', 'color'],
       'circle-stroke-width': ['get', 'strokeW'],
       'circle-stroke-opacity': ['get', 'opacity'],
-    },
-  });
-
-  // ===== Squad cars (static blue squares) =====
-  map.addSource('squad', {type:'geojson', data: {type:'FeatureCollection', features:
-    SQUAD_CARS.map(c => ({type:'Feature', geometry:{type:'Point', coordinates: c.at}, properties:{id: c.id}}))
-  }});
-  map.addLayer({
-    id: 'squad-shadow', type:'circle', source:'squad',
-    paint:{
-      'circle-radius': 11, 'circle-color': '#4080c0', 'circle-opacity': 0.18, 'circle-blur': 0.6,
-    },
-  });
-  map.addLayer({
-    id: 'squad-layer', type:'circle', source:'squad',
-    paint:{
-      'circle-radius': 5.5,
-      'circle-color': '#5095d0',
-      'circle-stroke-width': 1.5,
-      'circle-stroke-color': '#0a0a0a',
     },
   });
 
@@ -1196,11 +1563,384 @@ map.on('load', () => {
     },
   });
 
-  for (const id of ['microphones','noisepools','trails','predictions','predstops','ringBloom','rings','squad','hq','heads','streak']) {
+  for (const id of ['microphones','noisepools','predRoute','trails','ringBloom','rings','hq','heads']) {
     sources[id] = map.getSource(id);
   }
   mapReady = true;
 });
+
+/* ============================================================================
+ * 9b. TERMINAL CONSOLE
+ *
+ * Bash-styled status feed inside the top-left header. Emission is keyed off
+ * sim time (so 4× / 8× playback scales the feed naturally) and off live
+ * actor state (dB breaches, idle starts) so terminal lines line up with
+ * what the viewer is actually watching on the map.
+ *
+ * Three sources of lines:
+ *   1. Boot schedule — fixed sequence at scenario start (mic check,
+ *      calibration, signature DB load, stream open).
+ *   2. Per-loop AI milestones — fingerprint → match → pattern → predict
+ *      → dispatch, re-fired each loop so a viewer who joins late still
+ *      sees the AI prediction story.
+ *   3. Live events — dB-threshold breaches and new signal-idle stops,
+ *      driven by the current frame's actor sample.
+ * ==========================================================================*/
+const term = (() => {
+  const termEl = document.querySelector('[data-term]');
+  const spinnerEl = document.querySelector('[data-spinner]');
+  const activeEl = document.querySelector('[data-active-msg]');
+  const SPINNER = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+  const MAX_LINES = 120;
+  const PROMPT =
+    '<span class="t-user">noise-ai@slc-tracer</span>' +
+    '<span class="t-sep">:</span>' +
+    '<span class="t-path">~/scan</span>' +
+    '<span class="t-sym">$</span> ';
+  let spinIdx = 0;
+  function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  function add(html) {
+    const el = document.createElement('div');
+    el.className = 'tline';
+    el.innerHTML = html;
+    termEl.appendChild(el);
+    while (termEl.children.length > MAX_LINES) termEl.removeChild(termEl.firstChild);
+    termEl.scrollTop = termEl.scrollHeight;
+  }
+  return {
+    cmd:    (c)         => add(PROMPT + '<span class="t-acc">' + esc(c) + '</span>'),
+    info:   (s, tag)    => add('<span class="t-info">[' + (tag || 'INFO')  + ']</span> ' + s),
+    ok:     (s, tag)    => add('<span class="t-ok">['     + (tag || 'OK')    + ']</span> ' + s),
+    warn:   (s, tag)    => add('<span class="t-warn">['   + (tag || 'WARN')  + ']</span> ' + s),
+    alert:  (s, tag)    => add('<span class="t-alert">['  + (tag || 'ALERT') + ']</span> ' + s),
+    match:  (s, tag)    => add('<span class="t-match">['  + (tag || 'MATCH') + ']</span> ' + s),
+    dim:    (s)         => add('<span class="t-dim">' + s + '</span>'),
+    plain:  (s)         => add(s),
+    clear:  ()          => { termEl.innerHTML = ''; },
+    setActive: (msg)    => { if (activeEl) activeEl.textContent = msg; },
+    tickSpinner: () => {
+      spinIdx = (spinIdx + 1) % SPINNER.length;
+      if (spinnerEl) spinnerEl.textContent = SPINNER[spinIdx];
+    },
+  };
+})();
+setInterval(() => term.tickSpinner(), 85);
+
+function termRandHex(n){
+  const c = '0123456789abcdef'; let s = '';
+  for (let i = 0; i < n; i++) s += c[Math.floor(Math.random() * 16)];
+  return s;
+}
+function termSigName(sigId) {
+  if (!sigId) return 'mobile source';
+  return sigId.replace(/_/g, ' ').toUpperCase();
+}
+
+const termState = {
+  scenSlug: null,
+  bootFired: null,    // Set<string>
+  bootSched: null,    // [{id, at, fn}]
+  loopFired: null,    // Set<number>
+  loopSched: null,    // [{at, fn}]
+  loopsSeen: 0,
+  prevLoopFrac: 0,
+  inBreach: false,
+  lastIdleSigId: null,
+  lastHeartbeatT: -999,
+  // Biker-only predicted-route state.
+  routePredicted: false,         // true after the DISPLAY milestone fires
+  intersectionsPassed: null,     // Set<string> of staging intersections crossed
+};
+
+function makeBootSchedule(slug) {
+  const label = (slug || '').toUpperCase();
+  return [
+    {id:'b0', at:0.05, fn:() => {
+      term.cmd('./noise-tracer --scenario=' + label + ' --live');
+      term.setActive('initializing acoustic array');
+    }},
+    {id:'b1', at:1.10, fn:() => {
+      term.cmd('mic_array status --grid=UQI-pilot');
+      term.dim('scanning 40-node microphone grid…');
+      term.setActive('checking mic array');
+    }},
+    {id:'b2', at:2.70, fn:() => {
+      term.ok('40/40 microphones online <span class="t-dim">(beamform: dual-tap)</span>');
+    }},
+    {id:'b3', at:3.20, fn:() => {
+      term.cmd('calibrate --ambient --window=60s');
+      term.setActive('calibrating ambient floor');
+    }},
+    {id:'b4', at:4.40, fn:() => {
+      term.ok('ambient floor locked: 42.6 dB <span class="t-dim">(±1.1)</span>');
+    }},
+    {id:'b5', at:4.85, fn:() => {
+      term.cmd('load_signatures --db=offenders.kdb');
+      term.setActive('loading offender signatures');
+    }},
+    {id:'b6', at:6.10, fn:() => {
+      term.ok('18,432 acoustic signatures indexed');
+    }},
+    {id:'b7', at:6.55, fn:() => {
+      term.cmd('predict --tail --confidence=0.85');
+      term.setActive('opening live prediction stream');
+    }},
+    {id:'b8', at:7.80, fn:() => {
+      term.info('streaming · 40-mic array · awaiting breach', 'LIVE');
+      term.setActive('monitoring · ambient');
+    }},
+  ];
+}
+
+function makeLoopSchedule(slug) {
+  const PATTERN_NAMES = {
+    biker:  'CONVOY-NIGHT-RUN',
+    muscle: 'CORRIDOR-CRUISE-LAP',
+    pizza:  'RADIAL-DELIVERY-LOOP',
+  };
+  const PRIOR_COUNTS = { biker: 17, muscle: 9, pizza: 4 };
+  const PLATE_PREFIX = { biker: 'UT-MOTO', muscle: 'UT-V8', pizza: 'UT-DLV' };
+  return [
+    {at:0.10, fn:() => {
+      term.cmd('fingerprint --window=10s --bands=8');
+      term.setActive('calculating digital audio fingerprint');
+    }},
+    {at:0.16, fn:() => {
+      const hash = termRandHex(8);
+      term.ok('signature hash <span class="t-dim">' + hash + '</span> extracted');
+      term.cmd('match --hash=' + hash + ' --since=90d');
+      term.setActive('cross-referencing offender history');
+    }},
+    {at:0.26, fn:() => {
+      const oid = 1000 + Math.floor(Math.random() * 8999);
+      const priors = PRIOR_COUNTS[slug] || 6;
+      term.match('repeat offender · ID <span class="t-warn">#' + oid + '</span> · ' +
+                 '<span class="t-warn">' + priors + '</span> prior incidents');
+      term.setActive('identifying offense pattern');
+    }},
+    {at:0.36, fn:() => {
+      const plate = (PLATE_PREFIX[slug] || 'UT-XXX') + '-' +
+                    String(100 + Math.floor(Math.random() * 899));
+      term.info('plate inference: <span class="t-warn">' + plate +
+                '</span> <span class="t-dim">(corroborated by 6 mics)</span>', 'PLATE');
+    }},
+    {at:0.48, fn:() => {
+      const pat = PATTERN_NAMES[slug] || 'PATTERN-X';
+      term.info('pattern locked: <span class="t-warn">' + pat + '</span>', 'PATTERN');
+      term.setActive('recognizing offense pattern');
+    }},
+    {at:0.62, fn:() => {
+      term.cmd('predict_path --horizon=90s --topk=3');
+      term.setActive('predicting next 90s of path');
+    }},
+    {at:0.72, fn:() => {
+      const conf = 88 + Math.floor(Math.random() * 9);
+      term.ok('path forecast · <span class="t-warn">' + conf + '%</span> confidence · 8 nodes ahead', 'ROUTE');
+      term.setActive('drafting enforcement alert');
+    }},
+    {at:0.88, fn:() => {
+      const unit = 40 + Math.floor(Math.random() * 25);
+      term.alert('dispatching to SLCPD <span class="t-warn">unit ' + unit + '</span>', 'ALERT');
+      term.setActive('alert sent · resuming monitoring');
+    }},
+  ];
+}
+
+const HEARTBEATS = [
+  'scanning 40-mic array · no breach',
+  'tracking ambient floor · stable',
+  'correlating cross-mic signatures',
+  'beamforming · azimuth lock',
+  'tail buffer 600s · stream healthy',
+];
+
+function updateTerm(scen, t) {
+  // Scenario change → reset terminal state and prime the boot schedule.
+  if (termState.scenSlug !== sim.scenarioSlug) {
+    termState.scenSlug = sim.scenarioSlug;
+    termState.bootFired = new Set();
+    termState.loopFired = new Set();
+    termState.loopsSeen = 0;
+    termState.prevLoopFrac = 0;
+    termState.inBreach = false;
+    termState.lastIdleSigId = null;
+    termState.lastHeartbeatT = -999;
+    termState.routePredicted = false;
+    termState.intersectionsPassed = new Set();
+    if (sources.predRoute) sources.predRoute.setData({type:'FeatureCollection', features:[]});
+    term.clear();
+    if (!sim.scenarioSlug) {
+      term.setActive('awaiting scenario');
+      term.dim('# select a scenario to begin acoustic monitoring.');
+      termState.bootSched = null;
+      termState.loopSched = null;
+      return;
+    }
+    termState.bootSched = makeBootSchedule(sim.scenarioSlug);
+    termState.loopSched = makeLoopSchedule(sim.scenarioSlug);
+  }
+  if (!scen || !termState.bootSched) return;
+
+  // 1. Boot schedule (fires once per scenario activation).
+  for (const item of termState.bootSched) {
+    if (!termState.bootFired.has(item.id) && t >= item.at) {
+      item.fn();
+      termState.bootFired.add(item.id);
+    }
+  }
+  if (t < 7.8) return; // Don't run live/loop logic during boot.
+
+  // 2. Live events — sample the primary actor for breach + idle detection.
+  const actor = scen.actors[0];
+  const s = sampleAt(actor.timeline, t - actor.offsetS);
+  if (s.db >= 85 && !termState.inBreach) {
+    termState.inBreach = true;
+    const sig = termSigName(s.signalId);
+    term.alert('decibel breach · <span class="t-warn">' + s.db.toFixed(1) +
+               ' dB</span> @ <span class="t-dim">' + sig + '</span>', 'BREACH');
+  } else if (s.db < 78 && termState.inBreach) {
+    termState.inBreach = false;
+  }
+  if (s.kind === 'idle' && s.signalId && s.signalId !== 'congregation' &&
+      s.segment && s.segment.dbPeak > 0 && s.signalId !== termState.lastIdleSigId) {
+    termState.lastIdleSigId = s.signalId;
+    term.info('vehicle stationary at <span class="t-dim">' + termSigName(s.signalId) +
+              '</span> · rev signature building', 'STOP');
+  }
+  if (s.kind !== 'idle') termState.lastIdleSigId = null;
+
+  // 3. Per-loop AI milestones — reset on each loop wrap so the prediction
+  //    story re-fires every cycle. Loop wrap detected by a large backward
+  //    jump in loopFraction (e.g. 0.98 → 0.02).
+  const lf = loopFraction();
+  if (lf + 0.5 < termState.prevLoopFrac) {
+    termState.loopFired = new Set();
+    termState.routePredicted = false;
+    termState.intersectionsPassed = new Set();
+    if (sources.predRoute) sources.predRoute.setData({type:'FeatureCollection', features:[]});
+    termState.loopsSeen++;
+    term.dim('# --- loop ' + (termState.loopsSeen + 1) + ' · resampling ---');
+  }
+  for (let i = 0; i < termState.loopSched.length; i++) {
+    if (!termState.loopFired.has(i) && lf >= termState.loopSched[i].at) {
+      termState.loopSched[i].fn();
+      termState.loopFired.add(i);
+    }
+  }
+  termState.prevLoopFrac = lf;
+
+  // 4. Heartbeat — quiet status line every ~12 sim-seconds so the feed
+  //    keeps moving during long quiet stretches.
+  if (t - termState.lastHeartbeatT > 12) {
+    termState.lastHeartbeatT = t;
+    const msg = HEARTBEATS[Math.floor(Math.random() * HEARTBEATS.length)];
+    term.dim('· ' + msg);
+  }
+
+  // 4.5. Predicted-route reveal (biker). Fires the first time the
+  //      convoy crosses the southernmost staging intersection so the
+  //      forked "lightning bolt" appears originating from the bikes
+  //      themselves while there are still recalculation points ahead
+  //      to ramp confidence through.
+  if (sim.scenarioSlug === 'biker' && !termState.routePredicted) {
+    const _la = scen.actors[0];
+    const _lp = sampleAt(_la.timeline, t - _la.offsetS).pos;
+    const REVEAL_LAT = 40.758500;  // ~500 S, two stops south of the first branch point
+    if (_lp[1] >= REVEAL_LAT) {
+      term.cmd('render_route --predicted --branches=3 --source=offender_history');
+      term.info('displaying predicted route · <span class="t-dim">3 candidate branches · trained on 17 prior incidents</span>', 'DISPLAY');
+      termState.routePredicted = true;
+      term.setActive('tracking branch confidences');
+    }
+  }
+
+  // 5. Predicted-route lightning bolt (biker only). Three branches
+  //    radiate from the convoy's current position: a Capitol branch
+  //    that follows the actual route to the congregation, plus east
+  //    and west alternatives that fork from the next staging
+  //    intersection ahead. As the bikes cross each staging intersection
+  //    the prediction recalculates: the Capitol branch tightens to a
+  //    bright bolt, the alternatives dim and eventually drop out.
+  if (sim.scenarioSlug === 'biker' && termState.routePredicted && sources.predRoute) {
+    const leadActor = scen.actors[0];
+    const leadPos = sampleAt(leadActor.timeline, t - leadActor.offsetS).pos;
+
+    // 5a. Detect newly crossed staging intersections → emit a RECALC
+    //     echo and bump the confidence stage by one.
+    for (const ix of BRANCH_INTERSECTIONS) {
+      if (!termState.intersectionsPassed.has(ix.name) && leadPos[1] >= ix.lat) {
+        termState.intersectionsPassed.add(ix.name);
+        const stage = Math.min(termState.intersectionsPassed.size,
+                               ROUTE_CONFIDENCE_STAGES.length - 1);
+        const capConf = ROUTE_CONFIDENCE_STAGES[stage].capitol;
+        term.cmd('recalc_paths --crossed=' + ix.name);
+        term.info('route recalc · Capitol confidence <span class="t-warn">' +
+                  Math.round(capConf * 100) + '%</span>', 'RECALC');
+        if (stage >= ROUTE_CONFIDENCE_STAGES.length - 1) {
+          term.setActive('route locked · congregation imminent');
+        }
+      }
+    }
+
+    const stage = Math.min(termState.intersectionsPassed.size,
+                           ROUTE_CONFIDENCE_STAGES.length - 1);
+    const conf = ROUTE_CONFIDENCE_STAGES[stage];
+
+    // 5b. Capitol branch — from the leader's position along the
+    //     forecasted route through the curve to the congregation.
+    //     Prepended with bikePos when the leader is off the route
+    //     (south of s_200) so the trunk visibly emanates from the
+    //     bikes rather than starting at the route's anchor point.
+    const features = [];
+    const proj = projectOnPolyline(leadPos, FORECASTED_ROUTE);
+    const remaining = routeAhead(FORECASTED_ROUTE, proj.segIdx, proj.t);
+    const capitolCoords = proj.distM > 30 ? [leadPos, ...remaining] : remaining;
+    if (capitolCoords.length >= 2 &&
+        dist(capitolCoords[0], capitolCoords[capitolCoords.length-1]) > 5) {
+      features.push({
+        type:'Feature',
+        geometry:{type:'LineString', coordinates: capitolCoords},
+        properties:{ opacity: conf.capitol, branch: 'capitol' },
+      });
+    }
+
+    // 5c. East / West alternative branches — only shown while there's
+    //     still a future staging intersection (the fork point) AND the
+    //     stage hasn't fully collapsed onto the Capitol route.
+    const branchIx = nextBranchAhead(leadPos);
+    if (branchIx) {
+      const fork = [branchIx.lon, branchIx.lat];
+      if (conf.east > 0.01) {
+        features.push({
+          type:'Feature',
+          geometry:{type:'LineString', coordinates: [
+            leadPos,
+            fork,
+            [ALT_BRANCH_END_LON_E, branchIx.lat],
+            [ALT_BRANCH_END_LON_E, branchIx.lat + 0.0042],
+          ]},
+          properties:{ opacity: conf.east, branch: 'east' },
+        });
+      }
+      if (conf.west > 0.01) {
+        features.push({
+          type:'Feature',
+          geometry:{type:'LineString', coordinates: [
+            leadPos,
+            fork,
+            [ALT_BRANCH_END_LON_W, branchIx.lat],
+            [ALT_BRANCH_END_LON_W, branchIx.lat - 0.0042],
+          ]},
+          properties:{ opacity: conf.west, branch: 'west' },
+        });
+      }
+    }
+
+    sources.predRoute.setData({type:'FeatureCollection', features});
+  } else if (sources.predRoute) {
+    sources.predRoute.setData({type:'FeatureCollection', features:[]});
+  }
+}
 
 /* ============================================================================
  * 10. RENDER FRAME
@@ -1216,21 +1956,31 @@ function renderFrame() {
     sources.rings.setData({type:'FeatureCollection', features:[]});
     sources.ringBloom.setData({type:'FeatureCollection', features:[]});
     sources.noisepools.setData({type:'FeatureCollection', features:[]});
-    sources.predictions.setData({type:'FeatureCollection', features:[]});
-    sources.predstops.setData({type:'FeatureCollection', features:[]});
+    sources.predRoute.setData({type:'FeatureCollection', features:[]});
     sources.hq.setData({type:'FeatureCollection', features:[]});
-    sources.streak.setData({type:'FeatureCollection', features:[]});
+    // Reset microphones to their idle (teal) baseline when no scenario is playing.
+    sources.microphones.setData({type:'FeatureCollection', features: STATIONS.map(s => ({
+      type:'Feature', geometry:{type:'Point', coordinates:[s.lon, s.lat]},
+      properties:{id: s.id, color: '#2dd4bf', haloOpacity: 0.10, intensity: 0},
+    }))});
+    updateTerm(null, 0);
     return;
   }
   const t = sim.scenarioElapsedS;
 
   // ----- Trails -----
-  // Lookback grows with elapsed time so the trail (and its bloom) accumulates
-  // as the scenario plays. At t=0 there's no trail at all; after one full
-  // loop the trail starts overlapping its own past passes and the layered
-  // bloom builds up like a Strava heatmap on heavily-traveled streets.
-  const lookbackS = Math.min(600, sim.scenarioElapsedS);
+  // Lookback grows with elapsed time so the trail (and its bloom) builds
+  // up across the current loop iteration. At each loop wrap the trail
+  // resets to zero (capped by `scenarioElapsedS % loopT`) so the
+  // previous pass's bloom doesn't linger into the fresh loop.
+  const loopT = scen.loopT || sim.scenarioElapsedS || 1;
+  const lookbackS = Math.min(600, sim.scenarioElapsedS, sim.scenarioElapsedS % loopT);
   const trailFts = [];
+  // When the trail crosses the loop seam (last segment of a pass back to
+  // the start of the next), consecutive samples can jump hundreds of
+  // metres — without splitting, the polyline draws a single huge diagonal
+  // across the whole map. Any jump > LOOP_BREAK_M starts a fresh polyline.
+  const LOOP_BREAK_M = 100;
   for (const actor of scen.actors) {
     if (lookbackS < 1) continue;
     const samples = trailSamples(actor.timeline, t - actor.offsetS, lookbackS, 1.5);
@@ -1240,114 +1990,255 @@ function renderFrame() {
       const slice = samples.slice(i, Math.min(samples.length, i + CHUNK + 1));
       if (slice.length < 2) continue;
       const avgDb = slice.reduce((a, s) => a + s.db, 0) / slice.length;
-      const ageFrac = i / Math.max(1, samples.length - 1); // 0 = oldest, ~1 = newest
-      // Higher floor so even 10-min-old samples remain glowy (Strava style).
+      const ageFrac = i / Math.max(1, samples.length - 1);
       const opacity = 0.35 + 0.65 * ageFrac;
-      trailFts.push({
-        type:'Feature',
-        geometry:{type:'LineString', coordinates: slice.map(s => s.pos)},
-        properties:{color: colorForDb(avgDb), opacity, actorId: actor.id},
-      });
+      const baseProps = {color: colorForDb(avgDb), opacity, actorId: actor.id};
+      // Walk slice and emit one LineString per continuous run; break on
+      // jumps larger than LOOP_BREAK_M.
+      let run = [slice[0].pos];
+      for (let k = 1; k < slice.length; k++) {
+        if (dist(slice[k-1].pos, slice[k].pos) > LOOP_BREAK_M) {
+          if (run.length >= 2) {
+            trailFts.push({type:'Feature', geometry:{type:'LineString', coordinates: run}, properties: baseProps});
+          }
+          run = [slice[k].pos];
+        } else {
+          run.push(slice[k].pos);
+        }
+      }
+      if (run.length >= 2) {
+        trailFts.push({type:'Feature', geometry:{type:'LineString', coordinates: run}, properties: baseProps});
+      }
     }
   }
   sources.trails.setData({type:'FeatureCollection', features: trailFts});
 
-  // ----- Heads + (convoy) streak sprite -----
+  // ----- Heads -----
   const headFts = [];
-  const streakFts = [];
+  const actorSnapshots = []; // {pos, db, kind} per actor, used by the camera follow
   for (const actor of scen.actors) {
     const s = sampleAt(actor.timeline, t - actor.offsetS);
-    const idling = s.kind === 'idle';
-    const breath = idling ? 1 + Math.sin(t * 4 + actor.id.charCodeAt(0)) * 0.18 : 1;
-    let radiusBase = 5.5;
-    if (actor.spriteKind === 'convoy_streak') {
-      // lineness: 1 = fully stretched streak, 0 = collapsed circle.
-      // Grow over the first 1s of a drive segment; shrink over the first 1s
-      // of an idle segment.
-      const MORPH_S = 1.0;
-      const lineness = s.kind === 'drive'
-        ? Math.min(1, s.segT / MORPH_S)
-        : Math.max(0, 1 - s.segT / MORPH_S);
-      // Direction: drive segment uses its own vector; idle inherits the
-      // direction of the most recent drive segment so the streak retracts
-      // along the lane.
-      let dir = [0, 1];
-      if (s.kind === 'drive') {
-        dir = [s.segment.to[0] - s.segment.from[0], s.segment.to[1] - s.segment.from[1]];
-      } else {
-        const segs = actor.timeline.segments;
-        const idx = segs.indexOf(s.segment);
-        for (let k = idx - 1; k >= 0; k--) {
-          if (segs[k].kind === 'drive') {
-            dir = [segs[k].to[0] - segs[k].from[0], segs[k].to[1] - segs[k].from[1]];
-            break;
-          }
-        }
-      }
-      const mag = Math.hypot(dir[0], dir[1]) || 1;
-      const streakMeters = 32 * lineness;
-      const dLat = (streakMeters / 111320) * (dir[1] / mag);
-      const dLon = (streakMeters / 84600)  * (dir[0] / mag);
-      const tail = [s.pos[0] - dLon, s.pos[1] - dLat];
-      if (lineness > 0.04) {
-        streakFts.push({
-          type:'Feature',
-          geometry:{type:'LineString', coordinates: [tail, s.pos]},
-          properties:{color: colorForDb(s.db), lineness},
+    actorSnapshots.push({pos: s.pos, db: s.db, kind: s.kind, spriteKind: actor.spriteKind});
+
+    if (actor.spriteKind === 'convoy_swarm') {
+      // Ten bikes: each samples the leader timeline at (t + dt_i) and is
+      // pushed laterally by `bike.lat` meters perpendicular to the road
+      // so the cluster reads as a swarm, not a single-file line. Label
+      // goes on the bike closest to the leader's nominal position so it
+      // hovers over the pack rather than chasing the lead bike.
+      for (let bi = 0; bi < CONVOY_BIKES.length; bi++) {
+        const bike = CONVOY_BIKES[bi];
+        const b = sampleBike(actor.timeline, t - actor.offsetS, bike);
+        const bIdling = b.kind === 'idle';
+        // Phase the idle breath per bike so the regrouped cluster
+        // shimmers instead of pulsing in lockstep.
+        const bBreath = bIdling ? 1 + Math.sin(t * 4 + bi * 0.71) * 0.18 : 1;
+        headFts.push({
+          type:'Feature', geometry:{type:'Point', coordinates: b.pos},
+          properties:{
+            actorId: actor.id + '_' + bi,
+            color: colorForDb(b.db),
+            breath: bBreath,
+            idling: bIdling ? 1 : 0,
+            label: bi === 4 ? (actor.label || '') : '',
+            radiusBase: 1.5, // 3 px diameter
+          },
         });
       }
-      // Head grows into a bigger pulsing circle as it clusters.
-      const clusterness = 1 - lineness;
-      radiusBase = 5.5 + clusterness * 4.5; // 5.5 → 10 px
+      continue;
     }
+
+    const idling = s.kind === 'idle';
+    const breath = idling ? 1 + Math.sin(t * 4 + actor.id.charCodeAt(0)) * 0.18 : 1;
     headFts.push({
       type:'Feature', geometry:{type:'Point', coordinates: s.pos},
       properties:{
         actorId: actor.id, color: colorForDb(s.db),
         breath, idling: idling ? 1 : 0,
         label: actor.label || '',
-        radiusBase,
+        radiusBase: 5.5,
       },
     });
   }
   sources.heads.setData({type:'FeatureCollection', features: headFts});
-  sources.streak.setData({type:'FeatureCollection', features: streakFts});
+
+  // ----- Camera follow: keep the active actor(s) centered. -----
+  // Without this the map is locked to a static framing and actors that
+  // start at the route's southern end (e.g. the biker convoy at 900 S)
+  // are off-screen for the first few minutes. Lerp toward the centroid
+  // each frame so quick motion at high playback speeds tracks without
+  // visible camera jitter; snap during scrubbing so the user doesn't
+  // see the view chase a dragged thumb.
+  if (actorSnapshots.length > 0) {
+    let cx = 0, cy = 0;
+    for (const a of actorSnapshots) { cx += a.pos[0]; cy += a.pos[1]; }
+    cx /= actorSnapshots.length; cy /= actorSnapshots.length;
+    if (sim.seeking) {
+      map.setCenter([cx, cy]);
+    } else {
+      const cur = map.getCenter();
+      const k = 0.18;
+      map.setCenter([cur.lng + (cx - cur.lng) * k, cur.lat + (cy - cur.lat) * k]);
+    }
+  }
+
+  // ----- Microphone activation -----
+  // For each mic, find the maximum activation across a small temporal
+  // window (so the mic warms up slightly before the streamer arrives and
+  // lingers after it leaves) and across all actors. Proximity uses a
+  // double kernel: a tight near-field plus a long-tail far-field so that
+  // adjacent mics on the grid catch a faint glow when one of their
+  // neighbours is hot. The contributing actor's dB drives the mic's
+  // colour via `colorForDb`, so a hot mic visually mirrors the streamer
+  // detecting it.
+  const TEMPORAL_OFFSETS = [
+    {dt: -3.0, w: 0.45},  // decay tail (streamer recently passed)
+    {dt: -1.8, w: 0.70},
+    {dt: -0.6, w: 0.92},
+    {dt:  0.0, w: 1.00},  // current instant
+    {dt:  0.6, w: 0.80},
+    {dt:  1.5, w: 0.50},  // anticipation (streamer about to arrive)
+  ];
+  const actorSamples = [];
+  for (const actor of scen.actors) {
+    for (const o of TEMPORAL_OFFSETS) {
+      const s = sampleAt(actor.timeline, t - actor.offsetS + o.dt);
+      actorSamples.push({
+        pos: s.pos, db: s.db, weight: o.w,
+        spriteKind: actor.spriteKind,
+      });
+    }
+  }
+  const micFts = [];
+  for (const stn of STATIONS) {
+    const micPos = [stn.lon, stn.lat];
+    let intensity = 0;
+    let contribDb = 60;
+    for (const a of actorSamples) {
+      const dbFactor = Math.max(0, (a.db - 55) / 45);
+      if (dbFactor <= 0) continue;
+      const d = dist(a.pos, micPos);
+      // Tight near kernel + long tail so adjacent mics get a small share.
+      const proximity = 0.70 * Math.exp(-d / 35) + 0.30 * Math.exp(-d / 240);
+      const boost = a.spriteKind === 'convoy_swarm' ? 1.35 : 1.0;
+      const i = dbFactor * proximity * boost * a.weight;
+      if (i > intensity) { intensity = i; contribDb = a.db; }
+    }
+    intensity = Math.min(1, intensity);
+    micFts.push({
+      type:'Feature', geometry:{type:'Point', coordinates: micPos},
+      properties:{
+        id: stn.id, intensity,
+        color: micColor(intensity, contribDb),
+        haloOpacity: 0.10 + intensity * 0.55,
+      },
+    });
+  }
+  sources.microphones.setData({type:'FeatureCollection', features: micFts});
 
   // ----- Pulse rings -----
   // Revs scale with the rev's `progress` within its idle segment: early revs
   // are small, late revs are big — so the visual pulse rate stays rhythmic
-  // but each ring's punch grows over the wait.
+  // but each ring's punch grows over the wait. Each roar ring also lays
+  // down a soft bloom residue that lingers for ~6 s so the wave deposits
+  // a fading chain of warm glows along the street.
   const ringFts = [];
+  const bloomFts = [];
+  const BLOOM_MAX_AGE = 9.0;
   for (const actor of scen.actors) {
-    const events = eventsBetween(actor.timeline, t - actor.offsetS, 4);
+    const isSwarm = actor.spriteKind === 'convoy_swarm';
+    const events = eventsBetween(actor.timeline, t - actor.offsetS, BLOOM_MAX_AGE + 1);
     for (const e of events) {
       const age = (t - actor.offsetS) - e.t;
       if (age < 0) continue;
       const isRoar = e.kind === 'roar';
       const isArrive = e.kind === 'arrive';
-      const maxAge = isRoar ? 3.2 : (isArrive ? 1.4 : 1.7);
-      if (age > maxAge) continue;
-      const prog = e.progress != null ? e.progress : 1;
-      let radius, opacity, strokeW;
-      if (isRoar) {
-        radius = 10 + age * 28; opacity = (1 - age/maxAge) * 0.95; strokeW = 3;
-      } else if (isArrive) {
-        radius = 4 + age * 12;  opacity = (1 - age/maxAge) * 0.35;  strokeW = 1.6;
+      const isPulse = e.kind === 'pulse';
+      // Pulse rings now scale their lifetime with acceleration so the
+      // launch-phase rings hang on as long as the old launch wave did.
+      const pulseMaxAge = isPulse ? (1.6 + (e.accel || 0.3) * 1.8) : 0;
+      const maxAge = isRoar ? 3.2 : (isArrive ? 1.4 : (isPulse ? pulseMaxAge : 1.7));
+      const color = colorForDb(e.db);
+      let em;
+      if (isSwarm) {
+        const bk = CONVOY_BIKES[bikeIdxForEvent(e.t)];
+        em = {pos: sampleBike(actor.timeline, e.t, bk).pos, scale: bk.scale};
       } else {
-        // rev — grows from small at start of wait to large by end of wait.
-        const sizeBase = 4 + prog * 5;            // 4 → 9 px starting radius
-        const growth = 12 + prog * 16;            // 12 → 28 px/sec
-        radius = sizeBase + age * growth;
-        opacity = (1 - age/maxAge) * (0.45 + prog * 0.45);
-        strokeW = 1.6 + prog * 1.4;
+        em = {pos: e.pos, scale: 1.0};
       }
-      ringFts.push({
-        type:'Feature', geometry:{type:'Point', coordinates: e.pos},
-        properties:{ radius, opacity, color: colorForDb(e.db), strokeW },
-      });
+      // Per-kind bloom factor (0 = no bloom, 1 = full muscle-car-launch
+      // bloom). Every kind now contributes some residual bloom so the
+      // trail glows continuously while the source is moving.
+      let bloomFactor;
+      if (isRoar)         bloomFactor = 1.0;
+      else if (isPulse)   bloomFactor = 0.30 + (e.accel || 0.3) * 0.85;
+      else if (isArrive)  bloomFactor = 0.45;
+      else /* rev */      bloomFactor = 0.30 + (e.progress || 0.5) * 0.45;
+      if (age <= maxAge) {
+        const prog = e.progress != null ? e.progress : 1;
+        let radius, opacity, strokeW;
+        if (isRoar) {
+          const taper = e.waveTaper != null ? e.waveTaper : 0;
+          const punch = 1 - taper * 0.45;
+          radius = (10 + age * 28) * punch;
+          opacity = (1 - age/maxAge) * (0.95 * punch);
+          strokeW = 3 * punch;
+        } else if (isArrive) {
+          radius = 4 + age * 12;
+          opacity = (1 - age/maxAge) * 0.35;
+          strokeW = 1.6;
+        } else if (isPulse) {
+          // Cadence + intensity both driven by `e.accel` ∈ [0, 1]. At
+          // accel = 1 the ring matches the punch/growth of the old
+          // launch-wave rings (the "muscle car at the stoplight" look);
+          // at accel ≈ 0 it's a soft cruise pulse.
+          const accel = e.accel != null ? e.accel : 0.3;
+          const punch = 0.45 + accel * 0.55;
+          radius = (5 + accel * 7) * punch + age * (15 + accel * 13);
+          opacity = (1 - age/maxAge) * (0.40 + accel * 0.55) * punch;
+          strokeW = (1.1 + accel * 1.9) * punch;
+        } else {
+          const sizeBase = 4 + prog * 5;
+          const growth = 12 + prog * 16;
+          radius = sizeBase + age * growth;
+          opacity = (1 - age/maxAge) * (0.45 + prog * 0.45);
+          strokeW = 1.6 + prog * 1.4;
+        }
+        ringFts.push({
+          type:'Feature', geometry:{type:'Point', coordinates: em.pos},
+          properties:{
+            radius: radius * em.scale,
+            opacity,
+            color,
+            strokeW: strokeW * em.scale,
+          },
+        });
+      }
+      // Bloom residue — every kind contributes. Cadence and intensity
+      // already vary with accel (pulse rings), so the cumulative bloom
+      // brightens during accel/decel phases and fades during cruise.
+      if (bloomFactor > 0 && age <= BLOOM_MAX_AGE) {
+        const taper = e.waveTaper != null ? e.waveTaper : 0;
+        const lifeFrac = age / BLOOM_MAX_AGE;
+        const fade = (1 - lifeFrac) * (1 - lifeFrac);
+        const intensity = (1 - taper * 0.35) * bloomFactor;
+        const haloRadius = (18 + Math.min(age * 4, 12) - taper * 3) * em.scale;
+        const haloOpacity = fade * (0.55 * intensity);
+        bloomFts.push({
+          type:'Feature', geometry:{type:'Point', coordinates: em.pos},
+          properties:{ radius: haloRadius, opacity: haloOpacity, color },
+        });
+        const coreRadius = (9 + Math.min(age * 3, 6) - taper * 1.5) * em.scale;
+        const coreOpacity = fade * (0.85 * intensity);
+        bloomFts.push({
+          type:'Feature', geometry:{type:'Point', coordinates: em.pos},
+          properties:{ radius: coreRadius, opacity: coreOpacity, color },
+        });
+      }
     }
   }
   sources.rings.setData({type:'FeatureCollection', features: ringFts});
+  sources.ringBloom.setData({type:'FeatureCollection', features: bloomFts});
 
   // ----- Noise pools -----
   // Pool radius/opacity scale with how long the actor has been idling — the
@@ -1359,7 +2250,7 @@ function renderFrame() {
     if (s.kind !== 'idle' || !s.signalId) continue;
     if (!s.segment.dbPeak) continue; // no-rev idles (e.g., delivery park) skip
     const buildup = Math.min(1, s.segT / 25); // ramps over 25s
-    const mult = actor.spriteKind === 'convoy_streak' ? 6 : 1;
+    const mult = actor.spriteKind === 'convoy_swarm' ? 6 : 1;
     const energy = buildup * mult * Math.max(0, s.segment.dbPeak - 60);
     const b = buckets.get(s.signalId) || {at: s.pos, energy: 0, buildup: 0, peak: 0};
     b.energy += energy;
@@ -1380,32 +2271,6 @@ function renderFrame() {
   }
   sources.noisepools.setData({type:'FeatureCollection', features: poolFts});
 
-  // ----- Predictions -----
-  if (sim.predictionVisible) {
-    const predLines = [];
-    const predStops = [];
-    const seenTimelines = new Set();
-    for (const actor of scen.actors) {
-      // For multi-actor scenarios sharing a timeline (biker convoy followers),
-      // only render one prediction overlay (from the leader).
-      if (seenTimelines.has(actor.timeline) && actor.offsetS !== 0) continue;
-      seenTimelines.add(actor.timeline);
-      const {pts, stops} = predictPath(actor.timeline, t - actor.offsetS, 300, 2.5);
-      const headSample = sampleAt(actor.timeline, t - actor.offsetS);
-      const col = colorForDb(headSample.db);
-      predLines.push({type:'Feature', geometry:{type:'LineString', coordinates: pts}, properties:{color: col, actorId: actor.id}});
-      // Cap to first 4 predicted stops so the map doesn't get noisy.
-      for (const s of stops.slice(0, 4)) {
-        predStops.push({type:'Feature', geometry:{type:'Point', coordinates: s.at}, properties:{actorId: actor.id}});
-      }
-    }
-    sources.predictions.setData({type:'FeatureCollection', features: predLines});
-    sources.predstops.setData({type:'FeatureCollection', features: predStops});
-  } else {
-    sources.predictions.setData({type:'FeatureCollection', features:[]});
-    sources.predstops.setData({type:'FeatureCollection', features:[]});
-  }
-
   // ----- Pizza HQ pin (only when pizza scenario active) -----
   if (sim.scenarioSlug === 'pizza') {
     sources.hq.setData({type:'FeatureCollection', features: [{
@@ -1418,6 +2283,9 @@ function renderFrame() {
   // ----- Top-left clock (time since scenario was selected) -----
   const clockEl = document.querySelector('[data-clock]');
   if (clockEl) clockEl.textContent = fmtElapsed(t - sim.scenarioPreSeedS);
+
+  // ----- Terminal console feed -----
+  updateTerm(scen, t);
 }
 
 /* ============================================================================
@@ -1428,6 +2296,19 @@ function tick() {
   if (sim.scenarioSlug && !sim.paused && !sim.seeking) {
     const dtMs = Math.min(100, nowMs - sim.lastFrameMs);
     sim.scenarioElapsedS += (dtMs / 1000) * sim.playbackSpeed;
+    // Stop at end of loop instead of wrapping. Clamp to just-before-end
+    // so the scrubber stays pinned at 100% (loopFraction wraps to 0 at
+    // exactly loopT due to the modulo). Next play click restarts.
+    const scen = activeScenario();
+    if (scen) {
+      const endT = sim.scenarioPreSeedS + scen.loopT;
+      if (sim.scenarioElapsedS >= endT) {
+        sim.scenarioElapsedS = endT - 0.01;
+        sim.paused = true;
+        sim.loopComplete = true;
+        updatePlayBtn();
+      }
+    }
   }
   sim.lastFrameMs = nowMs;
   renderFrame();
@@ -1440,7 +2321,6 @@ function tick() {
  * ==========================================================================*/
 const chooserEl = document.getElementById('chooser');
 const chipsEl = document.getElementById('chips');
-const ctrlsEl = document.getElementById('ctrls');
 const scrubEl = document.getElementById('scrub');
 const splashEl = document.getElementById('splash');
 const scenLabelEl = document.querySelector('[data-scen-label]');
@@ -1468,17 +2348,21 @@ function setScenario(slug) {
   // UI
   chooserEl.classList.add('hidden');
   chipsEl.classList.remove('hidden');
-  ctrlsEl.classList.remove('hidden');
   scrubEl.classList.remove('hidden');
   sim.paused = false;
+  sim.loopComplete = false;
   updatePlayBtn();
   renderScrubStops(scen);
   for (const b of chipsEl.querySelectorAll('button.chip')) {
     b.classList.toggle('active', b.dataset.chip === slug);
   }
   scenLabelEl.textContent = scen.label;
-  // Frame the map.
-  map.easeTo({center: scen.mapView.center, zoom: scen.mapView.zoom, duration: 900});
+  // Frame the map on the actor's starting position; the per-frame
+  // follow in renderFrame keeps the actor centered as the scenario
+  // plays. jumpTo (not easeTo) because the follow-cam's setCenter
+  // would cancel any in-flight easing on the very next frame.
+  const initCenter = sampleAt(scen.actors[0].timeline, 0).pos;
+  map.jumpTo({center: initCenter, zoom: scen.mapView.zoom});
   // Sync hash.
   if (location.hash !== '#' + slug) {
     history.replaceState(null, '', '#' + slug);
@@ -1489,9 +2373,9 @@ function showChooser() {
   sim.scenarioSlug = null;
   sim.scenarioElapsedS = 0;
   sim.paused = false;
+  sim.loopComplete = false;
   chooserEl.classList.remove('hidden');
   chipsEl.classList.add('hidden');
-  ctrlsEl.classList.add('hidden');
   scrubEl.classList.add('hidden');
   scenLabelEl.textContent = 'SELECT A SCENARIO';
   if (location.hash) history.replaceState(null, '', location.pathname);
@@ -1511,9 +2395,6 @@ chipsEl.querySelector('[data-back]').addEventListener('click', e => {
   e.preventDefault();
   showChooser();
 });
-// Prediction toggle (top-right).
-const predToggle = ctrlsEl.querySelector('[data-pred]');
-predToggle.addEventListener('change', () => { sim.predictionVisible = predToggle.checked; });
 
 // Scrubber controls (bottom-center).
 const playBtn = scrubEl.querySelector('[data-play]');
@@ -1524,7 +2405,21 @@ const stopsEl = scrubEl.querySelector('[data-stops]');
 const timeEl = scrubEl.querySelector('[data-time]');
 
 function updatePlayBtn() { playBtn.textContent = sim.paused ? '▶' : '⏸'; }
-playBtn.addEventListener('click', () => { sim.paused = !sim.paused; updatePlayBtn(); });
+function togglePlay() {
+  if (sim.loopComplete) {
+    // Restart from the beginning. Force the terminal to re-init (full
+    // boot sequence) by nulling its scenSlug, which makes updateTerm
+    // hit its reset branch on the next frame.
+    sim.scenarioElapsedS = sim.scenarioPreSeedS;
+    sim.loopComplete = false;
+    sim.paused = false;
+    termState.scenSlug = null;
+  } else {
+    sim.paused = !sim.paused;
+  }
+  updatePlayBtn();
+}
+playBtn.addEventListener('click', togglePlay);
 
 scrubEl.querySelectorAll('[data-spd]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1579,6 +2474,12 @@ function seekToFraction(frac) {
   if (!scen) return;
   frac = Math.max(0, Math.min(1, frac));
   sim.scenarioElapsedS = sim.scenarioPreSeedS + frac * scen.loopT;
+  // Manual scrub clears the "ended" state so play resumes from the
+  // scrubbed position rather than restarting.
+  if (sim.loopComplete) {
+    sim.loopComplete = false;
+    updatePlayBtn();
+  }
 }
 
 function trackFractionFromEvent(e) {
@@ -1617,8 +2518,14 @@ map.on('load', () => {
   requestAnimationFrame(tick);
 });
 
-// Esc returns to chooser.
-window.addEventListener('keydown', e => { if (e.key === 'Escape') showChooser(); });
+// Esc returns to chooser; Space toggles playback (only while a scenario is active).
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { showChooser(); return; }
+  if (e.code === 'Space' && sim.scenarioSlug) {
+    e.preventDefault();
+    togglePlay();
+  }
+});
 
 })();
 </script>

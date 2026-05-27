@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...db import get_session
 from ...ingest.mqtt_publish import get_command_publisher
 from ...models import Device
@@ -52,11 +52,9 @@ class LedResponse(BaseModel):
 async def put_led(
     device_id: UUID,
     body: LedUpdate,
-    user: ResolvedUser = Depends(require_user),
+    user: ResolvedUser = Depends(require_permission("device.config.write")),
     session: AsyncSession = Depends(get_session),
 ) -> LedResponse:
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail="admin required")
     row = await session.get(Device, device_id)
     if row is None:
         raise HTTPException(status_code=404, detail="device not found")

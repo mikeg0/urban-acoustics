@@ -16,11 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...auth.user import require_permission
 from ...contracts import TelemetryPoint, TelemetryReadResponse, TelemetryResolution
 from ...db import get_session
 from ...models import Device
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permission("dashboard.view"))])
 
 # Resolution → (CA view name or None for raw, max window in seconds).
 # `raw` reads the hypertable; the cap stays so a careless `from=0` doesn't

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { putRuntimeConfig } from './api';
+import { useHasPermission } from './auth';
+import { PERM } from './permissions';
 import { applyTweaks, getDefaults, useTweaks } from './tweaks';
 import { PALETTES } from './palettes';
 import type { Tweaks } from './types';
@@ -105,6 +107,7 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const tweaks = useTweaks();
   const isNarrow = useIsNarrow();
+  const canWriteDeviceConfig = useHasPermission(PERM.DEVICE_CONFIG_WRITE);
   const [pendingPut, setPendingPut] = useState(false);
   const [putError, setPutError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -334,7 +337,7 @@ export function SettingsDialog({
                 max={THRESHOLD_MAX}
                 step="1"
                 value={deviceThreshold}
-                disabled={!deviceId}
+                disabled={!deviceId || !canWriteDeviceConfig}
                 onChange={(e) => handleThresholdChange(+e.target.value)}
                 style={{ width: '100%' }} />
               <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
@@ -347,7 +350,8 @@ export function SettingsDialog({
                   <Preset
                     key={v}
                     active={deviceThreshold === v}
-                    onClick={() => handleThresholdChange(v)}
+                    onClick={() => canWriteDeviceConfig && handleThresholdChange(v)}
+                    disabled={!canWriteDeviceConfig}
                   >
                     {v} dB
                   </Preset>
@@ -379,12 +383,17 @@ export function SettingsDialog({
               <input
                 type="checkbox"
                 checked={devicePaused}
-                disabled={!deviceId}
+                disabled={!deviceId || !canWriteDeviceConfig}
                 onChange={(e) => handlePauseChange(e.target.checked)}
-                style={{ cursor: deviceId ? 'pointer' : 'not-allowed' }}
+                style={{ cursor: (deviceId && canWriteDeviceConfig) ? 'pointer' : 'not-allowed' }}
               />
               <span>Pause audio clip recording (keep spectrogram + telemetry)</span>
             </label>
+            {!canWriteDeviceConfig && deviceId && (
+              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)' }}>
+                Admin role required to edit device settings.
+              </div>
+            )}
           </section>
 
           <section>
@@ -548,10 +557,11 @@ function GlossaryEntry({ term, children }: { term: string; children: ReactNode }
   );
 }
 
-function Preset({ children, active, onClick }: { children: ReactNode; active: boolean; onClick: () => void }) {
+function Preset({ children, active, onClick, disabled }: { children: ReactNode; active: boolean; onClick: () => void; disabled?: boolean }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         padding: '4px 10px',
         fontSize: 10,
@@ -562,7 +572,8 @@ function Preset({ children, active, onClick }: { children: ReactNode; active: bo
         border: `1px solid ${active ? 'var(--line-strong)' : 'var(--line)'}`,
         borderRadius: 4,
         color: active ? 'var(--ink-0)' : 'var(--ink-2)',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {children}

@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...contracts import LabelRequest, LabelResponse
 from ...db import get_session
 from ...models import Event, Label
@@ -20,7 +20,7 @@ router = APIRouter()
 async def add_label(
     event_id: UUID,
     body: LabelRequest,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("event.label.write")),
     session: AsyncSession = Depends(get_session),
 ) -> LabelResponse:
     if await session.get(Event, event_id) is None:

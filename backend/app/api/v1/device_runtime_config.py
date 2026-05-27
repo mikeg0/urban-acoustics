@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...db import get_session
 from ...ingest.mqtt_publish import get_command_publisher
 from ...models import Device, DeviceHealth
@@ -93,7 +93,7 @@ async def _latest_config_version(session: AsyncSession, device_id: UUID) -> str 
 )
 async def get_runtime_config(
     device_id: UUID,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> RuntimeConfigResponse:
     row = await session.get(Device, device_id)
@@ -116,11 +116,9 @@ async def get_runtime_config(
 async def put_runtime_config(
     device_id: UUID,
     body: RuntimeConfigUpdate,
-    user: ResolvedUser = Depends(require_user),
+    user: ResolvedUser = Depends(require_permission("device.config.write")),
     session: AsyncSession = Depends(get_session),
 ) -> RuntimeConfigResponse:
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail="admin required")
     row = await session.get(Device, device_id)
     if row is None:
         raise HTTPException(status_code=404, detail="device not found")

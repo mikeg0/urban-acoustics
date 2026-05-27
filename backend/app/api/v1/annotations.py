@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...contracts import AnnotationRequest, AnnotationResponse
 from ...db import get_session
 from ...models import Device, Event, SpectrogramAnnotation, SpectrogramFrame
@@ -42,7 +42,7 @@ def _to_response(row: SpectrogramAnnotation) -> AnnotationResponse:
 async def create_annotation(
     device_id: UUID,
     body: AnnotationRequest,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("event.label.write")),
     session: AsyncSession = Depends(get_session),
 ) -> AnnotationResponse:
     if await session.get(Device, device_id) is None:
@@ -113,7 +113,7 @@ async def list_annotations(
     from_ts: float | None = Query(default=None, alias="from"),
     to_ts: float | None = Query(default=None, alias="to"),
     limit: int = Query(default=500, ge=1, le=5000),
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[AnnotationResponse]:
     stmt = (
@@ -142,7 +142,7 @@ async def list_annotations(
 )
 async def delete_annotation(
     annotation_id: int,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("event.delete")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     row = await session.get(SpectrogramAnnotation, annotation_id)

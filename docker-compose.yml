@@ -60,6 +60,12 @@ services:
       S3_REGION: "us-east-1"
       JWT_SECRET: "dev-only-jwt-secret-replace-in-real-deployments"
       JWT_TTL_SECONDS: "3600"
+      # Plain-HTTP dev: cookies must not be Secure or browsers will refuse.
+      COOKIE_SECURE: "false"
+      # First-run admin bootstrap. After the first successful startup the
+      # admin should rotate the password via the UI and these can be cleared.
+      ADMIN_EMAIL: "admin@local"
+      ADMIN_PASSWORD: "devpass1234"
       DEVICE_CERT_TTL_DAYS: "90"
       EVENT_MAX_SIZE_BYTES: "8388608"
       EVENT_INTENT_TTL_SECONDS: "60"

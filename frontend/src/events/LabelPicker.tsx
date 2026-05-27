@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { submitEventLabel } from '../api';
+import { useHasPermission } from '../auth';
+import { PERM } from '../permissions';
 import { EVENT_LABELS, type DeviceEvent, type EventLabel } from '../types';
 
 interface Props {
@@ -8,6 +10,7 @@ interface Props {
 }
 
 export function LabelPicker({ event, onLabelled }: Props) {
+  const canLabel = useHasPermission(PERM.EVENT_LABEL_WRITE);
   const [pending, setPending] = useState<EventLabel | null>(null);
   const [applied, setApplied] = useState<EventLabel | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +24,14 @@ export function LabelPicker({ event, onLabelled }: Props) {
     return (
       <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
         Select an event to label.
+      </div>
+    );
+  }
+
+  if (!canLabel) {
+    return (
+      <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
+        {applied ? `Label: ${applied}` : 'No label · contributor role required to label events'}
       </div>
     );
   }

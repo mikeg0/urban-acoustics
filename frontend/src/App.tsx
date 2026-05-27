@@ -5,13 +5,20 @@ import {
   fetchDevice,
   fetchDeviceForecast,
   fetchDeviceSources,
+  fetchPreviewAnomalies,
+  fetchPreviewDailySummary,
+  fetchPreviewForecast,
+  fetchPreviewSources,
   fetchRuntimeConfig,
   fetchTelemetry,
-  fetchYear,
   liveDeviceSocket,
+  previewLiveSocket,
 } from './api';
+import { useAuth } from './auth';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
 import { CameraSnapshot, useNearestCamera } from './cameras';
+import { LoginPage } from './login_page';
+import { PERM, hasPermission } from './permissions';
 import {
   anomaliesToUi,
   daysToMonths,
@@ -22,33 +29,31 @@ import {
 } from './dashboard_adapter';
 import { RealDayView } from './dayview';
 import { DayView, HourView, MonthView, YearHeatmap, YearView } from './drills';
-import { HealthView, RealHealthView } from './health';
-import { LiveView, RealLiveView } from './live';
+import { RealHealthView } from './health';
+import { RealLiveView } from './live';
 import { PALETTES } from './palettes';
 import { AnomaliesFeed, BreachRibbon, ForecastPanel, PeakHoursChart, SourceBreakdown } from './panels';
 import { SettingsButton, SettingsDialog } from './settings';
 import { StationListView, isDeviceOnline } from './stations';
 import {
   LiveSpectrogram,
-  SpectrogramCanvas,
   TimelineSpectrogram,
-  buildSpectrogram,
   useRollingBands,
 } from './spectrogram';
 import { useTweaks } from './tweaks';
-import { formatClock, formatHour, hydrateMonths } from './utils';
+import { formatClock, formatHour } from './utils';
 import type {
   Anomaly, Day, DeviceInfo, DeviceLiveMessage,
-  DrillState, ForecastPoint, MonthHydrated, Source, YearBundle,
+  DrillState, ForecastPoint, MonthHydrated, Source,
 } from './types';
 
-// Real mode is opt-in: both env flags must be set. When on, the Live tab is
-// powered by real-device telemetry from /api/v1; the rest of the dashboard
-// (year heatmap, anomalies, forecast, etc.) still renders from the synthetic
-// /api/year bundle since no real long-horizon history exists yet.
-const VITE_DEVICE_ID = import.meta.env.VITE_DEVICE_ID;
-const VITE_DEMO_MODE = import.meta.env.VITE_DEMO_MODE;
-const REAL_MODE = VITE_DEMO_MODE === 'false' && !!VITE_DEVICE_ID;
+// Sentinel device id used to drive the guest preview flow. The backend's
+// preview routes don't actually key off this — they emit one synthetic
+// device's worth of data — but threading a stable string here lets the
+// existing deviceId-keyed effects keep their dependency arrays intact.
+const PREVIEW_DEVICE_ID = '00000000-0000-0000-0000-000000000000';
+
+type DataMode = 'preview' | 'real';
 
 type PageKey = 'live' | 'dashboard' | 'health';
 
@@ -169,29 +174,89 @@ function TopBar({
         <div className="mono" style={{ fontSize: 11, color: 'var(--ink-1)', padding: '6px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6 }}>
           {formatClock(t.getTime() / 1000, timeFormat, { withSeconds: true })}
         </div>
+        <UserChip />
         <SettingsButton onClick={onOpenSettings} />
       </div>
     </div>
   );
 }
 
-function NowCard({ palette, onOpenLive }: { palette: keyof typeof PALETTES; onOpenLive: () => void }) {
-  const [tick, setTick] = useState(0);
+function UserChip() {
+  const { user, logout } = useAuth();
+  if (!user) return null;
+  return (
+    <div
+      className="mono"
+      title={`Sign out ${user.email}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: 11,
+        color: 'var(--ink-1)',
+        padding: '6px 10px',
+        background: 'var(--bg-2)',
+        border: '1px solid var(--line)',
+        borderRadius: 6,
+      }}
+    >
+      <span style={{ opacity: 0.7 }}>{user.email}</span>
+      <span style={{
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        color: 'var(--neon-cool, #6cf)',
+        fontSize: 9,
+      }}>{user.role}</span>
+      <button
+        onClick={() => { void logout(); }}
+        style={{
+          background: 'transparent',
+          color: 'var(--ink-3)',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 11,
+        }}
+      >
+        ⏻
+      </button>
+    </div>
+  );
+}
+
+function PreviewNowCard({ onOpenLive }: { onOpenLive: () => void }) {
+  // Drives the dashboard "live tile" for guest preview. Connects to the
+  // procedural mock WS — same {type:"tick"|"spect"} envelope the real
+  // device WS uses, so the spectrogram band-buffer code below is shared.
+  const { spectroColor } = useTweaks();
+  const spectRing = useRollingBands(240);
+  const spectPushRef = useRef(spectRing.push);
+  useEffect(() => { spectPushRef.current = spectRing.push; }, [spectRing.push]);
+  const [laeq, setLaeq] = useState<number | null>(null);
+
   useEffect(() => {
-    const i = setInterval(() => setTick((x) => x + 1), 1500);
-    return () => clearInterval(i);
+    let closed = false;
+    let ws: WebSocket | null = null;
+    try { ws = previewLiveSocket(); } catch { return; }
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as DeviceLiveMessage;
+        if (msg.type === 'tick') setLaeq(msg.laeq);
+        else if (msg.type === 'spect') spectPushRef.current(msg.ts, msg.bands);
+      } catch { /* ignore */ }
+    };
+    ws.onclose = () => { /* preview mode — re-open is handled by remount */ };
+    return () => { closed = true; try { ws?.close(); } catch { /* */ } void closed; };
   }, []);
-  const data = useMemo(() => buildSpectrogram(77777 + tick, 1.1), [tick]);
-  const currentDb = 71.2 + Math.sin(tick * 0.7) * 4;
 
   return (
-    <Card title="LIVE · RIGHT NOW" right={<Pill tone="ok" icon>STREAMING</Pill>} padding={14}>
+    <Card title="LIVE · PREVIEW" right={<Pill tone="cool" icon>SIMULATED</Pill>} padding={14}>
       <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
         <div>
           <div className="mono" style={{ fontSize: 40, letterSpacing: '-0.03em', color: 'var(--ink-0)', lineHeight: 1 }}>
-            {currentDb.toFixed(1)}
+            {laeq != null ? laeq.toFixed(1) : '—'}
           </div>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>dB(A) · L<sub>eq,1min</sub></div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>dB(A) · L<sub>eq</sub></div>
         </div>
         <div
           onClick={onOpenLive}
@@ -201,10 +266,88 @@ function NowCard({ palette, onOpenLive }: { palette: keyof typeof PALETTES; onOp
           title="Open Live view"
           style={{ flex: 1, height: 70, borderRadius: 4, overflow: 'hidden', cursor: 'pointer' }}
         >
-          <SpectrogramCanvas data={data} palette={palette} height={70} />
+          <LiveSpectrogram ring={spectRing} palette={spectroColor} height={70} />
         </div>
       </div>
     </Card>
+  );
+}
+
+function PreviewLiveView({ threshold: _threshold }: { threshold: number }) {
+  // Full-width preview of the live spectrogram + dB needle. 90-second
+  // procedural loop; same data the dashboard "live tile" gets.
+  const { spectroColor } = useTweaks();
+  const spectRing = useRollingBands(1200);
+  const spectPushRef = useRef(spectRing.push);
+  useEffect(() => { spectPushRef.current = spectRing.push; }, [spectRing.push]);
+  const [tick, setTick] = useState<{ laeq: number; lafmax: number } | null>(null);
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    try { ws = previewLiveSocket(); } catch { return; }
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data) as DeviceLiveMessage;
+        if (msg.type === 'tick') setTick({ laeq: msg.laeq, lafmax: msg.lafmax });
+        else if (msg.type === 'spect') spectPushRef.current(msg.ts, msg.bands);
+      } catch { /* ignore */ }
+    };
+    return () => { try { ws?.close(); } catch { /* */ } };
+  }, []);
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 14, gap: 14 }}>
+      <div style={{
+        padding: '10px 14px',
+        background: 'var(--bg-2)',
+        border: '1px solid var(--line)',
+        borderRadius: 6,
+        fontFamily: 'var(--mono)',
+        fontSize: 11,
+        color: 'var(--ink-2)',
+        letterSpacing: '0.06em',
+      }}>
+        PREVIEW MODE · simulated data on a 90-second loop · ask an admin for member access to see real device telemetry
+      </div>
+      <Card padding={14}>
+        <div style={{ display: 'flex', gap: 22, alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 56, letterSpacing: '-0.03em', color: 'var(--ink-0)', lineHeight: 1 }}>
+              {tick ? tick.laeq.toFixed(1) : '—'}
+            </div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
+              dB(A) · L<sub>eq</sub>  ·  peak {tick ? tick.lafmax.toFixed(1) : '—'}
+            </div>
+          </div>
+        </div>
+        <div style={{ height: 240, borderRadius: 4, overflow: 'hidden' }}>
+          <LiveSpectrogram ring={spectRing} palette={spectroColor} height={240} />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function PreviewHealthPlaceholder() {
+  return (
+    <div style={{
+      flex: 1,
+      display: 'grid',
+      placeItems: 'center',
+      color: 'var(--ink-2)',
+      fontFamily: 'var(--mono)',
+      fontSize: 12,
+      letterSpacing: '0.1em',
+      padding: 40,
+      textAlign: 'center',
+    }}>
+      <div>
+        DEVICE HEALTH IS HIDDEN IN PREVIEW MODE.
+        <div style={{ marginTop: 8, color: 'var(--ink-3)', fontSize: 11 }}>
+          Sign in as a member or higher to see real device telemetry.
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -666,15 +809,38 @@ function useNavState(): [NavState, (next: Partial<NavState>) => void] {
 }
 
 export function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: 'var(--ink-3)', fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em' }}>
+        LOADING…
+      </div>
+    );
+  }
+  if (!user) return <LoginPage />;
+
+  const role = user.role;
+  const isGuest = role === 'guest';
+  const canViewReal = hasPermission(role, PERM.DASHBOARD_VIEW);
+
+  return <AuthedApp mode={isGuest ? 'preview' : (canViewReal ? 'real' : 'preview')} />;
+}
+
+function AuthedApp({ mode }: { mode: DataMode }) {
   const [nav, navigate] = useNavState();
 
   const onPageChange = useCallback((p: PageKey) => navigate({ page: p }), [navigate]);
   const onDrillStateChange = useCallback((d: DrillState) => navigate({ drill: d }), [navigate]);
 
-  if (!REAL_MODE) {
+  // Guest preview always renders a single synthetic "device" with no
+  // station picker. Member+ goes through the station list to pick a real
+  // device before the dashboard mounts.
+  if (mode === 'preview') {
     return (
       <DashboardApp
-        deviceId={null}
+        deviceId={PREVIEW_DEVICE_ID}
+        mode="preview"
         page={nav.page}
         onPageChange={onPageChange}
         drillState={nav.drill}
@@ -694,6 +860,7 @@ export function App() {
   return (
     <DashboardApp
       deviceId={nav.deviceId}
+      mode="real"
       onBack={() => navigate({ deviceId: null, page: 'dashboard', drill: DEFAULT_DRILL })}
       page={nav.page}
       onPageChange={onPageChange}
@@ -723,6 +890,7 @@ const DEFAULT_DB_THRESHOLD = 80;
 
 function DashboardApp({
   deviceId,
+  mode,
   onBack,
   page,
   onPageChange,
@@ -730,12 +898,14 @@ function DashboardApp({
   onDrillStateChange,
 }: {
   deviceId: string | null;
+  mode: DataMode;
   onBack?: () => void;
   page: PageKey;
   onPageChange: (p: PageKey) => void;
   drillState: DrillState;
   onDrillStateChange: (d: DrillState) => void;
 }) {
+  const isPreview = mode === 'preview';
   const tweaks = useTweaks();
   const { spectroColor, anomalySensitivity } = tweaks;
 
@@ -747,7 +917,8 @@ function DashboardApp({
   const [devicePaused, setDevicePaused] = useState<boolean>(false);
   const [appliedConfigVersion, setAppliedConfigVersion] = useState<string | null>(null);
   useEffect(() => {
-    if (!deviceId) return;
+    // Preview mode has no real device, so no runtime config to fetch.
+    if (!deviceId || isPreview) return;
     let cancelled = false;
     fetchRuntimeConfig(deviceId)
       .then((r) => {
@@ -758,23 +929,16 @@ function DashboardApp({
       })
       .catch(() => { /* keep default; UI still renders */ });
     return () => { cancelled = true; };
-  }, [deviceId]);
+  }, [deviceId, isPreview]);
 
-  // Demo bundle (synthetic /api/year) — only loaded when not in real mode.
-  const [bundle, setBundle] = useState<YearBundle | null>(null);
-  // Real-mode dashboard data, fetched in parallel from the rollup endpoints.
+  // Dashboard data — the four rollup endpoints, fetched in parallel. In
+  // preview mode they come from /api/v1/preview/* (procedural mock with a
+  // fixed seed); in real mode from /api/v1/devices/{id}/* (the device).
   const [realDays, setRealDays] = useState<Day[] | null>(null);
   const [realAnomalies, setRealAnomalies] = useState<Anomaly[] | null>(null);
   const [realForecast, setRealForecast] = useState<ForecastPoint[] | null>(null);
   const [realSources, setRealSources] = useState<Source[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (deviceId) return;
-    fetchYear()
-      .then(setBundle)
-      .catch((e: Error) => setError(e.message));
-  }, [deviceId]);
 
   useEffect(() => {
     if (!deviceId) return;
@@ -784,51 +948,53 @@ function DashboardApp({
     // Fire all four in parallel. A failure on one panel must not block the
     // others — we keep the unfilled slots as empty arrays so the dashboard
     // still renders.
-    fetchDailySummary(deviceId, from, now, dbThreshold)
+    const summaryP = isPreview
+      ? fetchPreviewDailySummary()
+      : fetchDailySummary(deviceId, from, now, dbThreshold);
+    const anomaliesP = isPreview
+      ? fetchPreviewAnomalies()
+      : fetchAnomaliesRange(deviceId, from, now, anomalySensitivity);
+    const forecastP = isPreview
+      ? fetchPreviewForecast()
+      : fetchDeviceForecast(deviceId, 7, dbThreshold);
+    const sourcesP = isPreview
+      ? fetchPreviewSources()
+      : fetchDeviceSources(deviceId, from, now);
+
+    summaryP
       .then((r) => { if (!cancelled) setRealDays(summaryToDays(r)); })
       .catch(() => { if (!cancelled) setRealDays([]); });
-    fetchAnomaliesRange(deviceId, from, now, anomalySensitivity)
+    anomaliesP
       .then((r) => { if (!cancelled) setRealAnomalies(anomaliesToUi(r)); })
       .catch(() => { if (!cancelled) setRealAnomalies([]); });
-    fetchDeviceForecast(deviceId, 7, dbThreshold)
+    forecastP
       .then((r) => { if (!cancelled) setRealForecast(forecastToUi(r)); })
       .catch(() => { if (!cancelled) setRealForecast([]); });
-    fetchDeviceSources(deviceId, from, now)
+    sourcesP
       .then((r) => { if (!cancelled) setRealSources(sourcesToUi(r)); })
       .catch(() => { if (!cancelled) setRealSources([]); });
     return () => { cancelled = true; };
     // Refetch when the dB threshold changes — it controls breach counting on
     // the server side. Anomaly sensitivity also changes the z-filter cutoff.
-  }, [deviceId, dbThreshold, anomalySensitivity]);
+  }, [deviceId, dbThreshold, anomalySensitivity, isPreview]);
 
   // When wired to a real device, fetch its metadata so the TopBar and footer
   // show the real sensor name/location instead of the synthetic city defaults.
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   useEffect(() => {
-    if (!deviceId) return;
+    if (!deviceId || isPreview) return;
     fetchDevice(deviceId)
       .then(setDevice)
       .catch(() => { /* fall back to synthetic city.sensor */ });
-  }, [deviceId]);
+  }, [deviceId, isPreview]);
 
   useEffect(() => {
-    const name = device?.name ?? (deviceId ? null : DEFAULT_CITY.name);
-    document.title = name ? `Urban Acoustics · ${name}` : 'Urban Acoustics';
-  }, [device?.name, deviceId]);
+    const name = device?.name ?? (isPreview ? 'Preview Mode' : DEFAULT_CITY.name);
+    document.title = `Urban Acoustics · ${name}`;
+  }, [device?.name, isPreview]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Demo-mode data, fully derived from the synthetic bundle.
-  const demoMonths = useMemo<MonthHydrated[]>(
-    () => (bundle ? hydrateMonths(bundle) : []),
-    [bundle],
-  );
-  const demoAnomalies = useMemo<Anomaly[]>(
-    () => (bundle ? bundle.anomalies.filter((a) => a.z >= anomalySensitivity) : []),
-    [bundle, anomalySensitivity],
-  );
-
-  // Real-mode data; the four endpoint adapters are the source of truth.
   const realMonths = useMemo<MonthHydrated[]>(
     () => (realDays ? daysToMonths(realDays) : []),
     [realDays],
@@ -846,18 +1012,8 @@ function DashboardApp({
   // Decide what to render. Real mode waits for the summary (the spine of
   // every panel); the others fall back to empty arrays after their own
   // fetch failure.
-  const ready = deviceId ? realDays != null : bundle != null;
+  const ready = realDays != null;
 
-  if (error && !deviceId) {
-    return (
-      <div style={{ padding: 40, color: 'var(--ink-1)', fontFamily: 'var(--mono)' }}>
-        Failed to load year data: {error}
-        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-3)' }}>
-          Is the backend running on port 8000? Try `docker compose up`.
-        </div>
-      </div>
-    );
-  }
   if (!ready) {
     return (
       <div style={{ padding: 40, color: 'var(--ink-2)', fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: '0.1em' }}>
@@ -866,24 +1022,14 @@ function DashboardApp({
     );
   }
 
-  const city = bundle?.city ?? DEFAULT_CITY;
-  const days: Day[] = deviceId ? (realDays ?? []) : (bundle?.days ?? []);
-  const months: MonthHydrated[] = deviceId ? realMonths : demoMonths;
-  const anomalies: Anomaly[] = deviceId
-    ? (realAnomalies ?? [])
-    : (bundle?.anomalies ?? []);
-  const visibleAnomalies = deviceId
-    ? anomalies.filter((a) => a.z >= anomalySensitivity)
-    : demoAnomalies;
-  const forecast: ForecastPoint[] = deviceId
-    ? (realForecast ?? [])
-    : (bundle?.forecast ?? []);
-  const peakHours: number[] = deviceId
-    ? realPeakHours
-    : (bundle?.peakHours ?? []);
-  const sources: Source[] = deviceId
-    ? (realSources ?? [])
-    : (bundle?.sources ?? []);
+  const city = DEFAULT_CITY;
+  const days: Day[] = realDays ?? [];
+  const months: MonthHydrated[] = realMonths;
+  const anomalies: Anomaly[] = realAnomalies ?? [];
+  const visibleAnomalies = anomalies.filter((a) => a.z >= anomalySensitivity);
+  const forecast: ForecastPoint[] = realForecast ?? [];
+  const peakHours: number[] = realPeakHours;
+  const sources: Source[] = realSources ?? [];
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -898,13 +1044,13 @@ function DashboardApp({
 
       {page === 'live' ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {deviceId
-            ? <RealLiveView deviceId={deviceId} threshold={dbThreshold} />
-            : <LiveView threshold={dbThreshold} />}
+          {isPreview
+            ? <PreviewLiveView threshold={dbThreshold} />
+            : <RealLiveView deviceId={deviceId!} threshold={dbThreshold} />}
         </div>
       ) : page === 'health' ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {deviceId ? <RealHealthView deviceId={deviceId} /> : <HealthView />}
+          {isPreview ? <PreviewHealthPlaceholder /> : <RealHealthView deviceId={deviceId!} />}
         </div>
       ) : (
         <Fragment>
@@ -921,9 +1067,9 @@ function DashboardApp({
             minHeight: 0,
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
-              {deviceId
-                ? <RealNowCard deviceId={deviceId} threshold={dbThreshold} onOpenLive={() => onPageChange('live')} />
-                : <NowCard palette={spectroColor} onOpenLive={() => onPageChange('live')} />}
+              {isPreview
+                ? <PreviewNowCard onOpenLive={() => onPageChange('live')} />
+                : <RealNowCard deviceId={deviceId!} threshold={dbThreshold} onOpenLive={() => onPageChange('live')} />}
               <Card
                 title="ANOMALIES FEED"
                 subtitle={`${visibleAnomalies.length} events · past 365 days`}

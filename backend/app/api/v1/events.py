@@ -12,7 +12,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth.device import ResolvedDevice, require_device
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...contracts import (
     EventIndexEntry,
     EventIndexResponse,
@@ -226,7 +226,7 @@ async def list_events(
     limit: int = Query(default=50, ge=1, le=500),
     from_ts: float | None = Query(default=None, alias="from"),
     to_ts: float | None = Query(default=None, alias="to"),
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[EventResponse]:
     stmt = select(Event).order_by(desc(Event.ts)).limit(limit)
@@ -248,7 +248,7 @@ async def list_event_index(
     limit: int = Query(default=5000, ge=1, le=10000),
     from_ts: float | None = Query(default=None, alias="from"),
     to_ts: float | None = Query(default=None, alias="to"),
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> EventIndexResponse:
     """Lightweight (ts, duration_s) listing for visual indicators.
@@ -292,7 +292,7 @@ async def list_event_index(
 @router.get("/events/{event_id}", response_model=EventResponse)
 async def get_event(
     event_id: UUID,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
     storage: Storage = Depends(get_storage),
     settings: Settings = Depends(get_settings),
@@ -322,7 +322,7 @@ class PlaybackUrlResponse(BaseModel):
 @router.get("/events/{event_id}/playback-url", response_model=PlaybackUrlResponse)
 async def get_event_playback_url(
     event_id: UUID,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
     storage: Storage = Depends(get_storage),
     settings: Settings = Depends(get_settings),
@@ -342,7 +342,7 @@ async def get_event_playback_url(
 @router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_event(
     event_id: UUID,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("event.delete")),
     session: AsyncSession = Depends(get_session),
     storage: Storage = Depends(get_storage),
 ) -> Response:

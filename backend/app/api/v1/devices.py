@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth.user import ResolvedUser, require_user
+from ...auth.user import ResolvedUser, require_permission
 from ...db import get_session
 from ...models import Device
 
@@ -55,7 +55,7 @@ def _to_response(row: Device) -> DeviceResponse:
 @router.post("/devices", status_code=status.HTTP_201_CREATED, response_model=DeviceResponse)
 async def register_device(
     body: DeviceRegistration,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("device.register")),
     session: AsyncSession = Depends(get_session),
 ) -> DeviceResponse:
     existing = await session.get(Device, body.device_id)
@@ -79,7 +79,7 @@ async def register_device(
 
 @router.get("/devices", response_model=list[DeviceResponse])
 async def list_devices(
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> list[DeviceResponse]:
     result = await session.execute(select(Device).order_by(Device.created_at))
@@ -89,7 +89,7 @@ async def list_devices(
 @router.get("/devices/{device_id}", response_model=DeviceResponse)
 async def get_device(
     device_id: UUID,
-    _user: ResolvedUser = Depends(require_user),
+    _user: ResolvedUser = Depends(require_permission("dashboard.view")),
     session: AsyncSession = Depends(get_session),
 ) -> DeviceResponse:
     row = await session.get(Device, device_id)

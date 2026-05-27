@@ -19,6 +19,7 @@ from . import data as data_lib
 from . import seed as seed_mod
 from .api.v1 import annotations as annotations_router
 from .api.v1 import anomalies as anomalies_router
+from .api.v1 import auth as auth_router
 from .api.v1 import cameras as cameras_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
@@ -30,10 +31,13 @@ from .api.v1 import forecast as forecast_router
 from .api.v1 import health as health_router
 from .api.v1 import labels as labels_router
 from .api.v1 import live as live_router
+from .api.v1 import preview as preview_router
 from .api.v1 import sources as sources_router
 from .api.v1 import spectrogram as spectrogram_router
 from .api.v1 import summary as summary_router
 from .api.v1 import telemetry as telemetry_router
+from .api.v1 import users as users_router
+from .auth.password import hash_password
 from .db import get_sessionmaker
 from .ingest.mqtt_publish import (
     get_command_publisher,
@@ -41,10 +45,13 @@ from .ingest.mqtt_publish import (
     shutdown_command_publisher,
 )
 from .live import live_ws_handler
-from .models import Device
+from .models import Device, User
 from .settings import get_settings
 from .storage import get_storage
 from sqlalchemy import select
+from datetime import datetime as _datetime
+from datetime import timezone as _timezone
+from uuid import uuid4 as _uuid4
 
 settings = get_settings()
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -85,10 +92,48 @@ async def _on_startup() -> None:
     init_command_publisher(settings)
     await _replay_retained_commands()
 
+    await _bootstrap_admin()
+
 
 @app.on_event("shutdown")
 async def _on_shutdown() -> None:
     shutdown_command_publisher()
+
+
+async def _bootstrap_admin() -> None:
+    """Create an admin user from ADMIN_EMAIL/ADMIN_PASSWORD if no admin exists.
+
+    Skipped silently when the env vars are blank, or when at least one
+    admin already exists. The bootstrap is one-shot per database; after
+    the first run the admin's password should be rotated via the admin
+    UI and these env vars cleared.
+    """
+    if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD:
+        return
+    factory = get_sessionmaker()
+    async with factory() as session:
+        existing = await session.execute(select(User).where(User.role == "admin").limit(1))
+        if existing.scalar_one_or_none() is not None:
+            log.info("startup: admin already exists, skipping bootstrap")
+            return
+        now = _datetime.now(_timezone.utc)
+        email = settings.ADMIN_EMAIL.strip().lower()
+        user = User(
+            user_id=_uuid4(),
+            email=email,
+            password_hash=hash_password(settings.ADMIN_PASSWORD),
+            role="admin",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(user)
+        try:
+            await session.commit()
+            log.info("startup: bootstrapped admin user %s", email)
+        except Exception:  # noqa: BLE001
+            await session.rollback()
+            log.exception("startup: failed to bootstrap admin user")
 
 
 async def _replay_retained_commands() -> None:
@@ -146,6 +191,9 @@ async def _replay_retained_commands() -> None:
 
 V1 = "/api/v1"
 app.include_router(health_router.router, prefix=V1, tags=["health"])
+app.include_router(auth_router.router, prefix=V1, tags=["auth"])
+app.include_router(users_router.router, prefix=V1, tags=["users"])
+app.include_router(preview_router.router, prefix=V1, tags=["preview"])
 app.include_router(devices_router.router, prefix=V1, tags=["devices"])
 app.include_router(telemetry_router.router, prefix=V1, tags=["telemetry"])
 app.include_router(device_health_router.router, prefix=V1, tags=["device-health"])

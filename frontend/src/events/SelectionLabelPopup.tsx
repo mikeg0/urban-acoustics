@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnnotationApiError, submitAnnotation } from '../api';
+import { useHasPermission } from '../auth';
+import { PERM } from '../permissions';
 import { useTweaks } from '../tweaks';
 import { formatClock } from '../utils';
 import { EVENT_LABELS, type EventLabel, type SpectrogramAnnotation } from '../types';
@@ -24,8 +26,13 @@ export function SelectionLabelPopup({
 }: Props) {
   const { timeFormat } = useTweaks();
   const fmtClockSec = (ts: number) => formatClock(ts, timeFormat, { withSeconds: true });
+  const canLabel = useHasPermission(PERM.EVENT_LABEL_WRITE);
   const [pending, setPending] = useState<EventLabel | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Guests/members can't write labels — hide the popup entirely rather
+  // than show a teaser they can't use.
+  if (!canLabel) return null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
