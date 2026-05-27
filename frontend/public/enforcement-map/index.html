@@ -197,7 +197,7 @@ button{font-family:inherit;cursor:pointer}
   <div class="sep"></div>
   <button class="chip" data-chip="biker">BIKER CONVOY</button>
   <button class="chip" data-chip="muscle">MUSCLE CAR</button>
-  <button class="chip" data-chip="pizza">PIZZA SUBARU</button>
+  <button class="chip" data-chip="pizza">PIZZA DELIVERY</button>
 </div>
 
 <div id="scrub" class="hidden">
@@ -243,9 +243,9 @@ button{font-family:inherit;cursor:pointer}
       </button>
       <button class="opt" data-opt="pizza">
         <div class="glyph">▭</div>
-        <div class="ttl">Pizza Subaru</div>
+        <div class="ttl">Pizza Delivery</div>
         <div class="desc">A Subaru with a modified muffler runs late night delivery loops at 2AM from 100 S &amp; Main, drawing a spider-web of trips.</div>
-        <div class="stats">5 DELIVERY ROUTES · RADIAL WEB · PEAK 86 dB</div>
+        <div class="stats">3 DELIVERY ROUTES · RADIAL WEB · PEAK 86 dB</div>
       </button>
     </div>
   </div>
@@ -285,7 +285,7 @@ if (typeof maplibregl === 'undefined') return;
  * Each street is a polyline along its centerline. NS streets run lat-asc
  * (south→north); EW streets run lon-asc (west→east).
  * ==========================================================================*/
-const STREETS = {"state":[[-111.888232,40.751084],[-111.888232,40.760005],[-111.888232,40.766991],[-111.888232,40.775866]],"main":[[-111.891119,40.751012],[-111.891119,40.758922],[-111.891119,40.766125],[-111.891119,40.776547]],"west_temple":[[-111.893958,40.751479],[-111.893958,40.761549],[-111.893958,40.767859],[-111.893958,40.774822]],"e_200":[[-111.885372,40.751125],[-111.885372,40.758203],[-111.885372,40.763582],[-111.885372,40.769347]],"e_300":[[-111.882503,40.751456],[-111.882503,40.759903],[-111.882503,40.763874],[-111.882503,40.769344]],"e_400":[[-111.879642,40.751583],[-111.879642,40.759434],[-111.879642,40.764239],[-111.879642,40.769345]],"n_temple":[[-111.899941,40.771493],[-111.896617,40.771493],[-111.892526,40.771493],[-111.888203,40.771493]],"s_100":[[-111.89994,40.767173],[-111.890914,40.767173],[-111.881952,40.767173],[-111.870289,40.767173]],"s_200":[[-111.899956,40.765005],[-111.890869,40.765005],[-111.881826,40.765005],[-111.870081,40.765005]],"s_300":[[-111.899977,40.762835],[-111.891984,40.762835],[-111.884515,40.762835],[-111.870401,40.762835]],"s_400":[[-111.899973,40.760582],[-111.890932,40.760582],[-111.880643,40.760582],[-111.870367,40.760582]],"s_500":[[-111.89994,40.758483],[-111.890884,40.758483],[-111.880316,40.758483],[-111.870032,40.758483]],"s_600":[[-111.899945,40.756299],[-111.89135,40.756299],[-111.881512,40.756299],[-111.870096,40.756299]],"s_700":[[-111.89993,40.754131],[-111.893721,40.754131],[-111.885577,40.754131],[-111.870248,40.754131]]};
+const STREETS = {"state":[[-111.888232,40.751084],[-111.888232,40.760005],[-111.888232,40.766991],[-111.888232,40.775866]],"main":[[-111.891119,40.751012],[-111.891119,40.758922],[-111.891119,40.766125],[-111.891119,40.776547]],"west_temple":[[-111.893958,40.751479],[-111.893958,40.761549],[-111.893958,40.767859],[-111.893958,40.774822]],"e_200":[[-111.885372,40.751125],[-111.885372,40.758203],[-111.885372,40.763582],[-111.885372,40.769347]],"e_300":[[-111.882503,40.751456],[-111.882503,40.759903],[-111.882503,40.763874],[-111.882503,40.769344]],"e_400":[[-111.879642,40.751583],[-111.879642,40.759434],[-111.879642,40.764239],[-111.879642,40.769345]],"n_temple":[[-111.899941,40.771493],[-111.896617,40.771493],[-111.892526,40.771493],[-111.888203,40.771493]],"s_temple":[[-111.899941,40.769333],[-111.893958,40.769333],[-111.891119,40.769333],[-111.888203,40.769333]],"s_100":[[-111.89994,40.767173],[-111.890914,40.767173],[-111.881952,40.767173],[-111.870289,40.767173]],"s_200":[[-111.899956,40.765005],[-111.890869,40.765005],[-111.881826,40.765005],[-111.870081,40.765005]],"s_300":[[-111.899977,40.762835],[-111.891984,40.762835],[-111.884515,40.762835],[-111.870401,40.762835]],"s_400":[[-111.899973,40.760582],[-111.890932,40.760582],[-111.880643,40.760582],[-111.870367,40.760582]],"s_500":[[-111.89994,40.758483],[-111.890884,40.758483],[-111.880316,40.758483],[-111.870032,40.758483]],"s_600":[[-111.899945,40.756299],[-111.89135,40.756299],[-111.881512,40.756299],[-111.870096,40.756299]],"s_700":[[-111.89993,40.754131],[-111.893721,40.754131],[-111.885577,40.754131],[-111.870248,40.754131]]};
 
 // Quick-lookup helpers.
 const NS_LON = {}, EW_LAT = {};
@@ -353,12 +353,15 @@ const BRANCH_INTERSECTIONS = [
   {lat: 40.771493, lon: -111.888232, name: 'n_temple'},
 ];
 
-// Endpoint longitudes for the east and west alternative branches.
-// Each branch forks from the next BRANCH_INTERSECTIONS point ahead of
-// the convoy and runs ~5-6 blocks before kinking off, giving the
-// "this could go to a different part of town" feel.
-const ALT_BRANCH_END_LON_E = -111.879642;  // east, near 400 East corridor
-const ALT_BRANCH_END_LON_W = -111.895900;  // west, past West Temple
+// Endpoint longitudes for the east and west alternative branches —
+// each anchored on a real north–south street so the vertical "kink"
+// at the end of every branch sits on the road grid (otherwise the
+// kink runs through buildings mid-block).
+//   East: 400 East corridor (matches STREETS.e_400 lon).
+//   West: 300 West corridor (the next real N-S street out from West
+//         Temple; matches the seed pilot corridor's 300W column).
+const ALT_BRANCH_END_LON_E = -111.879642;
+const ALT_BRANCH_END_LON_W = -111.897000;
 
 // Per-stage confidences. Sum to ~1; opacity is driven directly off the
 // `capitol` / `east` / `west` field for the matching branch. Stage 0
@@ -731,6 +734,11 @@ const CONVOY_BY_QUEUE = (() => {
   for (const b of CONVOY_BIKES) arr[b.queueIdx] = b;
   return arr;
 })();
+// Queue positions of the three "really loud" bikes — 1st, 3rd, and 7th
+// in line. Only these emit full-size rings and bloom; the rest of the
+// pack emits small rings and no bloom (CPU win: 70 % fewer bloom
+// features per pulse event, since bloom is the heaviest ring layer).
+const LOUD_QUEUE_IDX = new Set([0, 2, 6]);
 
 /* Sample a bike's position and state at sim-time `eventT`, applying the
  * bike's time offset (dt) and lateral road-perpendicular offset (lat).
@@ -894,74 +902,48 @@ function buildMuscleTimeline() {
 /* ----- Scenario C: pizza Subaru -------------------------------------------*/
 function buildPizzaTimeline() {
   const tl = newTimeline();
-  const v = 9;
+  const v = 15;
   const idleArgs = {dbIdle: 62, dbPeak: 86, revCadenceS: 6};
   const HQ = PIZZA_HQ;
-  // Each delivery: route to destination via a chain of intersections, idle 25s
-  // (parked, no revs), route back via different chain, idle 35s at home.
-  // Five different delivery patterns.
+  // Each delivery: route to destination, brief park, route back, brief HQ idle.
+  // Three radial trips (SE, NW around Temple Square, E) fit a ~7-min loop.
   const deliveries = [
     // 1) HQ → 300 S & 200 E. Path: Main south to 300 S, east on 300 S to 200 E.
     {dest: ix('e_200','s_300'),
      forward: [
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: ix('main','s_300'), sig: 'main_s_300'},
-       {at: ix('e_200','s_300'), sig: 'e_300_s_300'},
+       {at: ix('main','s_200'),  sig: null},
+       {at: ix('main','s_300'),  sig: null},
+       {at: ix('e_200','s_300'), sig: null},
      ],
      back: [
-       {at: ix('main','s_300'), sig: 'main_s_300'},
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: HQ,                  sig: 'main_s_100'},
+       {at: ix('main','s_300'), sig: null},
+       {at: ix('main','s_200'), sig: null},
+       {at: HQ,                 sig: null},
      ]},
-    // 2) HQ → N Temple & West Temple
+    // 2) HQ → N Temple & West Temple. Route detours via South Temple
+    // because Main Street is interrupted by Temple Square between
+    // S Temple and N Temple — a straight Main run would cut through
+    // the Reflecting Pool.
     {dest: ix('west_temple','n_temple'),
      forward: [
-       {at: ix('main','n_temple'), sig: 'main_n_temple'},
-       {at: ix('west_temple','n_temple'), sig: 'west_temple_n_temple'},
+       {at: ix('main','s_temple'),        sig: null},
+       {at: ix('west_temple','s_temple'), sig: null},
+       {at: ix('west_temple','n_temple'), sig: null},
      ],
      back: [
-       {at: ix('main','n_temple'), sig: 'main_n_temple'},
-       {at: HQ,                    sig: 'main_s_100'},
+       {at: ix('west_temple','s_temple'), sig: null},
+       {at: ix('main','s_temple'),        sig: null},
+       {at: HQ,                           sig: null},
      ]},
-    // 3) HQ → 500 S & State
-    {dest: ix('state','s_500'),
-     forward: [
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: ix('main','s_300'), sig: 'main_s_300'},
-       {at: ix('main','s_400'), sig: 'main_s_400'},
-       {at: ix('main','s_500'), sig: 'main_s_500'},
-       {at: ix('state','s_500'), sig: 'state_s_500'},
-     ],
-     back: [
-       {at: ix('main','s_500'), sig: 'main_s_500'},
-       {at: ix('main','s_400'), sig: 'main_s_400'},
-       {at: ix('main','s_300'), sig: 'main_s_300'},
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: HQ,                  sig: 'main_s_100'},
-     ]},
-    // 4) HQ → 200 S & 400 E
+    // 3) HQ → 200 S & 400 E
     {dest: ix('e_400','s_200'),
      forward: [
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: ix('e_400','s_200'), sig: 'e_400_s_200'},
+       {at: ix('main','s_200'),  sig: null},
+       {at: ix('e_400','s_200'), sig: null},
      ],
      back: [
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: HQ,                  sig: 'main_s_100'},
-     ]},
-    // 5) HQ → 400 S & 400 E
-    {dest: ix('e_400','s_400'),
-     forward: [
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: ix('main','s_300'), sig: 'main_s_300'},
-       {at: ix('main','s_400'), sig: 'main_s_400'},
-       {at: ix('e_400','s_400'), sig: 'e_400_s_400'},
-     ],
-     back: [
-       {at: ix('main','s_400'), sig: 'main_s_400'},
-       {at: ix('main','s_300'), sig: 'main_s_300'},
-       {at: ix('main','s_200'), sig: 'main_s_200'},
-       {at: HQ,                  sig: 'main_s_100'},
+       {at: ix('main','s_200'), sig: null},
+       {at: HQ,                 sig: null},
      ]},
   ];
   for (const dlv of deliveries) {
@@ -971,14 +953,14 @@ function buildPizzaTimeline() {
       cur = wp.at;
     }
     // Park at delivery destination — no revs.
-    addIdle(tl, dlv.dest, 25, {dbIdle: 0, dbPeak: 0, revCadenceS: 999, signalId: null, roarOnExit: false, label: 'DELIVERY'});
+    addIdle(tl, dlv.dest, 8, {dbIdle: 0, dbPeak: 0, revCadenceS: 999, signalId: null, roarOnExit: false, label: 'DELIVERY'});
     cur = dlv.dest;
     for (const wp of dlv.back) {
       addDriveAndStopIfRed(tl, cur, wp.at, v, 82, {...idleArgs, signalId: wp.sig});
       cur = wp.at;
     }
     // Idle at HQ between deliveries.
-    addIdle(tl, HQ, 35, {dbIdle: 60, dbPeak: 84, revCadenceS: 8, signalId: null, roarOnExit: true, label: 'AT HQ'});
+    addIdle(tl, HQ, 8, {dbIdle: 60, dbPeak: 84, revCadenceS: 8, signalId: null, roarOnExit: true, label: 'AT HQ'});
   }
   return finalizeTimeline(tl);
 }
@@ -1024,7 +1006,7 @@ const SCENARIOS = {
     },
   },
   pizza: {
-    slug: 'pizza', label: 'PIZZA SUBARU',
+    slug: 'pizza', label: 'PIZZA DELIVERY',
     mapView: {center: [-111.8895, 40.7676], zoom: 14.2},
     build() {
       const tl = buildPizzaTimeline();
@@ -1904,9 +1886,10 @@ function updateTerm(scen, t) {
       });
     }
 
-    // 5c. East / West alternative branches — only shown while there's
-    //     still a future staging intersection (the fork point) AND the
-    //     stage hasn't fully collapsed onto the Capitol route.
+    // 5c. East / West alternative branches — go straight east or west
+    //     along the cross street at the next staging intersection
+    //     (e.g. along N Temple if that's the next fork). No vertical
+    //     jog at the end — that used to cut through buildings.
     const branchIx = nextBranchAhead(leadPos);
     if (branchIx) {
       const fork = [branchIx.lon, branchIx.lat];
@@ -1917,7 +1900,6 @@ function updateTerm(scen, t) {
             leadPos,
             fork,
             [ALT_BRANCH_END_LON_E, branchIx.lat],
-            [ALT_BRANCH_END_LON_E, branchIx.lat + 0.0042],
           ]},
           properties:{ opacity: conf.east, branch: 'east' },
         });
@@ -1929,7 +1911,6 @@ function updateTerm(scen, t) {
             leadPos,
             fork,
             [ALT_BRANCH_END_LON_W, branchIx.lat],
-            [ALT_BRANCH_END_LON_W, branchIx.lat - 0.0042],
           ]},
           properties:{ opacity: conf.west, branch: 'west' },
         });
@@ -2159,12 +2140,31 @@ function renderFrame() {
       const pulseMaxAge = isPulse ? (1.6 + (e.accel || 0.3) * 1.8) : 0;
       const maxAge = isRoar ? 3.2 : (isArrive ? 1.4 : (isPulse ? pulseMaxAge : 1.7));
       const color = colorForDb(e.db);
-      let em;
+      // For the convoy: only the 1st, 3rd, and 7th bikes in the queue
+      // emit full-magnitude rings + bloom (the "really loud" bikes —
+      // those are the modded exhausts you actually hear over the rest
+      // of the pack). The other 7 bikes are "semi-loud": small rings
+      // only, no bloom. That keeps every motorcycle visually represented
+      // while cutting per-event bloom features by 70 %, which is where
+      // the CPU cost was concentrated.
+      const emitters = [];
       if (isSwarm) {
-        const bk = CONVOY_BIKES[bikeIdxForEvent(e.t)];
-        em = {pos: sampleBike(actor.timeline, e.t, bk).pos, scale: bk.scale};
+        for (const bk of CONVOY_BIKES) {
+          const loud = LOUD_QUEUE_IDX.has(bk.queueIdx);
+          emitters.push({
+            pos: sampleBike(actor.timeline, e.t, bk).pos,
+            // Bloom anchors to the leader-timeline position rather than the
+            // per-bike sampled position. Loud bikes include queueIdx 0
+            // (dt=+6.5s) which renders ahead of the visible cluster — using
+            // its position for bloom made the residue glow drift past the
+            // pack instead of staying with it.
+            bloomPos: e.pos,
+            scale: loud ? 1.25 : 0.42,
+            bloom: loud,
+          });
+        }
       } else {
-        em = {pos: e.pos, scale: 1.0};
+        emitters.push({pos: e.pos, bloomPos: e.pos, scale: 1.0, bloom: true});
       }
       // Per-kind bloom factor (0 = no bloom, 1 = full muscle-car-launch
       // bloom). Every kind now contributes some residual bloom so the
@@ -2174,11 +2174,14 @@ function renderFrame() {
       else if (isPulse)   bloomFactor = 0.30 + (e.accel || 0.3) * 0.85;
       else if (isArrive)  bloomFactor = 0.45;
       else /* rev */      bloomFactor = 0.30 + (e.progress || 0.5) * 0.45;
-      if (age <= maxAge) {
+      // Compute the per-kind ring formula ONCE per event, then emit
+      // the resulting ring + bloom features at every emitter position.
+      let radius = 0, opacity = 0, strokeW = 0, taper = 0;
+      const ringActive = age <= maxAge;
+      if (ringActive) {
         const prog = e.progress != null ? e.progress : 1;
-        let radius, opacity, strokeW;
         if (isRoar) {
-          const taper = e.waveTaper != null ? e.waveTaper : 0;
+          taper = e.waveTaper != null ? e.waveTaper : 0;
           const punch = 1 - taper * 0.45;
           radius = (10 + age * 28) * punch;
           opacity = (1 - age/maxAge) * (0.95 * punch);
@@ -2204,36 +2207,43 @@ function renderFrame() {
           opacity = (1 - age/maxAge) * (0.45 + prog * 0.45);
           strokeW = 1.6 + prog * 1.4;
         }
-        ringFts.push({
-          type:'Feature', geometry:{type:'Point', coordinates: em.pos},
-          properties:{
-            radius: radius * em.scale,
-            opacity,
-            color,
-            strokeW: strokeW * em.scale,
-          },
-        });
       }
-      // Bloom residue — every kind contributes. Cadence and intensity
-      // already vary with accel (pulse rings), so the cumulative bloom
-      // brightens during accel/decel phases and fades during cruise.
-      if (bloomFactor > 0 && age <= BLOOM_MAX_AGE) {
-        const taper = e.waveTaper != null ? e.waveTaper : 0;
+      const bloomActive = bloomFactor > 0 && age <= BLOOM_MAX_AGE;
+      let haloRadiusBase = 0, haloOpacityBase = 0, coreRadiusBase = 0, coreOpacityBase = 0;
+      if (bloomActive) {
+        const bTaper = e.waveTaper != null ? e.waveTaper : 0;
         const lifeFrac = age / BLOOM_MAX_AGE;
         const fade = (1 - lifeFrac) * (1 - lifeFrac);
-        const intensity = (1 - taper * 0.35) * bloomFactor;
-        const haloRadius = (18 + Math.min(age * 4, 12) - taper * 3) * em.scale;
-        const haloOpacity = fade * (0.55 * intensity);
-        bloomFts.push({
-          type:'Feature', geometry:{type:'Point', coordinates: em.pos},
-          properties:{ radius: haloRadius, opacity: haloOpacity, color },
-        });
-        const coreRadius = (9 + Math.min(age * 3, 6) - taper * 1.5) * em.scale;
-        const coreOpacity = fade * (0.85 * intensity);
-        bloomFts.push({
-          type:'Feature', geometry:{type:'Point', coordinates: em.pos},
-          properties:{ radius: coreRadius, opacity: coreOpacity, color },
-        });
+        const intensity = (1 - bTaper * 0.35) * bloomFactor;
+        haloRadiusBase = 18 + Math.min(age * 4, 12) - bTaper * 3;
+        haloOpacityBase = fade * (0.55 * intensity);
+        coreRadiusBase = 9 + Math.min(age * 3, 6) - bTaper * 1.5;
+        coreOpacityBase = fade * (0.85 * intensity);
+      }
+      // Emit one ring + one bloom pair per emitter (1 for non-swarm,
+      // 10 for the biker convoy — one ring trail per motorcycle).
+      for (const em of emitters) {
+        if (ringActive) {
+          ringFts.push({
+            type:'Feature', geometry:{type:'Point', coordinates: em.pos},
+            properties:{
+              radius: radius * em.scale,
+              opacity,
+              color,
+              strokeW: strokeW * em.scale,
+            },
+          });
+        }
+        if (bloomActive && em.bloom) {
+          bloomFts.push({
+            type:'Feature', geometry:{type:'Point', coordinates: em.bloomPos},
+            properties:{ radius: haloRadiusBase * em.scale, opacity: haloOpacityBase, color },
+          });
+          bloomFts.push({
+            type:'Feature', geometry:{type:'Point', coordinates: em.bloomPos},
+            properties:{ radius: coreRadiusBase * em.scale, opacity: coreOpacityBase, color },
+          });
+        }
       }
     }
   }
