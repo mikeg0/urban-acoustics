@@ -305,38 +305,361 @@ p { margin: 0; }
 .s-dash .eyebrow { color: var(--c-accent-soft); }
 .s-dash h2 { color: var(--c-bg); }
 .s-dash .section-head .lede { color: rgba(244,241,234,0.7); }
+
 .dashframe {
-  background: rgba(244,241,234,0.04); border: 1px solid rgba(244,241,234,0.12);
-  padding: 28px; display: grid; grid-template-columns: 2fr 1fr; gap: 24px;
+  --df-bg: #0e1419;
+  --df-bg-2: #131a20;
+  --df-panel: rgba(255,255,255,0.025);
+  --df-panel-border: rgba(255,255,255,0.085);
+  --df-rule: rgba(255,255,255,0.06);
+  --df-text: rgba(244,241,234,0.92);
+  --df-text-soft: rgba(244,241,234,0.62);
+  --df-text-mute: rgba(244,241,234,0.42);
+  --df-hot: #c44536;
+  --df-cool: #6ea8b8;
+  --df-warn: #d4a85a;
+  --df-green: #7fb37a;
+  --df-purple: #9b87c4;
+
+  background: var(--df-bg);
+  border: 1px solid var(--df-panel-border);
+  color: var(--df-text);
+  font-family: var(--font-body);
   margin-bottom: 24px;
+  overflow: hidden;
 }
-@media (max-width: 880px) { .dashframe { grid-template-columns: 1fr; } }
-.dashframe .panel { background: rgba(244,241,234,0.06); border: 1px solid rgba(244,241,234,0.10); padding: 22px; }
-.dashframe .panel .ptitle { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(244,241,234,0.55); margin-bottom: 14px; display: flex; justify-content: space-between; }
-.dashframe .panel .ptitle .badge { font-family: var(--font-mono); font-size: 10px; padding: 3px 8px; background: var(--c-accent); color: var(--c-bg); letter-spacing: 0.1em; }
-#heat-grid { display: grid; grid-template-columns: repeat(24, 1fr); grid-template-rows: repeat(8, 1fr); gap: 2px; aspect-ratio: 24/8; }
-#heat-grid .cell { background: rgba(244,241,234,0.08); transition: background .2s; }
-.heat-axis { display: flex; justify-content: space-between; margin-top: 10px; font-family: var(--font-mono); font-size: 10px; color: rgba(244,241,234,0.45); letter-spacing: 0.1em; }
-.tod-controls { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Topbar ─────────────────────────────────────────────────── */
+.df-topbar {
+  display: grid;
+  grid-template-columns: minmax(0,auto) minmax(0,1fr) auto auto;
+  align-items: center;
+  gap: 24px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--df-rule);
+  background: rgba(0,0,0,0.25);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--df-text-soft);
+}
+.df-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.df-brand .df-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
+.df-brand .df-bars i { display: block; width: 3px; background: var(--df-cool); }
+.df-brand .df-bars i:nth-child(1) { height: 35%; }
+.df-brand .df-bars i:nth-child(2) { height: 70%; background: var(--df-warn); }
+.df-brand .df-bars i:nth-child(3) { height: 100%; background: var(--df-hot); }
+.df-brand .df-bars i:nth-child(4) { height: 55%; background: var(--df-cool); }
+.df-brand .df-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.df-brand .df-id .a { color: var(--df-text); font-weight: 500; letter-spacing: 0.06em; font-size: 12.5px; }
+.df-brand .df-id .b { color: var(--df-text-mute); font-size: 9.5px; letter-spacing: 0.16em; }
+
+.df-status { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.df-status .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--df-green); box-shadow: 0 0 0 4px rgba(127,179,122,0.18); flex-shrink: 0; }
+.df-status .city { color: var(--df-text); display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.df-status .city .a { letter-spacing: 0.06em; }
+.df-status .city .b { color: var(--df-text-mute); font-size: 9.5px; letter-spacing: 0.14em; }
+
+.df-tabs { display: flex; gap: 0; background: rgba(255,255,255,0.04); padding: 3px; border-radius: 2px; }
+.df-tab { padding: 7px 12px; font: inherit; color: var(--df-text-mute); border: 0; background: transparent; letter-spacing: 0.12em; cursor: default; }
+.df-tab.is-active { background: rgba(255,255,255,0.08); color: var(--df-text); }
+.df-tab .ldot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--df-hot); margin-right: 6px; vertical-align: 1px; box-shadow: 0 0 0 3px rgba(196,69,54,0.22); }
+
+.df-meta { display: flex; align-items: center; gap: 14px; }
+.df-meta .item { display: flex; align-items: center; gap: 8px; color: var(--df-text-mute); letter-spacing: 0.1em; font-size: 10.5px; }
+.df-meta .threshold .v { color: var(--df-hot); }
+.df-meta .df-clock { color: var(--df-text); background: rgba(255,255,255,0.05); padding: 6px 10px; letter-spacing: 0.12em; font-size: 11.5px; }
+.df-meta .user .name { color: var(--df-text-soft); text-transform: none; letter-spacing: 0; font-family: var(--font-body); }
+.df-meta .user .tag { color: var(--df-warn); letter-spacing: 0.16em; }
+.df-meta .settings {
+  background: transparent; border: 1px solid var(--df-panel-border); color: var(--df-text-soft);
+  padding: 6px 10px; font: inherit; letter-spacing: 0.14em; display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* ── KPIs ───────────────────────────────────────────────────── */
+.df-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--df-rule);
+  border-bottom: 1px solid var(--df-rule);
+}
+.df-kpi { background: var(--df-bg); padding: 18px 22px; }
+.df-kpi .k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--df-text-mute); margin-bottom: 10px; }
+.df-kpi .v { font-family: var(--font-mono); font-size: 30px; color: var(--df-text); letter-spacing: -0.01em; line-height: 1; font-weight: 400; }
+.df-kpi .v .u { font-family: var(--font-mono); font-size: 11px; color: var(--df-text-mute); margin-left: 5px; letter-spacing: 0.06em; vertical-align: 2px; }
+.df-kpi .v.hot { color: var(--df-hot); }
+.df-kpi .p { font-family: var(--font-mono); font-size: 10.5px; color: var(--df-text-mute); margin-top: 9px; letter-spacing: 0.08em; line-height: 1.4; }
+.df-kpi .p b { color: var(--df-text-soft); font-weight: 500; }
+
+/* ── Body grid ──────────────────────────────────────────────── */
+.df-body {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1.85fr) minmax(0,1fr);
+  gap: 1px;
+  background: var(--df-rule);
+}
+.df-col { background: var(--df-bg); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+/* ── Card frame ─────────────────────────────────────────────── */
+.df-card { background: var(--df-panel); border: 1px solid var(--df-panel-border); padding: 14px; }
+.df-card .df-ch {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--df-text-mute);
+  margin-bottom: 12px;
+}
+.df-card .df-ch .ch-l { display: flex; flex-direction: column; gap: 2px; }
+.df-card .df-ch .ch-sub { color: var(--df-text-mute); font-size: 9.5px; letter-spacing: 0.12em; text-transform: none; }
+
+.df-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em;
+}
+.df-pill.live { border: 1px solid var(--df-hot); color: var(--df-hot); }
+.df-pill.live .ldot { width: 6px; height: 6px; border-radius: 50%; background: var(--df-hot); animation: dfPulse 2.2s infinite; }
+.df-pill.model { border: 1px solid var(--df-cool); color: var(--df-cool); }
+.df-pill.model .ldot { width: 6px; height: 6px; border-radius: 50%; background: var(--df-cool); }
+@keyframes dfPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ── Live readout ───────────────────────────────────────────── */
+.df-live { display: grid; grid-template-columns: 110px 1fr; gap: 14px; align-items: stretch; }
+.df-live .v-num { font-family: var(--font-mono); font-size: 44px; line-height: 1; color: var(--df-text); letter-spacing: -0.02em; font-weight: 400; }
+.df-live .v-meta { font-family: var(--font-mono); font-size: 10px; color: var(--df-text-mute); letter-spacing: 0.1em; margin-top: 6px; line-height: 1.5; }
+.df-live .v-meta b { color: var(--df-text-soft); font-weight: 500; }
+.df-spectro-live {
+  min-height: 80px;
+  background: linear-gradient(180deg, #0a0d10 0%, #1a1f24 100%);
+  position: relative; overflow: hidden;
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 5px, rgba(110,168,184,0.25) 5px 6px),
+    radial-gradient(ellipse 50% 25% at 20% 50%, rgba(196,69,54,0.5), transparent 70%),
+    radial-gradient(ellipse 30% 20% at 55% 60%, rgba(212,168,90,0.4), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 80% 40%, rgba(110,168,184,0.3), transparent 70%),
+    linear-gradient(180deg, #0a0d10 0%, #1a1f24 100%);
+}
+
+/* ── Camera placeholder ─────────────────────────────────────── */
+.df-camera-box {
+  position: relative; aspect-ratio: 16/10;
+  background:
+    linear-gradient(180deg, #2a3540 0%, #3a4a55 30%, #4a5560 50%, #2a2520 75%, #1a1510 100%);
+  overflow: hidden;
+  border: 1px solid var(--df-panel-border);
+}
+.df-camera-box::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    /* "buildings" silhouette */
+    linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.55) 55%, transparent 55%),
+    /* sky vignette */
+    radial-gradient(ellipse at 60% 30%, rgba(180,160,140,0.25), transparent 60%);
+}
+.df-camera-box::after {
+  /* a faint "road" */
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 35%;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 30px, rgba(244,224,180,0.18) 30px 50px),
+    linear-gradient(180deg, rgba(40,30,20,0.4), rgba(20,15,10,0.85));
+}
+.df-camera-overlay {
+  position: absolute; right: 8px; top: 8px;
+  font-family: var(--font-mono); font-size: 9.5px; color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.45); padding: 3px 7px; letter-spacing: 0.1em;
+  z-index: 2;
+}
+.df-camera-cap {
+  position: absolute; left: 10px; bottom: 8px;
+  font-family: var(--font-mono); font-size: 10px; color: rgba(244,241,234,0.85);
+  letter-spacing: 0.08em; z-index: 2;
+}
+
+/* ── Anomalies feed ─────────────────────────────────────────── */
+.df-anom-list { display: flex; flex-direction: column; gap: 10px; }
+.df-anom-row {
+  display: grid; grid-template-columns: auto auto 1fr auto;
+  align-items: center; gap: 12px;
+  padding: 10px 0; border-top: 1px solid var(--df-rule);
+}
+.df-anom-row:first-child { border-top: 0; padding-top: 4px; }
+.df-anom-row .sev {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.16em;
+  padding: 3px 8px; border-radius: 2px; text-align: center; min-width: 70px;
+}
+.df-anom-row .sev.elev { background: rgba(212,168,90,0.18); color: var(--df-warn); border: 1px solid rgba(212,168,90,0.4); }
+.df-anom-row .sev.high { background: rgba(196,69,54,0.18); color: var(--df-hot); border: 1px solid rgba(196,69,54,0.45); }
+.df-anom-row .ts { font-family: var(--font-mono); font-size: 10.5px; color: var(--df-text-mute); line-height: 1.4; }
+.df-anom-row .ts b { display: block; color: var(--df-text-soft); font-weight: 500; }
+.df-anom-row .desc { font-family: var(--font-mono); font-size: 10.5px; color: var(--df-text-soft); line-height: 1.45; }
+.df-anom-row .desc b { color: var(--df-text); font-weight: 500; font-size: 12px; display: block; margin-bottom: 2px; }
+.df-anom-row .db { font-family: var(--font-mono); font-size: 18px; color: var(--df-text); letter-spacing: -0.01em; }
+.df-anom-row .db .u { font-size: 9.5px; color: var(--df-text-mute); margin-left: 2px; }
+
+/* ── Drill column ───────────────────────────────────────────── */
+.df-rangetabs { display: flex; align-items: center; gap: 0; }
+.df-rangetabs .rt {
+  flex: 1; padding: 10px 14px; background: transparent;
+  border: 1px solid var(--df-panel-border);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--df-text-mute);
+  cursor: default;
+}
+.df-rangetabs .rt + .rt { border-left: 0; }
+.df-rangetabs .rt.is-active { background: #e3c4dd; color: #1a1015; border-color: #e3c4dd; }
+
+.df-breadcrumb {
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--df-text-mute);
+  padding: 4px 2px;
+}
+.df-breadcrumb .crumbs { display: flex; align-items: center; gap: 10px; }
+.df-breadcrumb .crumbs .sep { opacity: 0.5; }
+.df-breadcrumb .crumbs .cur { color: var(--df-text-soft); }
+
+.df-daystatus {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; background: var(--df-panel); border: 1px solid var(--df-panel-border);
+  flex-wrap: wrap;
+}
+.df-daystatus .left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.df-daystatus .ind { display: inline-flex; align-items: center; gap: 8px; }
+.df-daystatus .ind .ldot { width: 8px; height: 8px; border-radius: 50%; background: var(--df-green); box-shadow: 0 0 0 4px rgba(127,179,122,0.16); }
+.df-daystatus .ind .l { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--df-green); }
+.df-daystatus .day { font-family: var(--font-display); font-size: 19px; color: var(--df-text); letter-spacing: -0.005em; }
+.df-daystatus .sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--df-text-mute); letter-spacing: 0.1em; }
+.df-daystatus .right { font-family: var(--font-mono); font-size: 10.5px; color: var(--df-text-mute); letter-spacing: 0.14em; text-transform: uppercase; }
+.df-daystatus .right b { color: var(--df-hot); font-weight: 500; }
+
+.df-daystats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--df-rule); border: 1px solid var(--df-panel-border); }
+.df-daystats .ds { background: var(--df-bg); padding: 14px 14px; }
+.df-daystats .ds .k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--df-text-mute); margin-bottom: 8px; }
+.df-daystats .ds .v { font-family: var(--font-mono); font-size: 22px; color: var(--df-text); line-height: 1; letter-spacing: -0.01em; }
+.df-daystats .ds .v.hot { color: var(--df-hot); }
+.df-daystats .ds .v .u { font-size: 10px; color: var(--df-text-mute); margin-left: 3px; letter-spacing: 0.05em; }
+.df-daystats .ds .p { font-family: var(--font-mono); font-size: 9.5px; color: var(--df-text-mute); margin-top: 6px; letter-spacing: 0.06em; }
+
+/* ── 24-hour spectrogram strip ──────────────────────────────── */
+.df-spectro-card { padding: 14px; }
+.df-spectro-card .df-ch { margin-bottom: 8px; }
+.df-spectro-legend { display: flex; gap: 16px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; color: var(--df-text-mute); }
+.df-spectro-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+.df-spectro-legend .lg .sw { width: 11px; height: 11px; display: inline-block; }
+.df-spectro-legend .lg.labeled .sw { background: var(--df-green); }
+.df-spectro-legend .lg.unlabeled .sw { background: var(--df-warn); }
+.df-spectro-legend .lg.annot .sw { background: var(--df-purple); }
+.df-spectro-sub { font-family: var(--font-mono); font-size: 9.5px; color: var(--df-text-mute); letter-spacing: 0.1em; margin: 2px 0 10px; }
+#heat-grid {
+  display: grid; grid-template-columns: repeat(24, 1fr); grid-template-rows: repeat(4, 1fr);
+  gap: 1px; aspect-ratio: 24/3.5; background: #0a0d10;
+}
+#heat-grid .cell { background: rgba(244,241,234,0.06); transition: background .2s; }
+.heat-axis { display: grid; grid-template-columns: repeat(24, 1fr); margin-top: 6px; font-family: var(--font-mono); font-size: 9px; color: var(--df-text-mute); letter-spacing: 0.05em; }
+.heat-axis span { text-align: center; }
+.tod-controls { margin-top: 14px; display: flex; gap: 6px; flex-wrap: wrap; }
 .tod-btn {
-  background: transparent; color: rgba(244,241,234,0.6); border: 1px solid rgba(244,241,234,0.2);
-  padding: 8px 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+  background: transparent; color: var(--df-text-mute);
+  border: 1px solid var(--df-panel-border);
+  padding: 7px 11px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
   text-transform: uppercase; transition: all .15s;
 }
-.tod-btn:hover { color: var(--c-bg); border-color: var(--c-bg); }
-.tod-btn.is-active { background: var(--c-accent); color: var(--c-bg); border-color: var(--c-accent); }
+.tod-btn:hover { color: var(--df-text); border-color: rgba(255,255,255,0.18); }
+.tod-btn.is-active { background: var(--df-hot); color: #fff; border-color: var(--df-hot); }
 
-.dashframe .stat-line { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0; border-bottom: 1px solid rgba(244,241,234,0.10); }
-.dashframe .stat-line:last-child { border-bottom: 0; }
-.dashframe .stat-line .l { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(244,241,234,0.55); }
-.dashframe .stat-line .v { font-family: var(--font-display); font-size: 26px; }
-.dashframe .stat-line .v.up { color: var(--c-accent-soft); }
+/* ── Day events list ────────────────────────────────────────── */
+.df-events { padding: 0; }
+.df-events-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--df-rule);
+}
+.df-events-head .h { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--df-text-mute); }
+.df-events-head .h b { color: var(--df-text); font-weight: 500; }
+.df-events-head .h .sub { display: block; color: var(--df-text-mute); font-weight: 400; text-transform: none; letter-spacing: 0.06em; font-size: 9.5px; margin-top: 3px; }
+.df-events-head .sort {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; color: var(--df-text-soft);
+  padding: 6px 10px; border: 1px solid var(--df-panel-border); background: transparent;
+}
+.df-evrow {
+  display: grid; grid-template-columns: 70px 1fr auto auto; align-items: center; gap: 14px;
+  padding: 10px 14px; border-bottom: 1px solid var(--df-rule);
+}
+.df-evrow:last-child { border-bottom: 0; }
+.df-evrow .db { font-family: var(--font-mono); font-size: 17px; color: var(--df-text); letter-spacing: -0.01em; }
+.df-evrow .db .u { font-size: 10px; color: var(--df-text-mute); margin-left: 2px; }
+.df-evrow .meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--df-text-mute); line-height: 1.45; letter-spacing: 0.04em; }
+.df-evrow .meta .ts { color: var(--df-text-soft); }
+.df-evrow .meta .lbl { color: var(--df-text-mute); }
+.df-evrow .meta .lbl b { color: var(--df-text-soft); font-weight: 500; }
+.df-evrow .pill {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em;
+  padding: 4px 9px; border: 1px solid rgba(127,179,122,0.4); color: var(--df-green);
+  background: rgba(127,179,122,0.1);
+}
 
-#spark { display: flex; align-items: flex-end; gap: 3px; height: 90px; padding: 8px 0; }
-#spark .b { flex: 1; background: rgba(244,241,234,0.4); transition: background .2s; }
-#spark .b.peak { background: var(--c-accent); }
+/* ── Playback / Label panes ─────────────────────────────────── */
+.df-playback { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.df-pbox { padding: 14px; }
+.df-pbox .h { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--df-text-mute); margin-bottom: 10px; }
+.df-pbox .p { font-family: var(--font-body); font-size: 13px; color: var(--df-text-mute); line-height: 1.5; }
 
-.dash-foot { font-family: var(--font-mono); font-size: 12px; color: rgba(244,241,234,0.55); letter-spacing: 0.06em; }
+/* ── Side column: forecast / peaks / ribbon ─────────────────── */
+.df-forecast-svg { width: 100%; aspect-ratio: 16/9; display: block; }
+.df-forecast-days {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  margin-top: 6px;
+  font-family: var(--font-mono); font-size: 9.5px; color: var(--df-text-mute); letter-spacing: 0.1em;
+}
+.df-forecast-days .d { text-align: center; }
+.df-forecast-days .d b { color: var(--df-text); font-weight: 500; display: block; font-size: 11.5px; letter-spacing: 0; margin-top: 2px; }
+.df-forecast-note {
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--df-rule);
+  font-family: var(--font-mono); font-size: 10px; color: var(--df-text-mute); letter-spacing: 0.04em; line-height: 1.5;
+}
+
+#peak-hours { display: flex; align-items: flex-end; gap: 2px; height: 70px; padding-top: 6px; }
+#peak-hours .b { flex: 1; background: rgba(110,168,184,0.55); transition: background .2s; min-height: 2px; }
+#peak-hours .b.peak { background: var(--df-hot); }
+.peak-axis { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 6px; font-family: var(--font-mono); font-size: 9px; color: var(--df-text-mute); letter-spacing: 0.05em; }
+.peak-axis span:nth-child(1) { text-align: left; }
+.peak-axis span:nth-child(4) { text-align: right; }
+.peak-axis span:nth-child(2), .peak-axis span:nth-child(3) { text-align: center; }
+
+#breach-ribbon {
+  display: grid;
+  grid-template-columns: repeat(365, minmax(0, 1fr));
+  grid-template-rows: 1fr;
+  gap: 0; height: 28px;
+  background: rgba(0,0,0,0.25); padding: 4px;
+  overflow: hidden;
+}
+#breach-ribbon .b { background: rgba(244,241,234,0.10); min-width: 0; }
+#breach-ribbon .b.q1 { background: rgba(196,69,54,0.22); }
+#breach-ribbon .b.q2 { background: rgba(196,69,54,0.42); }
+#breach-ribbon .b.q3 { background: rgba(196,69,54,0.65); }
+#breach-ribbon .b.q4 { background: var(--df-hot); }
+.ribbon-axis { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 6px; font-family: var(--font-mono); font-size: 9px; color: var(--df-text-mute); letter-spacing: 0.08em; }
+.ribbon-axis span { text-align: center; }
+.ribbon-caption { font-family: var(--font-mono); font-size: 9.5px; color: var(--df-text-mute); letter-spacing: 0.08em; margin-top: 8px; }
+.ribbon-caption b { color: var(--df-text-soft); font-weight: 500; }
+
+/* ── Responsive collapse ────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .df-body { grid-template-columns: 1fr; }
+  .df-kpis { grid-template-columns: repeat(2, 1fr); }
+  .df-topbar { grid-template-columns: 1fr; gap: 12px; }
+  .df-meta { flex-wrap: wrap; }
+}
+@media (max-width: 700px) {
+  .df-kpis { grid-template-columns: 1fr; }
+  .df-daystats { grid-template-columns: 1fr 1fr; }
+  .df-playback { grid-template-columns: 1fr; }
+  .df-live { grid-template-columns: 1fr; }
+}
+
+.dash-foot { font-family: var(--font-mono); font-size: 12px; color: rgba(244,241,234,0.55); letter-spacing: 0.06em; margin-top: 24px; }
 .dash-foot b { color: var(--c-bg); font-weight: 500; }
 
 /* ─── Mid-page CTA strip ──────────────────────────────────────── */
@@ -868,43 +1191,285 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         <p class="lede">All data is aggregated at the block level before it is published. No individual vehicle is ever identified. The dashboard is the policy mechanism — and it works because the underlying data is open, auditable, and continuously updated.</p>
       </div>
 
-      <div class="dashframe">
-        <div class="panel">
-          <div class="ptitle">
-            <span>State Street corridor · noise heat map · dB(A)</span>
-            <span class="badge">LIVE</span>
-          </div>
-          <div id="heat-grid" aria-label="Noise heat map by hour and block"></div>
-          <div class="heat-axis">
-            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
-          </div>
-          <div class="tod-controls" role="group" aria-label="Filter heat map by time of day">
-            <button class="tod-btn is-active" data-tod="all">All hours</button>
-            <button class="tod-btn" data-tod="day">Day · 6a–6p</button>
-            <button class="tod-btn" data-tod="evening">Evening · 6p–11p</button>
-            <button class="tod-btn" data-tod="night">Night · 11p–5a</button>
+      <div class="dashframe" aria-label="Dashboard preview">
+
+        <!-- ─── Top bar ─────────────────────────────────────── -->
+        <div class="df-topbar">
+          <div class="df-brand">
+            <div class="df-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <div class="df-id">
+              <span class="a">UQI-ST-03 · 200 S &amp; State</span>
+              <span class="b">Urban Acoustics · v0.1</span>
+            </div>
           </div>
 
-          <div style="margin-top:32px;">
-            <div class="ptitle">
-              <span>Peak nighttime events · 14-day rolling</span>
-              <span style="font-family:var(--font-mono);font-size:10px;color:rgba(244,241,234,0.55);">Each bar = one night, &gt;80 dB events</span>
+          <div class="df-status">
+            <span class="ldot" aria-hidden="true"></span>
+            <div class="city">
+              <span class="a">Central City</span>
+              <span class="b">Streaming · 48 kHz · A-weighted</span>
             </div>
-            <div id="spark" aria-hidden="true"></div>
+          </div>
+
+          <div class="df-tabs" role="tablist" aria-label="Dashboard pages">
+            <button type="button" class="df-tab"><span class="ldot" aria-hidden="true"></span>Live</button>
+            <button type="button" class="df-tab is-active">Dashboard</button>
+            <button type="button" class="df-tab">Health</button>
+          </div>
+
+          <div class="df-meta">
+            <span class="item threshold">Threshold ≥ <span class="v">75 dB</span></span>
+            <span class="df-clock" data-df-clock>08:20:43</span>
+            <span class="item user"><span class="name">admin@local</span><span class="tag">Admin</span></span>
+            <button type="button" class="settings"><span aria-hidden="true">⚙</span> Settings</button>
           </div>
         </div>
 
-        <div>
-          <div class="panel" style="margin-bottom:16px;">
-            <div class="ptitle"><span>Tonight at a glance</span></div>
-            <div class="stat-line"><span class="l">Peak nighttime dB</span><span class="v">87</span></div>
-            <div class="stat-line"><span class="l">Events &gt; 80 dB</span><span class="v">24</span></div>
-            <div class="stat-line"><span class="l">Avg 11p–5a</span><span class="v">61</span></div>
-            <div class="stat-line"><span class="l">Vs 30-day avg</span><span class="v up">+12%</span></div>
+        <!-- ─── KPI strip ───────────────────────────────────── -->
+        <div class="df-kpis" aria-label="Headline statistics">
+          <div class="df-kpi">
+            <div class="k">Year avg</div>
+            <div class="v">52.4<span class="u">dB</span></div>
+            <div class="p">Rolling 365-day LAeq</div>
           </div>
-          <div class="panel">
-            <div class="ptitle"><span>Privacy guarantees</span></div>
-            <p style="font-size:14px;line-height:1.6;color:rgba(244,241,234,0.7);">All readings are aggregated to <b style="color:var(--c-bg);font-weight:500;">block grain</b> before publication. Raw audio is never recorded. Individual vehicles, addresses, and residents are never identified at any layer of the system.</p>
+          <div class="df-kpi">
+            <div class="k">Threshold breaches</div>
+            <div class="v hot">1<span class="u">hrs ≥ 75 dB</span></div>
+            <div class="p">Past 365 days</div>
+          </div>
+          <div class="df-kpi">
+            <div class="k">Loudest day</div>
+            <div class="v hot">115.1<span class="u">dB</span></div>
+            <div class="p">May 16</div>
+          </div>
+          <div class="df-kpi">
+            <div class="k">Modal peak hour</div>
+            <div class="v">03:00</div>
+            <div class="p">weekday rush + nightlife bleed</div>
+          </div>
+          <div class="df-kpi">
+            <div class="k">Anomalies flagged</div>
+            <div class="v">500<span class="u">z ≥ 2.9</span></div>
+            <div class="p">Past 365 days</div>
+          </div>
+        </div>
+
+        <!-- ─── Body: three columns ─────────────────────────── -->
+        <div class="df-body">
+
+          <!-- LEFT: live · camera · anomalies feed -->
+          <div class="df-col df-col-live">
+
+            <div class="df-card">
+              <div class="df-ch">
+                <span>Live · Right now</span>
+                <span class="df-pill live"><span class="ldot" aria-hidden="true"></span>Streaming</span>
+              </div>
+              <div class="df-live">
+                <div>
+                  <div class="v-num">49.1</div>
+                  <div class="v-meta"><b>dB(A)</b> · LAeq<br>1 s ago</div>
+                </div>
+                <div class="df-spectro-live" aria-hidden="true"></div>
+              </div>
+            </div>
+
+            <div class="df-card" style="padding: 6px;">
+              <div class="df-camera-box" role="img" aria-label="Camera feed: State Street at 200 South">
+                <div class="df-camera-overlay" data-df-clock-date>08:18 AM 05/27/2026</div>
+                <div class="df-camera-cap">State St · SR-186 @ 200 S, SLC</div>
+              </div>
+            </div>
+
+            <div class="df-card">
+              <div class="df-ch">
+                <div class="ch-l">
+                  <span>Anomalies feed</span>
+                  <span class="ch-sub">500 events · past 365 days</span>
+                </div>
+                <span class="df-pill live"><span class="ldot" aria-hidden="true"></span>Live</span>
+              </div>
+              <div class="df-anom-list">
+                <div class="df-anom-row">
+                  <span class="sev elev">Elevated</span>
+                  <span class="ts"><b>May 26</b>18:00</span>
+                  <span class="desc"><b>Motorcycle</b>z = 2.98 · +9.5 dB vs baseline</span>
+                  <span class="db">65.6<span class="u">dB</span></span>
+                </div>
+                <div class="df-anom-row">
+                  <span class="sev high">High</span>
+                  <span class="ts"><b>May 26</b>18:00</span>
+                  <span class="desc"><b>Car</b>z = 3.26 · +10.4 dB vs baseline</span>
+                  <span class="db">66.7<span class="u">dB</span></span>
+                </div>
+                <div class="df-anom-row">
+                  <span class="sev elev">Elevated</span>
+                  <span class="ts"><b>May 25</b>22:14</span>
+                  <span class="desc"><b>Motorcycle</b>z = 2.91 · sustained &gt;30 s</span>
+                  <span class="db">71.2<span class="u">dB</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CENTER: time range, day stats, spectrogram, events, playback -->
+          <div class="df-col df-col-drill">
+
+            <div class="df-rangetabs" role="tablist" aria-label="Time range">
+              <button type="button" class="rt">Year</button>
+              <button type="button" class="rt">Month</button>
+              <button type="button" class="rt is-active">Day</button>
+            </div>
+
+            <div class="df-breadcrumb">
+              <div class="crumbs">
+                <span>2026</span><span class="sep">›</span>
+                <span>May</span><span class="sep">›</span>
+                <span class="cur">May 20</span><span class="sep">—</span>
+              </div>
+              <span>Day</span>
+            </div>
+
+            <div class="df-daystatus">
+              <div class="left">
+                <span class="ind"><span class="ldot" aria-hidden="true"></span><span class="l">Within threshold</span></span>
+                <span class="day">Wednesday, May 20</span>
+                <span class="sub">2026-05-20 · 24/24 hrs reported</span>
+              </div>
+              <div class="right">Threshold ≥ <b>75 dB</b></div>
+            </div>
+
+            <div class="df-daystats">
+              <div class="ds"><div class="k">Day peak</div><div class="v hot">99.2<span class="u">dB · 14:00</span></div></div>
+              <div class="ds"><div class="k">Day avg</div><div class="v">60.9<span class="u">dB · LAeq</span></div></div>
+              <div class="ds"><div class="k">Breach hours</div><div class="v">0<span class="u">hrs ≥ 75 dB</span></div></div>
+              <div class="ds"><div class="k">Coverage</div><div class="v">24/24<span class="u">hrs reported</span></div></div>
+            </div>
+
+            <div class="df-card df-spectro-card">
+              <div class="df-ch">
+                <div class="ch-l">
+                  <span>24-hour spectrogram · 2026-05-20</span>
+                  <span class="ch-sub">click a tile to replay · breach ≥ 75 dB</span>
+                </div>
+                <div class="df-spectro-legend">
+                  <span class="lg labeled"><span class="sw" aria-hidden="true"></span>Labeled</span>
+                  <span class="lg unlabeled"><span class="sw" aria-hidden="true"></span>Unlabeled</span>
+                  <span class="lg annot"><span class="sw" aria-hidden="true"></span>Annotation</span>
+                </div>
+              </div>
+              <div id="heat-grid" aria-label="24-hour spectrogram by hour and frequency band"></div>
+              <div class="heat-axis" aria-hidden="true">
+                <span>00</span><span>01</span><span>02</span><span>03</span><span>04</span><span>05</span>
+                <span>06</span><span>07</span><span>08</span><span>09</span><span>10</span><span>11</span>
+                <span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span>
+                <span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span>
+              </div>
+              <div class="tod-controls" role="group" aria-label="Filter spectrogram by time of day">
+                <button class="tod-btn is-active" data-tod="all">All hours</button>
+                <button class="tod-btn" data-tod="day">Day · 6a–6p</button>
+                <button class="tod-btn" data-tod="evening">Evening · 6p–11p</button>
+                <button class="tod-btn" data-tod="night">Night · 11p–5a</button>
+              </div>
+            </div>
+
+            <div class="df-card df-events">
+              <div class="df-events-head">
+                <div class="h"><b>Day events</b><span class="sub">108 events for Wednesday, May 20 · pick one to play &amp; label</span></div>
+                <button type="button" class="sort">Sort oldest first ↑</button>
+              </div>
+              <div class="df-evrow">
+                <span class="db">82.0<span class="u">dB</span></span>
+                <span class="meta"><span class="ts">May 19, 18:00:19</span><br><span class="lbl">11.0 s · <b>car</b></span></span>
+                <span></span>
+                <span class="pill">Available</span>
+              </div>
+              <div class="df-evrow">
+                <span class="db">80.7<span class="u">dB</span></span>
+                <span class="meta"><span class="ts">May 19, 18:08:55</span><br><span class="lbl">11.0 s · <b>motorcycle</b></span></span>
+                <span></span>
+                <span class="pill">Available</span>
+              </div>
+              <div class="df-evrow">
+                <span class="db">78.2<span class="u">dB</span></span>
+                <span class="meta"><span class="ts">May 19, 18:12:13</span><br><span class="lbl">10.0 s · <b>motorcycle</b></span></span>
+                <span></span>
+                <span class="pill">Available</span>
+              </div>
+              <div class="df-evrow">
+                <span class="db">82.3<span class="u">dB</span></span>
+                <span class="meta"><span class="ts">May 19, 18:13:26</span><br><span class="lbl">9.4 s · <b>truck</b></span></span>
+                <span></span>
+                <span class="pill">Available</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- RIGHT: forecast · peak hours · breach ribbon -->
+          <div class="df-col df-col-side">
+
+            <div class="df-card">
+              <div class="df-ch">
+                <span>7-day forecast</span>
+                <span class="df-pill model"><span class="ldot" aria-hidden="true"></span>Model v3</span>
+              </div>
+              <svg class="df-forecast-svg" viewBox="0 0 200 100" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="dfBand" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#6ea8b8" stop-opacity="0.30"/>
+                    <stop offset="100%" stop-color="#6ea8b8" stop-opacity="0.04"/>
+                  </linearGradient>
+                </defs>
+                <g stroke="rgba(255,255,255,0.05)" stroke-width="0.4">
+                  <line x1="0" y1="25" x2="200" y2="25"/>
+                  <line x1="0" y1="50" x2="200" y2="50"/>
+                  <line x1="0" y1="75" x2="200" y2="75"/>
+                </g>
+                <path d="M0 62 L33 18 L66 8 L100 46 L133 60 L166 54 L200 48 L200 76 L166 82 L133 88 L100 74 L66 36 L33 46 L0 90 Z" fill="url(#dfBand)"/>
+                <path d="M0 72 L33 28 L66 18 L100 56 L133 70 L166 64 L200 58" fill="none" stroke="#6ea8b8" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+                <g fill="#6ea8b8">
+                  <circle cx="0" cy="72" r="1.6"/><circle cx="33" cy="28" r="2.2"/>
+                  <circle cx="66" cy="18" r="2.2"/><circle cx="100" cy="56" r="1.6"/>
+                  <circle cx="133" cy="70" r="1.6"/><circle cx="166" cy="64" r="1.6"/>
+                  <circle cx="200" cy="58" r="1.6"/>
+                </g>
+              </svg>
+              <div class="df-forecast-days" aria-hidden="true">
+                <span class="d">Thu<b>48</b></span><span class="d">Fri<b>67</b></span>
+                <span class="d">Sat<b>71</b></span><span class="d">Sun<b>55</b></span>
+                <span class="d">Mon<b>49</b></span><span class="d">Tue<b>51</b></span>
+                <span class="d">Wed<b>53</b></span>
+              </div>
+              <div class="df-forecast-note">Weekly seasonality + event calendar. Shaded band = 95% CI.</div>
+            </div>
+
+            <div class="df-card">
+              <div class="df-ch">
+                <div class="ch-l">
+                  <span>Peak hours</span>
+                  <span class="ch-sub">mean dB by hour-of-day · past 365 days</span>
+                </div>
+              </div>
+              <div id="peak-hours" aria-hidden="true"></div>
+              <div class="peak-axis" aria-hidden="true">
+                <span>00</span><span>06</span><span>12</span><span>18</span>
+              </div>
+            </div>
+
+            <div class="df-card">
+              <div class="df-ch">
+                <div class="ch-l">
+                  <span>Breach ribbon</span>
+                  <span class="ch-sub">hrs ≥ threshold / day</span>
+                </div>
+              </div>
+              <div id="breach-ribbon" aria-hidden="true"></div>
+              <div class="ribbon-axis" aria-hidden="true">
+                <span>Jan</span><span>Mar</span><span>May</span><span>Jul</span><span>Sep</span><span>Nov</span>
+              </div>
+              <div class="ribbon-caption">365 days · Intensity of ≥75 dB hours</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1299,24 +1864,38 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   });
 })();
 
-/* ─── Heat map (24 cols × 8 rows) with time-of-day filtering ──── */
+/* ─── 24-hour spectrogram strip (24 × 4) with TOD filtering ───── */
 (function heat() {
   var grid = document.getElementById('heat-grid');
   if (!grid) return;
-  var cols = 24, rows = 8;
+  var cols = 24, rows = 4;
   var cells = [];
   function intensity(r, c) {
-    // c = hour 0–23
-    var corridorBoost = (r >= 3 && r <= 4) ? 1.5 : 1.0;
-    var nightBoost = (c <= 5 || c >= 22) ? 1.6 : 0.85;
-    var middayDip = (c >= 10 && c <= 14) ? 0.65 : 1.0;
-    var rand = ((r * 7 + c * 11) % 5) / 8 + 0.55;
-    return Math.min(1, (rand * corridorBoost * nightBoost * middayDip) / 2.5);
+    // r = freq band (0 low → 3 high), c = hour 0–23
+    var lowBoost = (r <= 1) ? 1.25 : 0.9;
+    var nightBoost = (c <= 4 || c >= 22) ? 1.45 : 0.95;
+    var rushBoost = ((c >= 7 && c <= 9) || (c >= 16 && c <= 18)) ? 1.25 : 1.0;
+    var middayDip = (c >= 10 && c <= 14) ? 0.7 : 1.0;
+    var rand = ((r * 13 + c * 7) % 6) / 10 + 0.45;
+    return Math.min(1, (rand * lowBoost * nightBoost * rushBoost * middayDip) / 2.4);
   }
-  function colorFor(i, inWindow) {
-    if (!inWindow) return 'rgba(244,241,234,0.05)';
-    // map intensity to a 5-stop ramp from paper to accent
-    var stops = ['#3a3f48', '#6e5747', '#9b5b46', '#c44536', '#e0664f'];
+  function tileKind(r, c) {
+    // Deterministic-ish mix: most tiles are "labeled" (green) when activity is present,
+    // a slice of evening hours are "unlabeled" (amber), and one stripe is "annotation" (purple).
+    var seed = (r * 11 + c * 17) % 19;
+    if (c >= 17 && c <= 22 && r <= 2 && seed % 3 !== 0) return 'unlabeled';
+    if (c >= 12 && c <= 14 && r === 0) return 'annotation';
+    return 'labeled';
+  }
+  function colorFor(r, c, i, inWindow) {
+    if (!inWindow || i < 0.18) return 'rgba(244,241,234,0.05)';
+    var kind = tileKind(r, c);
+    var ramps = {
+      labeled:    ['rgba(127,179,122,0.25)', 'rgba(127,179,122,0.5)', 'rgba(127,179,122,0.75)', '#7fb37a'],
+      unlabeled:  ['rgba(212,168,90,0.22)',  'rgba(212,168,90,0.5)',  'rgba(212,168,90,0.75)',  '#d4a85a'],
+      annotation: ['rgba(155,135,196,0.25)', 'rgba(155,135,196,0.5)', 'rgba(155,135,196,0.75)', '#9b87c4']
+    };
+    var stops = ramps[kind];
     var idx = Math.min(stops.length - 1, Math.floor(i * stops.length));
     return stops[idx];
   }
@@ -1325,7 +1904,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       var cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.r = r; cell.dataset.c = c;
-      cell.style.background = colorFor(intensity(r, c), true);
+      cell.style.background = colorFor(r, c, intensity(r, c), true);
       grid.appendChild(cell);
       cells.push(cell);
     }
@@ -1340,7 +1919,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   function applyWindow(mode) {
     cells.forEach(function (cell) {
       var r = +cell.dataset.r, c = +cell.dataset.c;
-      cell.style.background = colorFor(intensity(r, c), inWindow(c, mode));
+      cell.style.background = colorFor(r, c, intensity(r, c), inWindow(c, mode));
     });
   }
   var btns = document.querySelectorAll('.tod-btn');
@@ -1352,17 +1931,71 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   });
 })();
 
-/* ─── Sparkline (14 bars) ─────────────────────────────────────── */
-(function spark() {
-  var s = document.getElementById('spark');
+/* ─── Peak hours bar chart (24 bars, mean dB by hour-of-day) ──── */
+(function peakHours() {
+  var s = document.getElementById('peak-hours');
   if (!s) return;
-  var values = [32, 44, 38, 78, 56, 50, 92, 62, 54, 46, 85, 60, 52, 64];
+  // Synthetic 24-hour curve: high at night, dip midday, evening bump
+  var values = [78, 75, 72, 70, 65, 58, 52, 50, 54, 58, 60, 62, 63, 64, 66, 68, 70, 74, 78, 80, 82, 80, 78, 78];
   values.forEach(function (v) {
     var b = document.createElement('div');
-    b.className = 'b' + (v > 75 ? ' peak' : '');
-    b.style.height = v + '%';
+    b.className = 'b' + (v >= 75 ? ' peak' : '');
+    b.style.height = Math.max(6, (v - 40) * 1.6) + '%';
     s.appendChild(b);
   });
+})();
+
+/* ─── Breach ribbon (365 days) ────────────────────────────────── */
+(function ribbon() {
+  var r = document.getElementById('breach-ribbon');
+  if (!r) return;
+  // Daily "hours ≥ threshold" intensity, 0–4. Deterministic so it doesn't
+  // change per page-load. Layers a seasonal lift (warmer months noisier),
+  // a weekly bump (Fri/Sat nights), one heavy stretch around May 18, and
+  // a small Sept/Halloween bump, on top of base sporadic activity.
+  for (var d = 0; d < 365; d++) {
+    var b = document.createElement('div');
+    b.className = 'b';
+
+    // base sporadic breach (LFSR-ish pseudo random off d)
+    var n = ((d * 9301 + 49297) % 233280) / 233280;
+    var seasonal = Math.max(0, Math.sin((d - 80) / 365 * Math.PI * 2) * 0.35); // warmer-months lift
+    var weekend = (d % 7 === 5 || d % 7 === 6) ? 0.22 : 0;
+    var mayPeak = Math.max(0, 0.95 - Math.abs(d - 138) * 0.12);   // May 18 cluster
+    var septPeak = Math.max(0, 0.55 - Math.abs(d - 252) * 0.08);  // Sept Labor Day
+    var halloween = Math.max(0, 0.5 - Math.abs(d - 304) * 0.18);
+    var nyEve = Math.max(0, 0.55 - Math.abs(d - 364) * 0.14);
+
+    var score = n * 0.6 + seasonal + weekend + mayPeak + septPeak + halloween + nyEve;
+
+    if (score >= 1.2) b.className += ' q4';
+    else if (score >= 0.85) b.className += ' q3';
+    else if (score >= 0.6) b.className += ' q2';
+    else if (score >= 0.42) b.className += ' q1';
+    r.appendChild(b);
+  }
+})();
+
+/* ─── Topbar clock + camera timestamp ─────────────────────────── */
+(function clock() {
+  var els = document.querySelectorAll('[data-df-clock]');
+  var dateEls = document.querySelectorAll('[data-df-clock-date]');
+  if (!els.length && !dateEls.length) return;
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function tick() {
+    var d = new Date();
+    var t = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    els.forEach(function (e) { e.textContent = t; });
+    if (dateEls.length) {
+      var m = pad(d.getMonth() + 1), dd = pad(d.getDate()), y = d.getFullYear();
+      var h12 = d.getHours() % 12 || 12;
+      var ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+      var stamp = pad(h12) + ':' + pad(d.getMinutes()) + ' ' + ampm + ' ' + m + '/' + dd + '/' + y;
+      dateEls.forEach(function (e) { e.textContent = stamp; });
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
 })();
 
 /* ─── FAQ accordion ───────────────────────────────────────────── */
