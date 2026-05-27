@@ -7,7 +7,10 @@
 <meta name="description" content="An independent citizens' coalition petitioning Salt Lake City to fund a measurement and transparency pilot for nighttime transportation noise on the State Street corridor." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.min.css" rel="stylesheet" />
+<script defer src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.min.js"></script>
 
 <style>
 /* ─── Tokens ───────────────────────────────────────────────────── */
@@ -269,16 +272,27 @@ p { margin: 0; }
 .mapbox { background: var(--c-paper); border: 1px solid var(--c-rule); padding: 24px; position: relative; }
 .mapbox .mapcap { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c-ink-mute); }
 .mapbox .mapcap .right { color: var(--c-ink-soft); }
-#corridor-map { width: 100%; height: auto; aspect-ratio: 16/11; background: var(--c-bg); border: 1px solid var(--c-rule); }
-#corridor-map text { font-family: var(--font-mono); fill: var(--c-ink-mute); }
-#corridor-map .street-major { stroke: #c4bfae; stroke-width: 8; }
-#corridor-map .street-minor { stroke: #d8d2c2; stroke-width: 2; }
-#corridor-map .corridor-hl { stroke: var(--c-accent); stroke-width: 14; opacity: 0.18; }
-#corridor-map .sensor { fill: var(--c-ink); cursor: pointer; transition: fill .15s, r .15s; }
-#corridor-map .sensor.is-corridor { fill: var(--c-accent); }
-#corridor-map .sensor:hover { fill: var(--c-accent); }
-.legend-row { display: flex; gap: 24px; margin-top: 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-ink-soft); flex-wrap: wrap; }
+#corridor-map { width: 100%; aspect-ratio: 16/11; background: #0e1116; border: 1px solid var(--c-rule); position: relative; overflow: hidden; }
+#corridor-map .maplibregl-ctrl-attrib,
+#corridor-map .maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(14,17,22,0.65); color: rgba(255,255,255,0.55); }
+#corridor-map .maplibregl-ctrl-attrib a { color: rgba(255,255,255,0.7); }
+#corridor-map .maplibregl-ctrl-group { background: rgba(14,17,22,0.78); border: 1px solid rgba(255,255,255,0.18); box-shadow: none; }
+#corridor-map .maplibregl-ctrl-group button { background-color: transparent; }
+#corridor-map .maplibregl-ctrl-group button + button { border-top: 1px solid rgba(255,255,255,0.14); }
+#corridor-map .maplibregl-ctrl-group button:hover { background-color: rgba(255,255,255,0.08); }
+#corridor-map .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) brightness(1.1); }
+#corridor-map .maplibregl-ctrl-group button:disabled .maplibregl-ctrl-icon { opacity: 0.35; }
+.legend-row { display: flex; gap: 24px; margin-top: 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-ink-soft); flex-wrap: wrap; align-items: center; }
 .legend-row .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
+.legend-row .heat-bar {
+  display: inline-block; width: 56px; height: 8px; margin-right: 8px; vertical-align: middle; border-radius: 2px;
+  background: linear-gradient(90deg,
+    rgba(98,0,234,0.55) 0%,
+    rgba(255,0,122,0.72) 30%,
+    rgba(255,80,0,0.82) 55%,
+    rgba(255,180,0,0.88) 80%,
+    rgba(255,240,200,0.92) 100%);
+}
 .maplist { display: flex; flex-direction: column; gap: 24px; }
 .maplist .item { padding-top: 22px; border-top: 1px solid var(--c-rule); }
 .maplist .item:first-child { border-top: 0; padding-top: 0; }
@@ -807,58 +821,13 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         <div class="mapbox">
           <div class="mapcap">
             <span>Sensor placement · pilot corridor · indicative</span>
-            <span class="right" id="map-hint">Hover any sensor for block detail</span>
+            <span class="right">40 calibrated sensors · State Street corridor</span>
           </div>
-          <svg id="corridor-map" viewBox="0 0 800 550" aria-label="Map of pilot sensor placement along State Street, Salt Lake City">
-            <!-- Background corridor highlight -->
-            <line class="corridor-hl" x1="0" y1="275" x2="800" y2="275" />
-
-            <!-- Major streets (horizontal cross streets) -->
-            <line class="street-major" x1="0" y1="60" x2="800" y2="60" />
-            <line class="street-minor" x1="0" y1="140" x2="800" y2="140" />
-            <line class="street-major" x1="0" y1="210" x2="800" y2="210" />
-            <line class="street-minor" x1="0" y1="275" x2="800" y2="275" />
-            <line class="street-major" x1="0" y1="345" x2="800" y2="345" />
-            <line class="street-minor" x1="0" y1="415" x2="800" y2="415" />
-            <line class="street-major" x1="0" y1="490" x2="800" y2="490" />
-
-            <!-- Vertical streets (N–S) -->
-            <line class="street-minor" x1="100" y1="0" x2="100" y2="550" />
-            <line class="street-major" x1="240" y1="0" x2="240" y2="550" />
-            <line class="street-minor" x1="380" y1="0" x2="380" y2="550" />
-            <line class="street-major" x1="520" y1="0" x2="520" y2="550" />
-            <line class="street-minor" x1="660" y1="0" x2="660" y2="550" />
-
-            <!-- Street labels -->
-            <g font-size="11" letter-spacing="0.1em">
-              <text x="10" y="55">N TEMPLE</text>
-              <text x="10" y="135">100 S</text>
-              <text x="10" y="205">200 S</text>
-              <text x="10" y="270">300 S</text>
-              <text x="10" y="340">400 S</text>
-              <text x="10" y="410">500 S</text>
-              <text x="10" y="485">700 S</text>
-              <text x="92" y="540" transform="rotate(-90 100 540)">W TEMPLE</text>
-              <text x="232" y="540" transform="rotate(-90 240 540)">MAIN ST</text>
-              <text x="372" y="540" transform="rotate(-90 380 540)">STATE ST</text>
-              <text x="512" y="540" transform="rotate(-90 520 540)">200 E</text>
-              <text x="652" y="540" transform="rotate(-90 660 540)">300 E</text>
-            </g>
-
-            <!-- 40 sensors (positions chosen to evoke State Street corridor) -->
-            <g id="sensors"></g>
-
-            <!-- Compass -->
-            <g font-size="13" fill="currentColor" fill-opacity="0.7">
-              <text x="750" y="25">N</text>
-              <line x1="755" y1="30" x2="755" y2="55" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5"/>
-              <polygon points="752,30 758,30 755,24" fill="currentColor" fill-opacity="0.5"/>
-            </g>
-          </svg>
+          <div id="corridor-map" role="img" aria-label="Map of pilot sensor placement along State Street, Salt Lake City"></div>
           <div class="legend-row">
-            <span><span class="dot" style="background:#1a2332;"></span>Standard sensor (×30)</span>
-            <span><span class="dot" style="background:#c44536;"></span>State Street corridor sensor (×10)</span>
-            <span style="margin-left:auto;">Block labels are indicative · final placement set in Phase 01 planning</span>
+            <span><span class="dot" style="background:rgba(255,255,255,0.92);border:1px solid var(--c-rule);"></span>Microphone sensor (×40)</span>
+            <span><span class="heat-bar" aria-hidden="true"></span>Aggregate nighttime exposure · low → high</span>
+            <span style="margin-left:auto;">Placement indicative · final positions confirmed in Phase 01 planning</span>
           </div>
         </div>
 
@@ -1207,57 +1176,107 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
 </footer>
 
 <script>
-/* ─── Sensor map: 40 dots, 10 on State Street (red) ──────────────── */
-(function buildSensors() {
-  var g = document.getElementById('sensors');
-  if (!g) return;
-  // y-rows: between street lines. Streets at y=60,140,210,275,345,415,490
-  // 7 horizontal bands; we place 2 sensors per "block" along the corridor
-  var rowsStd = [
-    [95, 100], [95, 240], [95, 380], [95, 520], [95, 660], // band 0 (top), excluding state st
-    [180, 100],[180, 240],[180, 660],
-    [240, 100],[240, 240],[240, 660],
-    [305, 100],[305, 240],[305, 660],
-    [380, 100],[380, 240],[380, 660],
-    [450, 100],[450, 240],[450, 520],[450, 660],
-    [520, 100],[520, 240],[520, 380],[520, 520],
-    // additional 5 to reach 30
-    [125, 660], [180, 380], [305, 380], [380, 660], [450, 380]
-  ];
-  // Standard sensors (navy) — 30 dots
-  rowsStd.slice(0, 30).forEach(function (pt, i) {
-    var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    c.setAttribute('cx', pt[1]); c.setAttribute('cy', pt[0]);
-    c.setAttribute('r', 5); c.setAttribute('class', 'sensor');
-    c.setAttribute('data-id', 'S-' + String(i + 1).padStart(2, '0'));
-    c.setAttribute('data-block', 'Block ' + (Math.floor(i / 2) + 1));
-    g.appendChild(c);
-  });
-  // State Street corridor sensors (accent) — 10 dots along x=380
-  var corridorYs = [95, 180, 240, 305, 380, 305, 380, 450, 520, 410];
-  for (var k = 0; k < 10; k++) {
-    var y = 60 + (k + 0.5) * (490 - 60) / 10 + ((k % 2) ? -8 : 8);
-    var c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    c.setAttribute('cx', 380 + ((k % 2) ? 14 : -14));
-    c.setAttribute('cy', y);
-    c.setAttribute('r', 6.5);
-    c.setAttribute('class', 'sensor is-corridor');
-    c.setAttribute('data-id', 'C-' + String(k + 1).padStart(2, '0'));
-    c.setAttribute('data-block', 'State Street · Block ' + (k + 1));
-    g.appendChild(c);
+/* ─── Corridor map: mirrors frontend/src/login_backdrop.tsx ──────── */
+/* Same basemap, same heat ramp, same mic icons, same /sensor-locations.geojson
+   so the petition page widget reads identically to the login backdrop.
+   Lazy-init on scroll keeps the per-visitor cost to a single tile burst when
+   visitors actually reach the section; pan/zoom is enabled with zoom-out
+   floored at INITIAL_ZOOM so users can dive in but never frame past the
+   pilot corridor. */
+(function corridorMap() {
+  var el = document.getElementById('corridor-map');
+  if (!el) return;
+
+  var CENTER = [-111.8881, 40.7616];
+  var BOUNDS = [[-111.9300, 40.7400], [-111.8500, 40.7850]];
+  var INITIAL_ZOOM = 12.8;
+  // Lock zoom-out to the initial framing so visitors can dive into the
+  // corridor but never zoom past the pilot area into the rest of the valley.
+  var MIN_ZOOM = INITIAL_ZOOM;
+  var MAX_ZOOM = 18;
+  var STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+  var GEOJSON = '/sensor-locations.geojson';
+
+  var MIC_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+
+  function init() {
+    if (el.dataset.inited) return;
+    if (typeof maplibregl === 'undefined') {
+      window.addEventListener('load', init, { once: true });
+      return;
+    }
+    el.dataset.inited = '1';
+
+    var map = new maplibregl.Map({
+      container: el,
+      style: STYLE,
+      center: CENTER,
+      zoom: INITIAL_ZOOM,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
+      maxBounds: BOUNDS,
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchPitch: false,
+      attributionControl: { compact: true }
+    });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+    map.on('load', function () {
+      var img = new Image(40, 40);
+      img.onload = function () {
+        if (!map.hasImage('mic-icon')) map.addImage('mic-icon', img, { pixelRatio: 2 });
+      };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(MIC_SVG);
+
+      map.addSource('uqi-stations', { type: 'geojson', data: GEOJSON });
+
+      map.addLayer({
+        id: 'uqi-heat',
+        type: 'heatmap',
+        source: 'uqi-stations',
+        paint: {
+          'heatmap-weight': ['get', 'weight'],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 16, 1.6],
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 11, 30, 13, 55, 16, 90],
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0,   'rgba(0,0,0,0)',
+            0.2, 'rgba(98, 0, 234, 0.55)',
+            0.4, 'rgba(255, 0, 122, 0.72)',
+            0.6, 'rgba(255, 80, 0, 0.82)',
+            0.8, 'rgba(255, 180, 0, 0.88)',
+            1.0, 'rgba(255, 240, 200, 0.92)'
+          ],
+          'heatmap-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'uqi-mics',
+        type: 'symbol',
+        source: 'uqi-stations',
+        layout: {
+          'icon-image': 'mic-icon',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.35, 13, 0.5, 16, 0.85]
+        }
+      });
+    });
   }
 
-  var hint = document.getElementById('map-hint');
-  g.addEventListener('mouseover', function (e) {
-    if (e.target.classList.contains('sensor')) {
-      var id = e.target.getAttribute('data-id');
-      var blk = e.target.getAttribute('data-block');
-      if (hint) hint.textContent = id + ' · ' + blk;
-    }
-  });
-  g.addEventListener('mouseout', function () {
-    if (hint) hint.textContent = 'Hover any sensor for block detail';
-  });
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) { io.disconnect(); init(); }
+      });
+    }, { rootMargin: '200px 0px' });
+    io.observe(el);
+  } else {
+    init();
+  }
 })();
 
 /* ─── Health-impact tabs ───────────────────────────────────────── */
