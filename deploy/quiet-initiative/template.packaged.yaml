@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Urban Quiet Initiative — email signup backend (DynamoDB + Lambda + 
+  HTTP API).
+Parameters:
+  TableName:
+    Type: String
+    Default: urban-quiet-signups
+    Description: DynamoDB table name for collected emails.
+Resources:
+  SignupsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName:
+        Ref: TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: email
+        AttributeType: S
+      KeySchema:
+      - AttributeName: email
+        KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  SignupApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+        - '*'
+        AllowMethods:
+        - POST
+        - OPTIONS
+        AllowHeaders:
+        - content-type
+        MaxAge: 86400
+  SignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: urban-quiet-signup
+      CodeUri: 
+        s3://urban-quiet-initiative-deploy-174590856187-us-west-2/82aa745c7b9abb9d7affa4e1d52ca63f
+      Handler: index.handler
+      Runtime: nodejs20.x
+      Architectures:
+      - arm64
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME:
+            Ref: SignupsTable
+      Policies:
+      - DynamoDBWritePolicy:
+          TableName:
+            Ref: SignupsTable
+      Events:
+        Signup:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: SignupApi
+            Method: POST
+            Path: /signup
+Outputs:
+  SignupEndpoint:
+    Description: Public POST endpoint for the signup form.
+    Value:
+      Fn::Sub: 
+        https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/signup
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-SignupEndpoint
+  SignupsTableName:
+    Value:
+      Ref: SignupsTable
+  SignupFunctionName:
+    Value:
+      Ref: SignupFunction

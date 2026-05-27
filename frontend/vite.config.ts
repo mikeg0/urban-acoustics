@@ -12,7 +12,7 @@ const WS_HOST = process.env.VITE_WS_HOST ?? 'ws://localhost:8000';
 // public/ middleware doesn't serve directory indexes, so requests for /<slug>
 // or /<slug>/ would otherwise fall through to the SPA index.html. This
 // middleware serves the static page directly for those URLs.
-const STATIC_DEMO_SLUGS = ['enforcement-demo', 'enforcement-map'];
+const STATIC_DEMO_SLUGS = ['enforcement-demo', 'enforcement-map', 'quiet-initiative'];
 function staticDemoMiddleware() {
   return {
     name: 'serve-static-demos',

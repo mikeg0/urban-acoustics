@@ -28,6 +28,18 @@ Then open **http://localhost:5173**.
 
 The first run seeds 365 day files under `backend/data/` (≈10 s) and installs npm + pip dependencies inside the images.
 
+## Local dev credentials
+
+All of the following are baked into [`docker-compose.yml`](docker-compose.yml) and are **dev-only**. Do not reuse in any deployed environment.
+
+| Service                | Username / key                       | Password                                |
+| ---------------------- | ------------------------------------ | --------------------------------------- |
+| Dashboard (admin user) | `admin@local`                        | `devpass1234`                           |
+| Postgres (db `urban_acoustics`) | `urban_acoustics`           | `urban_acoustics_dev`                   |
+| MinIO root             | `urban_acoustics`                    | `urban_acoustics_dev_secret_12345`      |
+
+The admin user is bootstrapped from the `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars on first backend startup; rotate it via the UI and clear the env vars afterwards. New self-signups land as `guest` and must be promoted via `PATCH /api/v1/users/{id}`.
+
 ## Project layout
 
 ```

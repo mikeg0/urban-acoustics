@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Urban Quiet Initiative — email signup + feedback backend (DynamoDB + Lambda + HTTP API).
+
+Parameters:
+  TableName:
+    Type: String
+    Default: urban-quiet-signups
+    Description: DynamoDB table name for collected emails.
+  FeedbackTableName:
+    Type: String
+    Default: urban-quiet-feedback
+    Description: DynamoDB table name for collected feedback messages.
+
+Resources:
+
+  SignupsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  FeedbackTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref FeedbackTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: feedbackId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: feedbackId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  SignupApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+        MaxAge: 86400
+
+  SignupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: urban-quiet-signup
+      CodeUri: src/
+      Handler: index.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - arm64
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          SIGNUPS_TABLE_NAME: !Ref SignupsTable
+          FEEDBACK_TABLE_NAME: !Ref FeedbackTable
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref SignupsTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref FeedbackTable
+      Events:
+        Signup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SignupApi
+            Method: POST
+            Path: /signup
+        Feedback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SignupApi
+            Method: POST
+            Path: /feedback
+
+Outputs:
+  SignupEndpoint:
+    Description: Public POST endpoint for the signup form.
+    Value: !Sub "https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/signup"
+    Export:
+      Name: !Sub "${AWS::StackName}-SignupEndpoint"
+  FeedbackEndpoint:
+    Description: Public POST endpoint for the feedback form.
+    Value: !Sub "https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/feedback"
+    Export:
+      Name: !Sub "${AWS::StackName}-FeedbackEndpoint"
+  SignupsTableName:
+    Value: !Ref SignupsTable
+  FeedbackTableName:
+    Value: !Ref FeedbackTable
+  SignupFunctionName:
+    Value: !Ref SignupFunction
