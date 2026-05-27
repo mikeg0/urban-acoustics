@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useAuth } from './auth';
+import { LoginBackdrop } from './login_backdrop';
 
 type Mode = 'login' | 'signup';
 
@@ -29,6 +30,7 @@ export function LoginPage() {
 
   return (
     <div style={{
+      position: 'relative',
       minHeight: '100vh',
       display: 'flex',
       alignItems: 'center',
@@ -36,15 +38,20 @@ export function LoginPage() {
       background: 'var(--bg-0)',
       color: 'var(--text)',
       fontFamily: 'var(--mono)',
+      overflow: 'hidden',
     }}>
+      <LoginBackdrop />
       <form
         onSubmit={submit}
         style={{
+          position: 'relative',
+          zIndex: 10,
           width: 360,
           padding: 28,
           background: 'var(--bg-1)',
-          border: '1px solid var(--line)',
+          border: '1px solid var(--line-strong, rgba(255,255,255,0.18))',
           borderRadius: 8,
+          boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4)',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,

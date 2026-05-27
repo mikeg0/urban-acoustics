@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapLibreMap, Marker, NavigationControl, type MapRef } from 'react-map-gl/maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { fetchCameras, fetchDevices, fetchTelemetry } from './api';
 import { Card } from './atoms';
 import { CameraSnapshot } from './cameras';
+import {
+  CORRIDOR_BOUNDS,
+  CORRIDOR_CENTER,
+  CORRIDOR_INITIAL_ZOOM,
+  CORRIDOR_MAX_ZOOM,
+  CORRIDOR_MIN_ZOOM,
+  MAP_STYLE,
+} from './mapConfig';
 import type { CameraInfo, DeviceInfo } from './types';
 
 // Mic ↔ camera proximity used for popovers. Matches the API's
@@ -44,23 +51,6 @@ function buildDeviceCameraMap(
   }
   return out;
 }
-
-// Urban Quiet Initiative pilot corridor lives inside downtown SLC; we clamp
-// the map to a downtown bbox (roughly Capitol → Ballpark, Rio Grande → 700
-// East) so the corridor sits in context but the user can't wander to the
-// rest of the world. The bbox is wide enough that `minZoom` actually bites
-// before maxBounds clamping does.
-const CORRIDOR_BOUNDS: [[number, number], [number, number]] = [
-  [-111.9300, 40.7400],
-  [-111.8500, 40.7850],
-];
-
-const CORRIDOR_CENTER: [number, number] = [-111.8881, 40.7616];
-const CORRIDOR_INITIAL_ZOOM = 12.8;
-const CORRIDOR_MIN_ZOOM = 12;
-const CORRIDOR_MAX_ZOOM = 18;
-
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 // Color ramp for current dB readings. Mirrors stations.jsx::colorFor from the
 // design (oklch ramp from quiet teal up to hot red-orange) so legend swatches
