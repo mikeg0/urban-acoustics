@@ -53,6 +53,7 @@ Resources:
         AllowOrigins:
           - "*"
         AllowMethods:
+          - GET
           - POST
           - OPTIONS
         AllowHeaders:
@@ -79,6 +80,10 @@ Resources:
             TableName: !Ref SignupsTable
         - DynamoDBWritePolicy:
             TableName: !Ref FeedbackTable
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:DescribeTable
+              Resource: !GetAtt SignupsTable.Arn
       Events:
         Signup:
           Type: HttpApi
@@ -86,6 +91,12 @@ Resources:
             ApiId: !Ref SignupApi
             Method: POST
             Path: /signup
+        SignupCount:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SignupApi
+            Method: GET
+            Path: /signups/count
         Feedback:
           Type: HttpApi
           Properties:
@@ -104,6 +115,11 @@ Outputs:
     Value: !Sub "https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/feedback"
     Export:
       Name: !Sub "${AWS::StackName}-FeedbackEndpoint"
+  SignupCountEndpoint:
+    Description: Public GET endpoint returning the current signature count.
+    Value: !Sub "https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/signups/count"
+    Export:
+      Name: !Sub "${AWS::StackName}-SignupCountEndpoint"
   SignupsTableName:
     Value: !Ref SignupsTable
   FeedbackTableName:

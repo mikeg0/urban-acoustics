@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, DescribeTableCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const ddbClient = new DynamoDBClient({});
+const ddb = DynamoDBDocumentClient.from(ddbClient);
 const SIGNUPS_TABLE = process.env.SIGNUPS_TABLE_NAME;
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE_NAME;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FEEDBACK_TOPICS = new Set(["story", "data", "privacy", "volunteer", "other"]);
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "content-type",
   "Access-Control-Max-Age": "86400",
 };
@@ -26,10 +28,36 @@ async function handleSignup(payload, meta) {
     return reply(400, { error: "invalid email" });
   }
 
+  const name = (payload.name || "").trim();
+  if (!name || name.length > 100) {
+    return reply(400, { error: "invalid name" });
+  }
+
+  const neighborhood = (payload.neighborhood || "").trim();
+  if (!neighborhood || neighborhood.length > 80) {
+    return reply(400, { error: "invalid neighborhood" });
+  }
+
+  const comment = (payload.comment || "").trim();
+  if (comment.length > 1000) {
+    return reply(400, { error: "comment too long" });
+  }
+
+  const isResident = payload.isResident !== false;
+
   try {
     await ddb.send(new PutCommand({
       TableName: SIGNUPS_TABLE,
-      Item: { email, createdAt: meta.now, userAgent: meta.userAgent, sourceIp: meta.sourceIp },
+      Item: {
+        email,
+        name,
+        neighborhood,
+        comment: comment || undefined,
+        isResident,
+        createdAt: meta.now,
+        userAgent: meta.userAgent,
+        sourceIp: meta.sourceIp,
+      },
       ConditionExpression: "attribute_not_exists(email)",
     }));
   } catch (err) {
@@ -41,6 +69,17 @@ async function handleSignup(payload, meta) {
   }
 
   return reply(200, { ok: true });
+}
+
+async function handleSignupCount() {
+  try {
+    const out = await ddbClient.send(new DescribeTableCommand({ TableName: SIGNUPS_TABLE }));
+    const count = out?.Table?.ItemCount ?? 0;
+    return reply(200, { count });
+  } catch (err) {
+    console.error("describe-table error", err);
+    return reply(500, { error: "server error" });
+  }
 }
 
 async function handleFeedback(payload, meta) {
@@ -59,6 +98,21 @@ async function handleFeedback(payload, meta) {
     return reply(400, { error: "invalid message" });
   }
 
+  const topic = (payload.topic || "").trim().toLowerCase();
+  if (topic && !FEEDBACK_TOPICS.has(topic)) {
+    return reply(400, { error: "invalid topic" });
+  }
+
+  const block = (payload.block || "").trim();
+  if (block.length > 120) {
+    return reply(400, { error: "block too long" });
+  }
+
+  const whenWoken = (payload.whenWoken || "").trim();
+  if (whenWoken.length > 120) {
+    return reply(400, { error: "whenWoken too long" });
+  }
+
   try {
     await ddb.send(new PutCommand({
       TableName: FEEDBACK_TABLE,
@@ -68,6 +122,9 @@ async function handleFeedback(payload, meta) {
         name,
         email,
         message,
+        topic: topic || undefined,
+        block: block || undefined,
+        whenWoken: whenWoken || undefined,
         userAgent: meta.userAgent,
         sourceIp: meta.sourceIp,
       },
@@ -83,6 +140,14 @@ async function handleFeedback(payload, meta) {
 export const handler = async (event) => {
   const method = event?.requestContext?.http?.method ?? "GET";
   if (method === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
+
+  const path = event?.requestContext?.http?.path ?? event?.rawPath ?? "";
+
+  if (method === "GET") {
+    if (path.endsWith("/signups/count")) return handleSignupCount();
+    return reply(405, { error: "method not allowed" });
+  }
+
   if (method !== "POST") return reply(405, { error: "method not allowed" });
 
   let payload;
@@ -98,7 +163,6 @@ export const handler = async (event) => {
     sourceIp: event?.requestContext?.http?.sourceIp ?? "",
   };
 
-  const path = event?.requestContext?.http?.path ?? event?.rawPath ?? "";
   if (path.endsWith("/signup")) return handleSignup(payload, meta);
   if (path.endsWith("/feedback")) return handleFeedback(payload, meta);
   return reply(404, { error: "not found" });

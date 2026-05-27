@@ -325,6 +325,85 @@ p { margin: 0; }
 .dash-foot { font-family: var(--font-mono); font-size: 12px; color: rgba(244,241,234,0.55); letter-spacing: 0.06em; }
 .dash-foot b { color: var(--c-bg); font-weight: 500; }
 
+/* ─── Mid-page CTA strip ──────────────────────────────────────── */
+.midcta {
+  background: var(--c-accent); color: var(--c-white);
+  padding: 36px var(--pad-x);
+}
+.midcta .row {
+  max-width: var(--max-w); margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 32px; flex-wrap: wrap;
+}
+.midcta .line { font-family: var(--font-display); font-size: clamp(22px, 2.2vw, 30px); line-height: 1.25; letter-spacing: -0.01em; max-width: 36ch; }
+.midcta .line b { font-weight: 600; }
+.midcta a {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: var(--c-white); color: var(--c-accent);
+  padding: 14px 22px; text-decoration: none; font-weight: 600;
+  border-radius: 2px; white-space: nowrap; transition: background .15s, color .15s;
+}
+.midcta a:hover { background: var(--c-ink); color: var(--c-white); }
+
+/* ─── Council watch widget ────────────────────────────────────── */
+.councilwatch { margin-top: 56px; padding-top: 36px; border-top: 1px solid rgba(244,241,234,0.18); }
+.councilwatch .cw-head { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c-accent-soft); margin-bottom: 18px; }
+.councilwatch .cw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 700px) { .councilwatch .cw-grid { grid-template-columns: 1fr; } }
+.councilwatch .cw-card { background: rgba(244,241,234,0.06); border: 1px solid rgba(244,241,234,0.12); padding: 18px; }
+.councilwatch .cw-name { font-family: var(--font-display); font-size: 19px; line-height: 1.2; }
+.councilwatch .cw-meta { font-family: var(--font-mono); font-size: 11px; color: rgba(244,241,234,0.6); margin-top: 4px; letter-spacing: 0.06em; }
+.councilwatch .cw-pill {
+  display: inline-block; margin-top: 12px; padding: 4px 10px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.cw-pill.is-spons { background: var(--c-accent); color: var(--c-white); }
+.cw-pill.is-cons { background: rgba(244,241,234,0.16); color: var(--c-bg); }
+.cw-pill.is-quiet { background: transparent; color: rgba(244,241,234,0.6); border: 1px solid rgba(244,241,234,0.25); }
+
+/* ─── Share row (after petition submit) ───────────────────────── */
+.share-row { margin-top: 20px; display: none; gap: 10px; flex-wrap: wrap; }
+.share-row.is-shown { display: flex; }
+.share-row .sb {
+  padding: 10px 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  background: rgba(244,241,234,0.06); color: var(--c-bg); border: 1px solid rgba(244,241,234,0.2); text-decoration: none;
+  cursor: pointer;
+}
+.share-row .sb:hover { background: var(--c-accent); border-color: var(--c-accent); }
+
+/* ─── Petition extra fields ───────────────────────────────────── */
+.signup .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .signup .field-row { grid-template-columns: 1fr; } }
+.signup input[type=text],
+.signup textarea {
+  width: 100%; padding: 14px 16px; background: rgba(244,241,234,0.06);
+  border: 1px solid rgba(244,241,234,0.25); color: var(--c-bg);
+  font-family: var(--font-body); font-size: 15px;
+}
+.signup textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+.signup input[type=text]::placeholder,
+.signup textarea::placeholder { color: rgba(244,241,234,0.4); }
+.signup input[type=text]:focus,
+.signup textarea:focus { outline: 1px solid var(--c-accent); border-color: var(--c-accent); }
+.signup .checkrow { display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(244,241,234,0.75); }
+.signup .checkrow input { width: 16px; height: 16px; accent-color: var(--c-accent); }
+.signup form { display: flex; flex-direction: column; gap: 12px; }
+.signup .row-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+/* ─── Feedback form prompts ───────────────────────────────────── */
+.feedback .topic-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 700px) { .feedback .topic-list { grid-template-columns: 1fr; } }
+.feedback .topic-list label {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border: 1px solid var(--c-rule); background: #fff;
+  font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.feedback .topic-list label:hover { border-color: var(--c-accent); }
+.feedback .topic-list input[type=radio] { accent-color: var(--c-accent); }
+.feedback .topic-list input[type=radio]:checked + span { color: var(--c-accent); font-weight: 600; }
+.feedback .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .feedback .field-row { grid-template-columns: 1fr; } }
+.feedback .topic-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c-ink-mute); margin-bottom: 4px; }
+
 /* ─── Theory of change ─────────────────────────────────────────── */
 .s-toc { background: var(--c-paper); }
 .flowline {
@@ -533,8 +612,8 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
 <!-- ─── Top strip + nav ─────────────────────────────────── -->
 <div class="topstrip" role="region" aria-label="Initiative metadata">
   <div class="row">
-    <span>An independent citizens' coalition · Not affiliated with the City of Salt Lake City</span>
-    <span>Petition signature drive open until <a href="#get-involved">June 1, 2026</a></span>
+    <span><b data-sig-count>1,247</b> Salt Lake City residents have signed · <b data-days-left>—</b> days left to sign</span>
+    <span>An independent citizens' coalition · <a href="#petition">Add your name →</a></span>
   </div>
 </div>
 
@@ -545,14 +624,12 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       <span class="name">Urban Quiet<small>A Salt Lake City citizens' coalition</small></span>
     </a>
     <ul>
-      <li><a href="#why">The problem</a></li>
+      <li><a href="#why">Why</a></li>
       <li><a href="#proposal">Proposal</a></li>
-      <li><a href="#corridor">Corridor</a></li>
       <li><a href="#dashboard">Dashboard</a></li>
-      <li><a href="#references">Research</a></li>
       <li><a href="#faq">FAQ</a></li>
     </ul>
-    <a class="cta-btn is-nav" href="#get-involved">Sign the petition <span class="arrow">→</span></a>
+    <a class="cta-btn is-nav" href="#petition">Sign the petition <span class="arrow">→</span></a>
   </div>
 </nav>
 
@@ -561,13 +638,13 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   <!-- ─── HERO ───────────────────────────────────────────── -->
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap">
-      <div class="badge"><span class="dot"></span>Citizens' petition · seeking council sponsorship · 2026</div>
-      <h1 id="hero-title">A quieter Salt Lake City, <em>by measurement.</em></h1>
-      <p class="sub">We're a coalition of Salt Lake City residents petitioning the City Council to fund a twelve-month pilot: forty calibrated sensors along the State Street corridor, measuring nighttime transportation noise — and publishing what they find, in public, every block.</p>
+      <div class="badge"><span class="dot"></span><b data-sig-count>1,247</b>&nbsp;neighbors signed · Delivered to City Council June 2, 2026</div>
+      <h1 id="hero-title">Salt Lake City shouldn't have to <em>lose sleep</em> over this.</h1>
+      <p class="sub">We're neighbors asking the City to put 40 noise sensors on State Street, publish what they find every night, and let the data — not enforcement — do the work.</p>
 
       <div class="actions">
-        <a class="cta-btn" href="#get-involved">Sign the petition <span class="arrow">→</span></a>
-        <a class="cta-btn is-ghost" href="#proposal">Read the proposal</a>
+        <a class="cta-btn" href="#petition">Sign the petition <span class="arrow">→</span></a>
+        <a class="cta-btn is-ghost" href="proposal.html">Read the full proposal</a>
       </div>
 
       <div class="quickstats" aria-label="Pilot at a glance">
@@ -579,7 +656,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         <div class="qs">
           <div class="k">Sensors</div>
           <div class="v">40</div>
-          <div class="p">Mounted to existing light & signal poles</div>
+          <div class="p">Mounted to existing light &amp; signal poles</div>
         </div>
         <div class="qs">
           <div class="k">Pilot length</div>
@@ -616,6 +693,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       <div class="tabpanel is-active" id="tp-sleep" role="tabpanel">
         <div>
           <h3>Nighttime noise fragments restorative sleep — whether or not you remember waking.</h3>
+          <p class="copy" style="font-style:italic;color:var(--c-ink);">"I don't remember waking up. I just remember being exhausted by Wednesday." — what residents along the corridor describe, again and again.</p>
           <p class="copy">Repeated peak events at night produce cortical micro-arousals that degrade sleep architecture and reduce slow-wave (deep) sleep retention. The damage accumulates across weeks and years, even when sleepers are not consciously aware of being woken.</p>
           <p class="copy">In Salt Lake City, residents of Central City, the Granary District, Ballpark, and downtown report fragmented sleep at rates well above outer-neighborhood baselines — consistent with the pattern in every published study of urban exposure corridors.</p>
           <p class="cite-line"><b><a href="https://pubmed.ncbi.nlm.nih.gov/20438143/" target="_blank" rel="noopener" class="src-link">Muzet (2007)</a>; <a href="https://www.thelancet.com/journals/lancet/article/PIIS0140-6736%2813%2961613-X/fulltext" target="_blank" rel="noopener" class="src-link">Basner &amp; McGuire (2018)</a>.</b> Dose–response relationships between nighttime transportation noise and measurable sleep disturbance.</p>
@@ -630,6 +708,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       <div class="tabpanel" id="tp-heart" role="tabpanel" hidden>
         <div>
           <h3>Chronic exposure raises cardiovascular disease risk independently of other factors.</h3>
+          <p class="copy" style="font-style:italic;color:var(--c-ink);">Years of broken sleep don't just feel bad — they leave a measurable mark on your heart.</p>
           <p class="copy">Sustained sympathetic activation from repeated nighttime noise drives elevated cortisol and blood pressure — pathways that produce real, measurable cardiovascular morbidity. The effect is dose-dependent: more nighttime noise, more risk.</p>
           <p class="copy">Pooled meta-analyses across European cohorts estimate roughly an 8% rise in ischemic heart disease risk for every 10 dB increase in long-term road traffic noise exposure.</p>
           <p class="cite-line"><b><a href="https://www.jacc.org/doi/10.1016/j.jacc.2017.12.015" target="_blank" rel="noopener" class="src-link">Münzel et al. (2018)</a>; <a href="https://www.thelancet.com/journals/lancet/article/PIIS0140-6736%2813%2961613-X/fulltext" target="_blank" rel="noopener" class="src-link">Basner et al. (2014)</a>.</b> Chronic environmental noise produces auditory and non-auditory health effects, including independent cardiovascular consequences.</p>
@@ -644,6 +723,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       <div class="tabpanel" id="tp-work" role="tabpanel" hidden>
         <div>
           <h3>Sleep loss is also a workforce productivity issue.</h3>
+          <p class="copy" style="font-style:italic;color:var(--c-ink);">The people running downtown Salt Lake's economy are losing weeks of clear thinking to noise they did not choose.</p>
           <p class="copy">Insomnia and sleep disruption measurably reduce workplace productivity through absenteeism and presenteeism. Sleep deprivation impairs attention, executive function, decision-making, and reaction time — directly relevant to Utah's growing downtown employment base.</p>
           <p class="copy">For an employer near a high-exposure corridor, the productivity loss per affected worker can run into double-digit days per year. The benefits of intervention are not limited to public health; they include the everyday performance of Salt Lake City's downtown workforce.</p>
           <p class="cite-line"><b><a href="https://journals.lww.com/joem/Abstract/2011/07000/The_Prevalence_and_Effects_of_Insomnia_on_Work.10.aspx" target="_blank" rel="noopener" class="src-link">Kessler et al. (2011)</a>; <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3290659/" target="_blank" rel="noopener" class="src-link">Lim &amp; Dinges (2010)</a>.</b> Documented productivity and cognitive consequences of fragmented sleep.</p>
@@ -658,6 +738,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       <div class="tabpanel" id="tp-who" role="tabpanel" hidden>
         <div>
           <h3>The World Health Organization treats road noise as a top urban environmental hazard.</h3>
+          <p class="copy" style="font-style:italic;color:var(--c-ink);">If a global public-health agency calls this a hazard, our City should at least be measuring it.</p>
           <p class="copy">WHO's environmental noise guidelines conclude that nighttime road traffic noise is causally associated with adverse sleep and cardiovascular outcomes — and that exposure above 55 dB at night is a public health concern requiring intervention.</p>
           <p class="copy">Roughly one in five urban residents across comparably-developed cities is exposed above these guidelines. Salt Lake City's downtown corridors are no exception, but we currently have no continuous measurement to confirm it block by block.</p>
           <p class="cite-line"><b><a href="https://www.who.int/europe/publications/i/item/9789289053563" target="_blank" rel="noopener" class="src-link">World Health Organization (2018)</a>.</b> Environmental Noise Guidelines for the European Region.</p>
@@ -677,9 +758,9 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
       <div class="section-head">
         <div>
           <div class="eyebrow">02 · The proposal</div>
-          <h2 id="prop-title">Measure objectively, publish openly.</h2>
+          <h2 id="prop-title">What we're asking the City to do.</h2>
         </div>
-        <p class="lede">The Urban Quiet Initiative is a citizens' coalition petitioning Salt Lake City to authorize and fund a phased twelve-month pilot. Phase one would deploy a calibrated sensor network. Phase two would publish the data through a public dashboard. We are explicitly not asking for any expansion of citation authority or individual identification.</p>
+        <p class="lede">Authorize and fund a twelve-month, phased pilot. Phase one deploys 40 calibrated noise sensors along State Street. Phase two publishes what they find on a public dashboard. We are not asking for any new citation authority or individual identification — just measurement and transparency.</p>
       </div>
 
       <div class="phasegrid">
@@ -863,192 +944,23 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
     </div>
   </section>
 
-  <!-- ─── THEORY OF CHANGE ───────────────────────────────── -->
-  <section class="s-toc" id="theory" aria-labelledby="toc-title">
-    <div class="wrap">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">05 · Theory of change</div>
-          <h2 id="toc-title">Measurement → visibility → norms → quieter nights.</h2>
-        </div>
-        <p class="lede">The chain is explicit and testable. Every link is supported by peer-reviewed evidence — this is an application of established research, not a new hypothesis we are testing for the first time on Salt Lake City residents.</p>
-      </div>
-
-      <div class="flowline">
-        <div class="flow-node">
-          <div class="fn">01 · Input</div>
-          <div class="fh">Measure noise continuously.</div>
-          <div class="fp">Forty calibrated sensors generate baseline, time-stamped, geo-located data 24/7.</div>
-          <div class="flow-arrow"></div>
-        </div>
-        <div class="flow-node">
-          <div class="fn">02 · Publish</div>
-          <div class="fh">Disclose on a public dashboard.</div>
-          <div class="fp">Heat maps and trends make the previously invisible problem legible to everyone.</div>
-          <div class="flow-arrow"></div>
-        </div>
-        <div class="flow-node">
-          <div class="fn">03 · Awareness</div>
-          <div class="fh">Residents and drivers see the scale.</div>
-          <div class="fp">Visibility builds shared understanding of who is affected — and when.</div>
-          <div class="flow-arrow"></div>
-        </div>
-        <div class="flow-node">
-          <div class="fn">04 · Norms</div>
-          <div class="fh">Social and political pressure shifts.</div>
-          <div class="fp">Late-night noise becomes socially costly; policy gains a data backbone.</div>
-          <div class="flow-arrow"></div>
-        </div>
-        <div class="flow-node is-end">
-          <div class="fn">05 · Outcome</div>
-          <div class="fh">Voluntary compliance, quieter nights.</div>
-          <div class="fp">Reduced exposure across the corridor — without new citation authority.</div>
-        </div>
-      </div>
-
-      <div class="iftext">
-        <div class="lab">If, then</div>
-        <p><em>If</em> Salt Lake City measures transportation noise continuously, publishes the data transparently, and raises awareness of its health and economic impacts — <em>then</em> harmful nighttime vehicle behavior will decline through visibility, awareness, and stronger social incentives for voluntary compliance.</p>
-      </div>
+  <!-- ─── MID-PAGE CTA STRIP ─────────────────────────────── -->
+  <aside class="midcta" aria-label="Sign the petition">
+    <div class="row">
+      <div class="line"><b data-sig-count>1,247</b> neighbors have signed. The City Council hears the next one on <b>June 2, 2026</b>.</div>
+      <a href="#petition">Add my name <span aria-hidden="true">→</span></a>
     </div>
-  </section>
-
-  <!-- ─── TIMELINE ──────────────────────────────────────── -->
-  <section class="s-time" id="timeline" aria-labelledby="time-title">
-    <div class="wrap">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">06 · Expected outcomes</div>
-          <h2 id="time-title">Outcomes unfold across three horizons.</h2>
-        </div>
-        <p class="lede">What the city, residents, and council should expect to see in the first six months, the second six months, and beyond. Every outcome here is measurable from the dashboard's own data.</p>
-      </div>
-
-      <div class="timeline">
-        <div class="tcol">
-          <div class="tdot"></div>
-          <div class="trange">0 – 6 months</div>
-          <h3>Baseline & awareness.</h3>
-          <ul>
-            <li>Continuous environmental noise baseline established across the corridor</li>
-            <li>Public dashboard launched online</li>
-            <li>Salt Lake City residents become aware of corridor-level exposure patterns</li>
-            <li>Hot spots and peak hours identified for further policy attention</li>
-          </ul>
-        </div>
-        <div class="tcol">
-          <div class="tdot"></div>
-          <div class="trange">6 – 12 months</div>
-          <h3>Behavior & policy.</h3>
-          <ul>
-            <li>Voluntary reductions in excessive nighttime vehicle noise</li>
-            <li>Council gains objective evidence for any policy refinement</li>
-            <li>311 complaints regarding nighttime transportation noise decline</li>
-            <li>First quarterly comparison report against pre-deployment baseline</li>
-          </ul>
-        </div>
-        <div class="tcol">
-          <div class="tdot"></div>
-          <div class="trange">12+ months</div>
-          <h3>Livability & scale.</h3>
-          <ul>
-            <li>Sustained reductions in chronic nighttime exposure along the corridor</li>
-            <li>Framework documented and offered to other Wasatch Front cities</li>
-            <li>Pilot evaluation informs decisions about other SLC corridors</li>
-            <li>Public dashboard remains live, generating its own evaluation data</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── BUDGET ──────────────────────────────────────────── -->
-  <section class="s-budget" id="budget" aria-labelledby="budget-title">
-    <div class="wrap">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">07 · Pilot budget</div>
-          <h2 id="budget-title">$95K to $180K, grant-eligible.</h2>
-        </div>
-        <p class="lede">The pilot is sized to be funded substantially by smart-city, environmental health, and livability grant programs — with the remainder requested from Salt Lake City. Hardware uses commodity sensors, not bespoke devices. The coalition does not itself hold or disburse pilot funds.</p>
-      </div>
-
-      <div class="budgetlayout">
-        <table class="budget" aria-label="Estimated pilot costs by category">
-          <thead><tr><th>Category</th><th style="text-align:right;">Estimated cost</th></tr></thead>
-          <tbody>
-            <tr><td class="cat">Sensor hardware & installation</td><td class="amt">$25K – $40K</td></tr>
-            <tr><td class="cat">Wireless connectivity & hosting</td><td class="amt">$10K – $20K</td></tr>
-            <tr><td class="cat">Data platform & dashboard build</td><td class="amt">$35K – $75K</td></tr>
-            <tr><td class="cat">Public outreach & communications</td><td class="amt">$15K – $25K</td></tr>
-            <tr><td class="cat">Project evaluation & reporting</td><td class="amt">$10K – $20K</td></tr>
-            <tr class="total"><td class="cat">Total pilot cost</td><td class="amt">$95K – $180K</td></tr>
-          </tbody>
-        </table>
-
-        <div>
-          <h3 style="font-size:22px;margin-bottom:8px;">Allocation · midpoint</h3>
-          <p style="font-size:14px;color:var(--c-ink-soft);margin-bottom:24px;">Approximate share of total pilot cost by category.</p>
-          <div class="bbars">
-            <div class="ln"><div class="nm"><span>Dashboard build</span><span class="p">39%</span></div><div class="tr"><div class="fl" style="width:39%;"></div></div></div>
-            <div class="ln"><div class="nm"><span>Sensors & install</span><span class="p">23%</span></div><div class="tr"><div class="fl" style="width:23%;"></div></div></div>
-            <div class="ln"><div class="nm"><span>Outreach</span><span class="p">14%</span></div><div class="tr"><div class="fl" style="width:14%;"></div></div></div>
-            <div class="ln"><div class="nm"><span>Connectivity</span><span class="p">11%</span></div><div class="tr"><div class="fl" style="width:11%;"></div></div></div>
-            <div class="ln"><div class="nm"><span>Evaluation</span><span class="p">11%</span></div><div class="tr"><div class="fl" style="width:11%;"></div></div></div>
-          </div>
-          <p style="margin-top:28px;font-family:var(--font-mono);font-size:12px;color:var(--c-ink-soft);line-height:1.6;letter-spacing:0.04em;">
-            <b style="color:var(--c-ink);font-weight:500;">Grant programs in scope:</b> Bloomberg Mayors Challenge · EPA Environmental Justice Collaborative Problem-Solving · Utah Department of Health & Human Services environmental health programs · Wasatch Front smart-cities partnerships.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── EQUITY & PRIVACY ───────────────────────────────── -->
-  <section class="s-eq" id="privacy" aria-labelledby="eq-title">
-    <div class="wrap">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">08 · Equity & privacy</div>
-          <h2 id="eq-title">Built in by design, not bolted on.</h2>
-        </div>
-        <p class="lede">Privacy is a constraint on the system architecture, not a policy promise we hope to keep. The sensors do not record audio. The dashboard does not publish below the block grain. These are technical guarantees.</p>
-      </div>
-
-      <div class="eqgrid">
-        <div class="eqcell">
-          <div class="ek">01 · No audio</div>
-          <div class="eh">Sensors record sound levels, not sound.</div>
-          <div class="ep">There is no microphone capturing speech or conversations. Each sensor reports A-weighted decibel values and event timestamps — nothing else.</div>
-        </div>
-        <div class="eqcell">
-          <div class="ek">02 · Block-level only</div>
-          <div class="eh">No data below the block grain.</div>
-          <div class="ep">All published readings are aggregated to block-level metrics. Individual vehicles, addresses, and residents are never identifiable from dashboard data.</div>
-        </div>
-        <div class="eqcell">
-          <div class="ek">03 · Equal coverage</div>
-          <div class="eh">Two sensors per block. No exceptions.</div>
-          <div class="ep">Every block in the corridor gets the same sensor density. The pilot does not concentrate monitoring on any one neighborhood, demographic, or business district.</div>
-        </div>
-        <div class="eqcell">
-          <div class="ek">04 · Public governance</div>
-          <div class="eh">Governance built into the proposal.</div>
-          <div class="ep">Data retention, access, and use policies are part of the petition itself — published before any sensor is deployed. The coalition is asking the City to commit to independent audits at the 6-month and 12-month marks.</div>
-        </div>
-      </div>
-    </div>
-  </section>
+  </aside>
 
   <!-- ─── FAQ ──────────────────────────────────────────── -->
   <section class="s-faq" id="faq" aria-labelledby="faq-title">
     <div class="wrap">
       <div class="section-head">
         <div>
-          <div class="eyebrow">09 · Frequently asked</div>
+          <div class="eyebrow">05 · Frequently asked</div>
           <h2 id="faq-title">Common questions from residents.</h2>
         </div>
-        <p class="lede">Salt Lake City residents have asked thoughtful questions at the community meetings preceding this petition. Here are the most common — with direct answers. If you have a question that is not here, write us through the form below.</p>
+        <p class="lede">The five most-asked questions, with direct answers. Three more — on enforcement, cost, and what happens after twelve months — live on the <a href="proposal.html#faq" class="src-link">full proposal page</a>. If you have a question that's not here, write to us through the form below.</p>
       </div>
 
       <div class="faqlist">
@@ -1090,105 +1002,11 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">
-            <span>How much will this cost Salt Lake City residents?</span><span class="pm">+</span>
-          </button>
-          <div class="faq-a">
-            <p>The proposed pilot is estimated at $95,000 to $180,000 for the full twelve months. A meaningful share of this is expected to be covered by smart-city, environmental health, and livability grant programs — Bloomberg Mayors Challenge, EPA Environmental Justice, and Utah-level environmental health funding are all in scope. The coalition is also exploring community fundraising to reduce the City's share.</p>
-            <p>The remaining city contribution would be modest by infrastructure standards and one-time. There is no ongoing cost increase for residents.</p>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">
             <span>Who can see the data once it's published?</span><span class="pm">+</span>
           </button>
           <div class="faq-a">
             <p>Everyone, if the pilot is funded. The proposal is for a public website with no login required — ideally hosted on a slc.gov subdomain. Anyone — residents, journalists, researchers, business owners — would see corridor-level noise patterns by block, by hour, and by day of the week.</p>
             <p>Anonymized, block-aggregated data would also be available for download under Utah's existing public-records framework, so independent researchers can verify the City's reporting.</p>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">
-            <span>What happens after the twelve months?</span><span class="pm">+</span>
-          </button>
-          <div class="faq-a">
-            <p>If the City funds the pilot: at month twelve, an independent evaluation would compare pre- and post-deployment data. The Council could then decide whether to continue, expand, or sunset the program. The dashboard itself can remain live indefinitely at very low cost.</p>
-            <p>If outcomes are strong, an obvious next step is extending sensor coverage to other Salt Lake City corridors that have consistently received noise complaints — Liberty Wells, Sugar House Park edge, North Salt Lake junctions, and so on.</p>
-          </div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">
-            <span>How is this different from 311 noise complaints today?</span><span class="pm">+</span>
-          </button>
-          <div class="faq-a">
-            <p>311 complaints depend on residents calling to report a noise event after it has already happened. The published research shows this approach captures roughly 10–15% of true exposure — most affected residents never call, and the events themselves are usually over before anyone responds.</p>
-            <p>Continuous sensor monitoring captures the full picture, continuously, without any resident effort. 311 becomes a backup, not the primary signal.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─── REFERENCES ─────────────────────────────────────── -->
-  <section class="s-refs" id="references" aria-labelledby="refs-title">
-    <div class="wrap">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">10 · Primary sources</div>
-          <h2 id="refs-title">The research behind the proposal.</h2>
-        </div>
-        <p class="lede">Every claim in this proposal is supported by peer-reviewed work in high-impact journals or academic presses. The references below are the primary sources — follow each link to read the original study.</p>
-      </div>
-
-      <div class="refgrid">
-        <div class="refgroup">
-          <div class="grouphead">Transportation noise harms sleep &amp; cardiovascular health</div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.thelancet.com/journals/lancet/article/PIIS0140-6736%2813%2961613-X/fulltext" target="_blank" rel="noopener">Auditory and non-auditory effects of noise on health.</a></div>
-            <div class="rmeta">Basner et al. · 2014 · The Lancet · <a href="https://pubmed.ncbi.nlm.nih.gov/24183105/" target="_blank" rel="noopener">PubMed</a></div>
-          </div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.jacc.org/doi/10.1016/j.jacc.2017.12.015" target="_blank" rel="noopener">Environmental noise and the cardiovascular system.</a></div>
-            <div class="rmeta">Münzel et al. · 2018 · Journal of the American College of Cardiology · <a href="https://pubmed.ncbi.nlm.nih.gov/29420965/" target="_blank" rel="noopener">PubMed</a></div>
-          </div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.who.int/europe/publications/i/item/9789289053563" target="_blank" rel="noopener">Environmental Noise Guidelines for the European Region.</a></div>
-            <div class="rmeta">World Health Organization · 2018</div>
-          </div>
-        </div>
-
-        <div class="refgroup">
-          <div class="grouphead">Sleep disruption impairs productivity &amp; cognition</div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3290659/" target="_blank" rel="noopener">A meta-analysis of the impact of short-term sleep deprivation on cognitive variables.</a></div>
-            <div class="rmeta">Lim &amp; Dinges · 2010 · Psychological Bulletin · <a href="https://pubmed.ncbi.nlm.nih.gov/20438143/" target="_blank" rel="noopener">PubMed</a></div>
-          </div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://journals.lww.com/joem/Abstract/2011/07000/The_Prevalence_and_Effects_of_Insomnia_on_Work.10.aspx" target="_blank" rel="noopener">The prevalence and effects of insomnia on work performance.</a></div>
-            <div class="rmeta">Kessler et al. · 2011 · Journal of Occupational and Environmental Medicine</div>
-          </div>
-        </div>
-
-        <div class="refgroup">
-          <div class="grouphead">Continuous monitoring improves policy effectiveness</div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.sciencedirect.com/science/article/abs/pii/S0160412009002057" target="_blank" rel="noopener">Strategic environmental noise mapping: methodological issues in implementing the EU Environmental Noise Directive.</a></div>
-            <div class="rmeta">Murphy &amp; King · 2010 · Environment International</div>
-          </div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.sciencedirect.com/science/article/abs/pii/S0003682X19306029" target="_blank" rel="noopener">Noise monitoring and exposure mapping in urban environments using low-cost sensors.</a></div>
-            <div class="rmeta">Can et al. · 2020 · Applied Acoustics</div>
-          </div>
-        </div>
-
-        <div class="refgroup">
-          <div class="grouphead">Transparency &amp; disclosure shift behavior</div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.cambridge.org/core/books/full-disclosure/6D4066C64C047E3FCB9774B7363C05C" target="_blank" rel="noopener">Full Disclosure: The Perils and Promise of Transparency.</a></div>
-            <div class="rmeta">Fung, Graham &amp; Weil · 2007 · Cambridge University Press</div>
-          </div>
-          <div class="refitem">
-            <div class="rtitle"><a href="https://www.sciencedirect.com/science/article/abs/pii/S030142151100716X" target="_blank" rel="noopener">Information strategies and energy conservation behavior: a meta-analysis of experimental studies.</a></div>
-            <div class="rmeta">Delmas, Fischlein &amp; Asensio · 2011 · Energy Policy</div>
           </div>
         </div>
       </div>
@@ -1200,10 +1018,10 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
     <div class="wrap">
       <div class="section-head">
         <div>
-          <div class="eyebrow">11 · Get involved</div>
-          <h2 id="get-title">Four ways Salt Lake City residents can help shape this.</h2>
+          <div class="eyebrow">06 · Get involved</div>
+          <h2 id="get-title">Four ways to make this happen.</h2>
         </div>
-        <p class="lede" style="color:rgba(244,241,234,0.75);">Our petition drive runs through June 1, 2026. On June 2, 2026, we will deliver signatures and public comments to the City Council, formally asking them to sponsor and fund this pilot. Every signature — and every neighbor who shows up — strengthens the case.</p>
+        <p class="lede" style="color:rgba(244,241,234,0.75);">The petition drive runs through June 1, 2026. On June 2, 2026, we walk into City Council with every signature and every story you send us. Awareness is the policy — and the more of us show up, the harder it is to ignore.</p>
       </div>
 
       <div class="getgrid">
@@ -1211,46 +1029,81 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
           <div class="action-row">
             <div class="ai">01</div>
             <div>
-              <div class="ah">Sign our petition.</div>
-              <div class="ap">Open through June 1, 2026 · delivered to the City Council in support of the pilot.</div>
+              <div class="ah">Sign the petition.</div>
+              <div class="ap">Takes 30 seconds. Open through June 1, 2026 · delivered the next morning to the City Council.</div>
             </div>
-            <a href="#signup">Sign →</a>
+            <a href="#petition">Sign →</a>
           </div>
           <div class="action-row">
             <div class="ai">02</div>
             <div>
-              <div class="ah">Speak at the Council meeting.</div>
-              <div class="ap">June 2, 2026 · 7:00 p.m. formal meeting · City &amp; County Building, 451 S State St · public comment is welcomed.</div>
+              <div class="ah">Tell us about your block.</div>
+              <div class="ap">A story, a recording, a 311 case — anything that helps us make the case. Goes straight to the coalition.</div>
             </div>
-            <a href="#signup">Details →</a>
+            <a href="#feedback">Send →</a>
           </div>
           <div class="action-row">
             <div class="ai">03</div>
             <div>
-              <div class="ah">Email your council member.</div>
-              <div class="ap">Districts 3 and 4 cover the proposed pilot corridor most directly.</div>
+              <div class="ah">Speak at the Council meeting.</div>
+              <div class="ap">June 2, 2026 · 7:00 p.m. · City &amp; County Building, 451 S State St · public comment is welcomed.</div>
             </div>
-            <a href="#signup">Find rep →</a>
+            <a href="#petition">Details →</a>
           </div>
           <div class="action-row">
             <div class="ai">04</div>
             <div>
-              <div class="ah">Share the proposal.</div>
-              <div class="ap">Send this page to a neighbor. Awareness is the policy.</div>
+              <div class="ah">Share with a neighbor.</div>
+              <div class="ap">Awareness is the policy. The more residents who know, the harder this is for the Council to defer.</div>
             </div>
-            <a href="#signup">Share →</a>
+            <a href="#petition">Share →</a>
           </div>
         </div>
 
-        <div class="signup" id="signup">
-          <div class="sh">Sign on · stay informed.</div>
-          <div class="sp">Add your name to the petition and we'll keep you posted: one brief email each month with signature counts, council dates, and pilot updates. Unsubscribe any time.</div>
-          <form id="signup-form" novalidate>
-            <input type="email" name="email" placeholder="your.name@email.com" required aria-label="Email address" autocomplete="email" />
-            <button type="submit">Sign on <span aria-hidden="true">→</span></button>
+        <div class="signup" id="petition">
+          <div class="sh">Sign the petition.</div>
+          <div class="sp">We deliver every signature to the City Council on June 2, 2026. We'll also email you about once a month with progress — unsubscribe any time.</div>
+          <form id="petition-form" novalidate>
+            <div class="field-row">
+              <input type="text" name="name" placeholder="Your name" required maxlength="100" aria-label="Your name" autocomplete="name" />
+              <input type="email" name="email" placeholder="your.name@email.com" required maxlength="254" aria-label="Email address" autocomplete="email" />
+            </div>
+            <input type="text" name="neighborhood" placeholder="Your neighborhood or ZIP (e.g. Central City, Ballpark, 84111)" required maxlength="80" aria-label="Neighborhood or ZIP" autocomplete="postal-code" />
+            <textarea name="comment" placeholder="Why this matters to you (optional)" maxlength="1000" rows="3" aria-label="Why this matters to you"></textarea>
+            <label class="checkrow"><input type="checkbox" name="isResident" checked /> <span>I'm a Salt Lake City resident</span></label>
+            <div class="row-actions">
+              <button type="submit">Add my name <span aria-hidden="true">→</span></button>
+              <span style="font-family:var(--font-mono);font-size:11px;color:rgba(244,241,234,0.5);letter-spacing:0.06em;">Joining <b data-sig-count style="color:var(--c-bg);">1,247</b> neighbors</span>
+            </div>
           </form>
-          <div class="ok" id="signup-ok" role="status" aria-live="polite">Thanks — you're on the list. We'll be in touch.</div>
-          <div class="privacy">Your email is used only for this coalition. Never shared, never sold. Removed on request.</div>
+          <div class="ok" id="petition-ok" role="status" aria-live="polite"></div>
+          <div class="share-row" id="petition-share" aria-label="Share the petition">
+            <a class="sb" href="https://twitter.com/intent/tweet?text=I%20just%20signed%20the%20Urban%20Quiet%20Initiative%20petition.%20Salt%20Lake%20City%20shouldn%27t%20have%20to%20lose%20sleep%20over%20this.&amp;url=https%3A%2F%2Furban-quiet-initiative.geo-tt.app%2F" target="_blank" rel="noopener">Share on X</a>
+            <a class="sb" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Furban-quiet-initiative.geo-tt.app%2F" target="_blank" rel="noopener">Share on Facebook</a>
+            <button class="sb" type="button" data-copy-link="https://urban-quiet-initiative.geo-tt.app/">Copy link</button>
+          </div>
+          <div class="privacy">Your details go only to the coalition and are delivered to City Council as a signature. Never shared, never sold. Removed on request.</div>
+        </div>
+      </div>
+
+      <div class="councilwatch" aria-label="Council watch">
+        <div class="cw-head">Council watch · Where each member stands</div>
+        <div class="cw-grid">
+          <div class="cw-card">
+            <div class="cw-name">Council Member, District 3</div>
+            <div class="cw-meta">Covers central pilot corridor</div>
+            <span class="cw-pill is-cons">Considering</span>
+          </div>
+          <div class="cw-card">
+            <div class="cw-name">Council Member, District 4</div>
+            <div class="cw-meta">Covers central pilot corridor</div>
+            <span class="cw-pill is-cons">Considering</span>
+          </div>
+          <div class="cw-card">
+            <div class="cw-name">Five other council members</div>
+            <div class="cw-meta">Citywide</div>
+            <span class="cw-pill is-quiet">No response yet</span>
+          </div>
         </div>
       </div>
     </div>
@@ -1261,18 +1114,37 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
     <div class="wrap">
       <div class="section-head">
         <div>
-          <div class="eyebrow">12 · Feedback</div>
-          <h2 id="feedback-title">Tell us what we should know.</h2>
+          <div class="eyebrow">07 · Feedback</div>
+          <h2 id="feedback-title">Tell us about your block.</h2>
         </div>
-        <p class="lede">Have a story about night noise on your block, a correction to the proposal, or a concern we should address? Send a note — every message reaches the coalition directly.</p>
+        <p class="lede">A story, data, a concern — anything that helps us make the case. Specific is better than general. Every message reaches the coalition directly.</p>
       </div>
 
-      <div class="feedback-card">
+      <div class="feedback-card" style="max-width:820px;">
         <form id="feedback-form" class="feedback" novalidate>
-          <input type="text" name="name" placeholder="Your name" required maxlength="100" aria-label="Your name" autocomplete="name" />
-          <input type="email" name="email" placeholder="your.name@email.com" required maxlength="254" aria-label="Email address" autocomplete="email" />
-          <textarea name="message" placeholder="What would you like us to know?" required maxlength="4000" rows="6" aria-label="Your message"></textarea>
-          <button type="submit">Send feedback <span aria-hidden="true">→</span></button>
+          <div>
+            <div class="topic-label">What kind of message is this?</div>
+            <div class="topic-list" role="radiogroup" aria-label="Topic">
+              <label><input type="radio" name="topic" value="story" required /><span>I have a story to share</span></label>
+              <label><input type="radio" name="topic" value="data" /><span>I have data or recordings</span></label>
+              <label><input type="radio" name="topic" value="privacy" /><span>I'm concerned about privacy</span></label>
+              <label><input type="radio" name="topic" value="volunteer" /><span>I want to volunteer</span></label>
+              <label><input type="radio" name="topic" value="other" /><span>Something else</span></label>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <input type="text" name="block" placeholder="What block or cross-streets? (optional)" maxlength="120" aria-label="Block or cross-streets" />
+            <input type="text" name="whenWoken" placeholder="When does noise wake you? e.g. 1–3 AM Fri" maxlength="120" aria-label="When does noise wake you" />
+          </div>
+
+          <div class="field-row">
+            <input type="text" name="name" placeholder="Your name" required maxlength="100" aria-label="Your name" autocomplete="name" />
+            <input type="email" name="email" placeholder="your.name@email.com" required maxlength="254" aria-label="Email address" autocomplete="email" />
+          </div>
+
+          <textarea name="message" placeholder="Tell us more — the more specific, the more useful." required maxlength="4000" rows="6" aria-label="Your message"></textarea>
+          <button type="submit">Send to the coalition <span aria-hidden="true">→</span></button>
         </form>
         <div class="ok" id="feedback-ok" role="status" aria-live="polite"></div>
         <div class="privacy">Your message goes only to the coalition. Never shared, never sold.</div>
@@ -1294,23 +1166,23 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         <p>An independent citizens' coalition petitioning the Salt Lake City Council to fund a measurement and transparency pilot for nighttime transportation noise along the State Street corridor in downtown Salt Lake City. Not affiliated with the City of Salt Lake City, the Mayor's Office, or any city department.</p>
       </div>
       <div class="footcol">
-        <h4>The proposal</h4>
+        <h4>Overview</h4>
         <ul>
           <li><a href="#why">Why noise matters</a></li>
           <li><a href="#proposal">The two phases</a></li>
           <li><a href="#corridor">The corridor</a></li>
           <li><a href="#dashboard">The dashboard</a></li>
-          <li><a href="#budget">Budget</a></li>
+          <li><a href="#faq">FAQ</a></li>
         </ul>
       </div>
       <div class="footcol">
-        <h4>For residents</h4>
+        <h4>Full proposal</h4>
         <ul>
-          <li><a href="#faq">FAQ</a></li>
-          <li><a href="#references">References</a></li>
-          <li><a href="#privacy">Equity & privacy</a></li>
-          <li><a href="#get-involved">Get involved</a></li>
-          <li><a href="#signup">Sign up for updates</a></li>
+          <li><a href="proposal.html#theory">Theory of change</a></li>
+          <li><a href="proposal.html#timeline">Expected outcomes</a></li>
+          <li><a href="proposal.html#budget">Budget</a></li>
+          <li><a href="proposal.html#privacy">Equity &amp; privacy</a></li>
+          <li><a href="proposal.html#references">References</a></li>
         </ul>
       </div>
       <div class="footcol">
@@ -1485,14 +1357,49 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   });
 })();
 
-/* ─── Email signup ────────────────────────────────────────────── */
-(function signup() {
-  var form = document.getElementById('signup-form');
+/* ─── API base ────────────────────────────────────────────────── */
+var API_BASE = 'https://fs0krnlxd0.execute-api.us-west-2.amazonaws.com';
+
+/* ─── Signature counter (seeded, then fetched on load) ────────── */
+(function sigCount() {
+  var els = document.querySelectorAll('[data-sig-count]');
+  if (!els.length) return;
+  function paint(n) {
+    var s = Number(n).toLocaleString('en-US');
+    els.forEach(function (e) { e.textContent = s; });
+  }
+  fetch(API_BASE + '/signups/count').then(function (r) {
+    return r.ok ? r.json() : null;
+  }).then(function (body) {
+    if (body && typeof body.count === 'number' && body.count > 0) paint(body.count);
+  }).catch(function () { /* keep seeded number */ });
+  window.__urbanQuietBumpSigCount = function () {
+    var first = els[0];
+    if (!first) return;
+    var n = parseInt((first.textContent || '0').replace(/[^\d]/g, ''), 10) || 0;
+    paint(n + 1);
+  };
+})();
+
+/* ─── Days remaining until 2026-06-01 ─────────────────────────── */
+(function daysLeft() {
+  var els = document.querySelectorAll('[data-days-left]');
+  if (!els.length) return;
+  var deadline = new Date('2026-06-01T00:00:00-06:00');
+  var now = new Date();
+  var ms = deadline - now;
+  var d = Math.max(0, Math.ceil(ms / 86400000));
+  els.forEach(function (e) { e.textContent = d; });
+})();
+
+/* ─── Petition form ───────────────────────────────────────────── */
+(function petition() {
+  var form = document.getElementById('petition-form');
   if (!form) return;
-  var endpoint = 'https://fs0krnlxd0.execute-api.us-west-2.amazonaws.com/signup';
-  var input = form.querySelector('input[type=email]');
+  var endpoint = API_BASE + '/signup';
   var btn = form.querySelector('button[type=submit]');
-  var ok = document.getElementById('signup-ok');
+  var ok = document.getElementById('petition-ok');
+  var share = document.getElementById('petition-share');
   var defaultBtnHTML = btn ? btn.innerHTML : '';
 
   function setStatus(msg, shown) {
@@ -1503,11 +1410,16 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    var email = (input.value || '').trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setStatus('Please enter a valid email address.', true);
-      return;
-    }
+    var name = (form.elements.name.value || '').trim();
+    var email = (form.elements.email.value || '').trim();
+    var neighborhood = (form.elements.neighborhood.value || '').trim();
+    var comment = (form.elements.comment.value || '').trim();
+    var isResident = !!form.elements.isResident.checked;
+
+    if (!name) return setStatus('Please enter your name.', true);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setStatus('Please enter a valid email address.', true);
+    if (!neighborhood) return setStatus('Please enter your neighborhood or ZIP.', true);
+
     btn.disabled = true;
     btn.textContent = 'Sending…';
     setStatus('', false);
@@ -1515,18 +1427,22 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
     fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: email })
+      body: JSON.stringify({ name: name, email: email, neighborhood: neighborhood, comment: comment, isResident: isResident })
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (body) {
         return { status: r.status, body: body };
       });
     }).then(function (res) {
       if (res.status === 200 && res.body && res.body.ok) {
-        input.value = '';
         var msg = res.body.already
           ? "You're already on the list — thanks again."
-          : "Thanks — you're on the list. We'll be in touch.";
+          : "Thanks — your name is in. We deliver every signature to the City Council on June 2.";
         setStatus(msg, true);
+        if (share) share.classList.add('is-shown');
+        if (!res.body.already && typeof window.__urbanQuietBumpSigCount === 'function') {
+          window.__urbanQuietBumpSigCount();
+        }
+        if (!res.body.already) form.reset();
       } else {
         setStatus((res.body && res.body.error) || 'Sorry, something went wrong. Please try again.', true);
       }
@@ -1539,14 +1455,33 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   });
 })();
 
+/* ─── Share row: copy-link button ─────────────────────────────── */
+(function shareCopy() {
+  document.querySelectorAll('[data-copy-link]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var url = b.getAttribute('data-copy-link');
+      var done = function () {
+        var t = b.textContent;
+        b.textContent = 'Copied!';
+        setTimeout(function () { b.textContent = t; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = url; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (e) { /* noop */ }
+        document.body.removeChild(ta); done();
+      }
+    });
+  });
+})();
+
 /* ─── Feedback form ──────────────────────────────────────────── */
 (function feedback() {
   var form = document.getElementById('feedback-form');
   if (!form) return;
-  var endpoint = 'https://fs0krnlxd0.execute-api.us-west-2.amazonaws.com/feedback';
-  var nameInput = form.querySelector('input[name=name]');
-  var emailInput = form.querySelector('input[name=email]');
-  var messageInput = form.querySelector('textarea[name=message]');
+  var endpoint = API_BASE + '/feedback';
   var btn = form.querySelector('button[type=submit]');
   var ok = document.getElementById('feedback-ok');
   var defaultBtnHTML = btn ? btn.innerHTML : '';
@@ -1559,21 +1494,19 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
-    var name = (nameInput.value || '').trim();
-    var email = (emailInput.value || '').trim();
-    var message = (messageInput.value || '').trim();
-    if (!name) {
-      setStatus('Please enter your name.', true);
-      return;
-    }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setStatus('Please enter a valid email address.', true);
-      return;
-    }
-    if (!message) {
-      setStatus('Please enter a message.', true);
-      return;
-    }
+    var name = (form.elements.name.value || '').trim();
+    var email = (form.elements.email.value || '').trim();
+    var message = (form.elements.message.value || '').trim();
+    var block = (form.elements.block.value || '').trim();
+    var whenWoken = (form.elements.whenWoken.value || '').trim();
+    var topicEl = form.querySelector('input[name=topic]:checked');
+    var topic = topicEl ? topicEl.value : '';
+
+    if (!topic) return setStatus('Please pick a topic.', true);
+    if (!name) return setStatus('Please enter your name.', true);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setStatus('Please enter a valid email address.', true);
+    if (!message) return setStatus('Please enter a message.', true);
+
     btn.disabled = true;
     btn.textContent = 'Sending…';
     setStatus('', false);
@@ -1581,7 +1514,7 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
     fetch(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: name, email: email, message: message })
+      body: JSON.stringify({ name: name, email: email, message: message, topic: topic, block: block, whenWoken: whenWoken })
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (body) {
         return { status: r.status, body: body };
