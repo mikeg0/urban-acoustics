@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Deploy the urban-quiet-initiative Amplify site, bundling the petition page
-# and the enforcement-map / enforcement-demo demo pages into one artifact.
+# and the enforcement-map demo page into one artifact.
 #
-# Reads the three static sites from ../../frontend/public/<name>/index.html
+# Reads the static sites from ../../frontend/public/<name>/index.html
 # (the same files Vite serves locally), assembles them into a deploy artifact
 # with the petition page at both / and /quiet-initiative/, and pushes the
 # artifact to the existing Amplify app via the manual-deployment flow.
@@ -17,7 +17,7 @@ REGION="${AWS_REGION:-us-west-2}"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PUBLIC_ROOT="$HERE/../../frontend/public"
-SITES=(quiet-initiative enforcement-map enforcement-demo)
+SITES=(quiet-initiative enforcement-map)
 
 echo "==> App: $AMPLIFY_APP_ID  Branch: $AMPLIFY_BRANCH  Region: $REGION"
 
@@ -43,6 +43,11 @@ for site in "${SITES[@]}"; do
 done
 # Petition page at the artifact root too, so the bare domain still serves it.
 cp "$PUBLIC_ROOT/quiet-initiative/index.html" "$STAGE/index.html"
+
+# Shared root-level assets referenced from the pages (e.g. /sensor-locations.geojson).
+cp "$PUBLIC_ROOT/sensor-locations.geojson" "$STAGE/sensor-locations.geojson"
+cp "$PUBLIC_ROOT/favicon.ico"      "$STAGE/favicon.ico"
+cp "$PUBLIC_ROOT/favicon-180.png"  "$STAGE/favicon-180.png"
 
 # 3. Zip the staged artifact.
 echo "==> Zipping artifact"
@@ -77,7 +82,6 @@ while true; do
       echo "    https://urban-quiet-initiative.geo-tt.app/"
       echo "    https://urban-quiet-initiative.geo-tt.app/quiet-initiative/"
       echo "    https://urban-quiet-initiative.geo-tt.app/enforcement-map/"
-      echo "    https://urban-quiet-initiative.geo-tt.app/enforcement-demo/"
       exit 0
       ;;
     FAILED|CANCELLED)

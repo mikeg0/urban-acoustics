@@ -5,7 +5,7 @@ Deployment assets for the Urban Quiet Initiative petition site — a Salt Lake C
 - **Live site:** https://urban-quiet-initiative.geo-tt.app/
 - **Amplify default URL:** https://main.d3iawkfgvlagfs.amplifyapp.com/
 
-The petition page is a single static HTML file hosted on AWS Amplify, alongside two demo pages (`enforcement-map`, `enforcement-demo`). Email signups go to a small AWS backend (API Gateway → Lambda → DynamoDB) defined as a CloudFormation/SAM stack in this directory.
+The petition page is a single static HTML file hosted on AWS Amplify, alongside the `enforcement-map` demo page. Email signups go to a small AWS backend (API Gateway → Lambda → DynamoDB) defined as a CloudFormation/SAM stack in this directory.
 
 ## Repo layout
 
@@ -25,19 +25,16 @@ urban-acoustics/
     └── public/
         ├── quiet-initiative/
         │   └── index.html      ← the petition page
-        ├── enforcement-map/
-        │   └── index.html
-        └── enforcement-demo/
+        └── enforcement-map/
             └── index.html
 ```
 
 ### Local preview
 
-Running the urban-acoustics dev stack (`docker compose up`) makes all three sites available under the dev domain:
+Running the urban-acoustics dev stack (`docker compose up`) makes both sites available under the dev domain:
 
 - https://urban-acoustics.dev.conexed.com/quiet-initiative/
 - https://urban-acoustics.dev.conexed.com/enforcement-map/
-- https://urban-acoustics.dev.conexed.com/enforcement-demo/
 
 No Vite config changes are needed — `frontend/public/<name>/index.html` is served at `/<name>/` automatically.
 
@@ -75,7 +72,7 @@ Both DynamoDB tables have `DeletionPolicy: Retain` so deleting the stack does **
 
 ## Deploying the static sites (Amplify)
 
-`deploy-amplify.sh` bundles all three pages from `frontend/public/` and uploads them to the Amplify app via the manual-deployment flow.
+`deploy-amplify.sh` bundles the petition page and the `enforcement-map` demo from `frontend/public/` and uploads them to the Amplify app via the manual-deployment flow.
 
 ```bash
 cd deploy/quiet-initiative
@@ -84,7 +81,7 @@ cd deploy/quiet-initiative
 
 What it does:
 
-1. Reads `frontend/public/{quiet-initiative,enforcement-map,enforcement-demo}/` from this repo.
+1. Reads `frontend/public/{quiet-initiative,enforcement-map}/` from this repo.
 2. Stages them into a single artifact, also copying `quiet-initiative/index.html` to the artifact root so the bare domain still serves the petition.
 3. Zips the artifact, requests an Amplify deployment slot (`aws amplify create-deployment`), uploads the zip to the presigned URL, and starts the deployment.
 4. Polls `aws amplify get-job` until the status is `SUCCEED` or `FAILED`.
@@ -94,7 +91,6 @@ Resulting URLs:
 - `https://urban-quiet-initiative.geo-tt.app/` — petition (bare domain, unchanged from before)
 - `https://urban-quiet-initiative.geo-tt.app/quiet-initiative/` — petition (same file, path-named)
 - `https://urban-quiet-initiative.geo-tt.app/enforcement-map/` — enforcement-map demo
-- `https://urban-quiet-initiative.geo-tt.app/enforcement-demo/` — enforcement-demo
 
 The petition is published at both `/` and `/quiet-initiative/` so existing bookmarks/QR codes pointing at the bare domain keep working while the path-named URL matches the local-dev URL for parity.
 
@@ -231,7 +227,6 @@ aws dynamodb delete-item --table-name urban-quiet-signups --region us-west-2 \
 curl -sI https://urban-quiet-initiative.geo-tt.app/ | head -2
 curl -sI https://urban-quiet-initiative.geo-tt.app/quiet-initiative/ | head -2
 curl -sI https://urban-quiet-initiative.geo-tt.app/enforcement-map/ | head -2
-curl -sI https://urban-quiet-initiative.geo-tt.app/enforcement-demo/ | head -2
 
 # Signup endpoint works (replace with current endpoint if it changed)
 ENDPOINT=$(aws cloudformation describe-stacks \

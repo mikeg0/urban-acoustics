@@ -6,6 +6,7 @@ const ddbClient = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(ddbClient);
 const SIGNUPS_TABLE = process.env.SIGNUPS_TABLE_NAME;
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE_NAME;
+const PAGE_VISITS_TABLE = process.env.PAGE_VISITS_TABLE_NAME;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FEEDBACK_TOPICS = new Set(["story", "data", "privacy", "volunteer", "other"]);
 
@@ -137,6 +138,41 @@ async function handleFeedback(payload, meta) {
   return reply(200, { ok: true });
 }
 
+function clampDimension(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  const i = Math.trunc(n);
+  if (i < 0 || i > 10000) return undefined;
+  return i;
+}
+
+async function handlePageView(payload, meta) {
+  const referrer = (payload.referrer || "").trim().slice(0, 2048);
+  const path = (payload.path || "").trim().slice(0, 2048);
+  const screenWidth = clampDimension(payload.screenWidth);
+  const screenHeight = clampDimension(payload.screenHeight);
+
+  try {
+    await ddb.send(new PutCommand({
+      TableName: PAGE_VISITS_TABLE,
+      Item: {
+        visitId: randomUUID(),
+        createdAt: meta.now,
+        sourceIp: meta.sourceIp,
+        userAgent: meta.userAgent,
+        referrer: referrer || undefined,
+        path: path || undefined,
+        screenWidth,
+        screenHeight,
+      },
+    }));
+  } catch (err) {
+    console.error("pageview ddb error", err);
+  }
+
+  return reply(200, { ok: true });
+}
+
 export const handler = async (event) => {
   const method = event?.requestContext?.http?.method ?? "GET";
   if (method === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
@@ -165,5 +201,6 @@ export const handler = async (event) => {
 
   if (path.endsWith("/signup")) return handleSignup(payload, meta);
   if (path.endsWith("/feedback")) return handleFeedback(payload, meta);
+  if (path.endsWith("/pageview")) return handlePageView(payload, meta);
   return reply(404, { error: "not found" });
 };

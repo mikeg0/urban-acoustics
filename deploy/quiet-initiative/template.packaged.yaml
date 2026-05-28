@@ -1,12 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Urban Quiet Initiative — email signup backend (DynamoDB + Lambda + 
-  HTTP API).
+Description: Urban Quiet Initiative — email signup + feedback backend (DynamoDB 
+  + Lambda + HTTP API).
 Parameters:
   TableName:
     Type: String
     Default: urban-quiet-signups
     Description: DynamoDB table name for collected emails.
+  FeedbackTableName:
+    Type: String
+    Default: urban-quiet-feedback
+    Description: DynamoDB table name for collected feedback messages.
+  PageVisitsTableName:
+    Type: String
+    Default: urban-quiet-page-visits
+    Description: DynamoDB table name for first-party page-visit telemetry.
 Resources:
   SignupsTable:
     Type: AWS::DynamoDB::Table
@@ -24,6 +32,38 @@ Resources:
         KeyType: HASH
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+  FeedbackTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName:
+        Ref: FeedbackTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: feedbackId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: feedbackId
+        KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  PageVisitsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName:
+        Ref: PageVisitsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: visitId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: visitId
+        KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
   SignupApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -31,6 +71,7 @@ Resources:
         AllowOrigins:
         - '*'
         AllowMethods:
+        - GET
         - POST
         - OPTIONS
         AllowHeaders:
@@ -41,7 +82,7 @@ Resources:
     Properties:
       FunctionName: urban-quiet-signup
       CodeUri: 
-        s3://urban-quiet-initiative-deploy-174590856187-us-west-2/82aa745c7b9abb9d7affa4e1d52ca63f
+        s3://urban-quiet-initiative-deploy-174590856187-us-west-2/463a3b1467f93be174152daeb33f281f
       Handler: index.handler
       Runtime: nodejs20.x
       Architectures:
@@ -50,12 +91,29 @@ Resources:
       Timeout: 10
       Environment:
         Variables:
-          TABLE_NAME:
+          SIGNUPS_TABLE_NAME:
             Ref: SignupsTable
+          FEEDBACK_TABLE_NAME:
+            Ref: FeedbackTable
+          PAGE_VISITS_TABLE_NAME:
+            Ref: PageVisitsTable
       Policies:
       - DynamoDBWritePolicy:
           TableName:
             Ref: SignupsTable
+      - DynamoDBWritePolicy:
+          TableName:
+            Ref: FeedbackTable
+      - DynamoDBWritePolicy:
+          TableName:
+            Ref: PageVisitsTable
+      - Statement:
+        - Effect: Allow
+          Action: dynamodb:DescribeTable
+          Resource:
+            Fn::GetAtt:
+            - SignupsTable
+            - Arn
       Events:
         Signup:
           Type: HttpApi
@@ -64,6 +122,27 @@ Resources:
               Ref: SignupApi
             Method: POST
             Path: /signup
+        SignupCount:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: SignupApi
+            Method: GET
+            Path: /signups/count
+        Feedback:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: SignupApi
+            Method: POST
+            Path: /feedback
+        PageView:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: SignupApi
+            Method: POST
+            Path: /pageview
 Outputs:
   SignupEndpoint:
     Description: Public POST endpoint for the signup form.
@@ -73,9 +152,39 @@ Outputs:
     Export:
       Name:
         Fn::Sub: ${AWS::StackName}-SignupEndpoint
+  FeedbackEndpoint:
+    Description: Public POST endpoint for the feedback form.
+    Value:
+      Fn::Sub: 
+        https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/feedback
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-FeedbackEndpoint
+  SignupCountEndpoint:
+    Description: Public GET endpoint returning the current signature count.
+    Value:
+      Fn::Sub: 
+        https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/signups/count
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-SignupCountEndpoint
+  PageViewEndpoint:
+    Description: Public POST endpoint that records a first-party page visit.
+    Value:
+      Fn::Sub: 
+        https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/pageview
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-PageViewEndpoint
   SignupsTableName:
     Value:
       Ref: SignupsTable
+  FeedbackTableName:
+    Value:
+      Ref: FeedbackTable
+  PageVisitsTableName:
+    Value:
+      Ref: PageVisitsTable
   SignupFunctionName:
     Value:
       Ref: SignupFunction

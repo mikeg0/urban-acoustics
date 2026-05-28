@@ -11,6 +11,10 @@ Parameters:
     Type: String
     Default: urban-quiet-feedback
     Description: DynamoDB table name for collected feedback messages.
+  PageVisitsTableName:
+    Type: String
+    Default: urban-quiet-page-visits
+    Description: DynamoDB table name for first-party page-visit telemetry.
 
 Resources:
 
@@ -46,6 +50,22 @@ Resources:
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
 
+  PageVisitsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref PageVisitsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: visitId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: visitId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
   SignupApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -75,11 +95,14 @@ Resources:
         Variables:
           SIGNUPS_TABLE_NAME: !Ref SignupsTable
           FEEDBACK_TABLE_NAME: !Ref FeedbackTable
+          PAGE_VISITS_TABLE_NAME: !Ref PageVisitsTable
       Policies:
         - DynamoDBWritePolicy:
             TableName: !Ref SignupsTable
         - DynamoDBWritePolicy:
             TableName: !Ref FeedbackTable
+        - DynamoDBWritePolicy:
+            TableName: !Ref PageVisitsTable
         - Statement:
             - Effect: Allow
               Action: dynamodb:DescribeTable
@@ -103,6 +126,12 @@ Resources:
             ApiId: !Ref SignupApi
             Method: POST
             Path: /feedback
+        PageView:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SignupApi
+            Method: POST
+            Path: /pageview
 
 Outputs:
   SignupEndpoint:
@@ -120,9 +149,16 @@ Outputs:
     Value: !Sub "https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/signups/count"
     Export:
       Name: !Sub "${AWS::StackName}-SignupCountEndpoint"
+  PageViewEndpoint:
+    Description: Public POST endpoint that records a first-party page visit.
+    Value: !Sub "https://${SignupApi}.execute-api.${AWS::Region}.amazonaws.com/pageview"
+    Export:
+      Name: !Sub "${AWS::StackName}-PageViewEndpoint"
   SignupsTableName:
     Value: !Ref SignupsTable
   FeedbackTableName:
     Value: !Ref FeedbackTable
+  PageVisitsTableName:
+    Value: !Ref PageVisitsTable
   SignupFunctionName:
     Value: !Ref SignupFunction
