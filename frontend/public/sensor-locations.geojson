@@ -2,45 +2,703 @@
   "type": "FeatureCollection",
   "name": "uqi-pilot-corridor-stations",
   "features": [
-    { "type": "Feature", "properties": { "code": "UQI-ST-01",   "weight": 0.55 }, "geometry": { "type": "Point", "coordinates": [-111.888264, 40.771538] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-02",   "weight": 0.42 }, "geometry": { "type": "Point", "coordinates": [-111.888238, 40.767176] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-03",   "weight": 0.62 }, "geometry": { "type": "Point", "coordinates": [-111.888230, 40.765028] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-04",   "weight": 0.40 }, "geometry": { "type": "Point", "coordinates": [-111.888245, 40.762822] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-05",   "weight": 0.35 }, "geometry": { "type": "Point", "coordinates": [-111.888244, 40.760645] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-06",   "weight": 0.48 }, "geometry": { "type": "Point", "coordinates": [-111.888247, 40.758475] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-07",   "weight": 0.32 }, "geometry": { "type": "Point", "coordinates": [-111.888232, 40.756300] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-08",   "weight": 0.44 }, "geometry": { "type": "Point", "coordinates": [-111.888233, 40.754128] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-09",   "weight": 0.30 }, "geometry": { "type": "Point", "coordinates": [-111.888239, 40.751948] } },
-    { "type": "Feature", "properties": { "code": "UQI-ST-10",   "weight": 0.38 }, "geometry": { "type": "Point", "coordinates": [-111.888232, 40.749812] } },
-    { "type": "Feature", "properties": { "code": "UQI-300W-01", "weight": 0.50 }, "geometry": { "type": "Point", "coordinates": [-111.899689, 40.767185] } },
-    { "type": "Feature", "properties": { "code": "UQI-300W-02", "weight": 0.58 }, "geometry": { "type": "Point", "coordinates": [-111.899693, 40.762820] } },
-    { "type": "Feature", "properties": { "code": "UQI-300W-03", "weight": 0.46 }, "geometry": { "type": "Point", "coordinates": [-111.899685, 40.758480] } },
-    { "type": "Feature", "properties": { "code": "UQI-300W-04", "weight": 0.98 }, "geometry": { "type": "Point", "coordinates": [-111.899684, 40.754122] } },
-    { "type": "Feature", "properties": { "code": "UQI-300W-05", "weight": 0.95 }, "geometry": { "type": "Point", "coordinates": [-111.899685, 40.749763] } },
-    { "type": "Feature", "properties": { "code": "UQI-WT-01",   "weight": 0.38 }, "geometry": { "type": "Point", "coordinates": [-111.893955, 40.767175] } },
-    { "type": "Feature", "properties": { "code": "UQI-WT-02",   "weight": 0.52 }, "geometry": { "type": "Point", "coordinates": [-111.893954, 40.762822] } },
-    { "type": "Feature", "properties": { "code": "UQI-WT-03",   "weight": 0.64 }, "geometry": { "type": "Point", "coordinates": [-111.893948, 40.758480] } },
-    { "type": "Feature", "properties": { "code": "UQI-WT-04",   "weight": 0.46 }, "geometry": { "type": "Point", "coordinates": [-111.893958, 40.754120] } },
-    { "type": "Feature", "properties": { "code": "UQI-WT-05",   "weight": 0.50 }, "geometry": { "type": "Point", "coordinates": [-111.894013, 40.749787] } },
-    { "type": "Feature", "properties": { "code": "UQI-MAIN-01", "weight": 0.48 }, "geometry": { "type": "Point", "coordinates": [-111.891107, 40.767172] } },
-    { "type": "Feature", "properties": { "code": "UQI-MAIN-02", "weight": 0.80 }, "geometry": { "type": "Point", "coordinates": [-111.891097, 40.762816] } },
-    { "type": "Feature", "properties": { "code": "UQI-MAIN-03", "weight": 0.86 }, "geometry": { "type": "Point", "coordinates": [-111.891088, 40.758483] } },
-    { "type": "Feature", "properties": { "code": "UQI-MAIN-04", "weight": 0.74 }, "geometry": { "type": "Point", "coordinates": [-111.891090, 40.754130] } },
-    { "type": "Feature", "properties": { "code": "UQI-MAIN-05", "weight": 0.56 }, "geometry": { "type": "Point", "coordinates": [-111.891083, 40.749813] } },
-    { "type": "Feature", "properties": { "code": "UQI-200E-01", "weight": 0.40 }, "geometry": { "type": "Point", "coordinates": [-111.885373, 40.767170] } },
-    { "type": "Feature", "properties": { "code": "UQI-200E-02", "weight": 0.82 }, "geometry": { "type": "Point", "coordinates": [-111.885370, 40.762815] } },
-    { "type": "Feature", "properties": { "code": "UQI-200E-03", "weight": 0.58 }, "geometry": { "type": "Point", "coordinates": [-111.885368, 40.758464] } },
-    { "type": "Feature", "properties": { "code": "UQI-200E-04", "weight": 0.78 }, "geometry": { "type": "Point", "coordinates": [-111.885386, 40.754130] } },
-    { "type": "Feature", "properties": { "code": "UQI-200E-05", "weight": 0.52 }, "geometry": { "type": "Point", "coordinates": [-111.885375, 40.749812] } },
-    { "type": "Feature", "properties": { "code": "UQI-300E-01", "weight": 0.42 }, "geometry": { "type": "Point", "coordinates": [-111.882512, 40.767174] } },
-    { "type": "Feature", "properties": { "code": "UQI-300E-02", "weight": 0.68 }, "geometry": { "type": "Point", "coordinates": [-111.882509, 40.762828] } },
-    { "type": "Feature", "properties": { "code": "UQI-300E-03", "weight": 0.42 }, "geometry": { "type": "Point", "coordinates": [-111.882531, 40.758483] } },
-    { "type": "Feature", "properties": { "code": "UQI-300E-04", "weight": 0.62 }, "geometry": { "type": "Point", "coordinates": [-111.882503, 40.754131] } },
-    { "type": "Feature", "properties": { "code": "UQI-300E-05", "weight": 0.46 }, "geometry": { "type": "Point", "coordinates": [-111.882508, 40.749798] } },
-    { "type": "Feature", "properties": { "code": "UQI-400E-01", "weight": 0.38 }, "geometry": { "type": "Point", "coordinates": [-111.879647, 40.767169] } },
-    { "type": "Feature", "properties": { "code": "UQI-400E-02", "weight": 0.56 }, "geometry": { "type": "Point", "coordinates": [-111.879637, 40.762835] } },
-    { "type": "Feature", "properties": { "code": "UQI-400E-03", "weight": 0.40 }, "geometry": { "type": "Point", "coordinates": [-111.879646, 40.758487] } },
-    { "type": "Feature", "properties": { "code": "UQI-400E-04", "weight": 0.54 }, "geometry": { "type": "Point", "coordinates": [-111.879640, 40.754138] } },
-    { "type": "Feature", "properties": { "code": "UQI-400E-05", "weight": 0.42 }, "geometry": { "type": "Point", "coordinates": [-111.879636, 40.749801] } }
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-01",
+        "weight": 0.55,
+        "db_typical": 62.3,
+        "name": "N Temple & State",
+        "location": "Downtown",
+        "has_camera": true,
+        "view_id": 134418
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888264,
+          40.771538
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-02",
+        "weight": 0.42,
+        "db_typical": 58.9,
+        "name": "100 S & State",
+        "location": "Downtown",
+        "has_camera": true,
+        "view_id": 133884
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888238,
+          40.767176
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-03",
+        "weight": 0.62,
+        "db_typical": 64.1,
+        "name": "200 S & State",
+        "location": "Central City",
+        "has_camera": true,
+        "view_id": 133691
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.88823,
+          40.765028
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-04",
+        "weight": 0.4,
+        "db_typical": 58.4,
+        "name": "300 S & State",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888245,
+          40.762822
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-05",
+        "weight": 0.35,
+        "db_typical": 57.1,
+        "name": "400 S & State",
+        "location": "Central City",
+        "has_camera": true,
+        "view_id": 133076
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888244,
+          40.760645
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-06",
+        "weight": 0.48,
+        "db_typical": 60.5,
+        "name": "500 S & State",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888247,
+          40.758475
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-07",
+        "weight": 0.32,
+        "db_typical": 56.3,
+        "name": "600 S & State",
+        "location": "Granary",
+        "has_camera": true,
+        "view_id": 133869
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888232,
+          40.7563
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-08",
+        "weight": 0.44,
+        "db_typical": 59.4,
+        "name": "700 S & State",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888233,
+          40.754128
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-09",
+        "weight": 0.3,
+        "db_typical": 55.8,
+        "name": "800 S & State",
+        "location": "Ballpark"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888239,
+          40.751948
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-ST-10",
+        "weight": 0.38,
+        "db_typical": 57.9,
+        "name": "900 S & State",
+        "location": "Ballpark",
+        "has_camera": true,
+        "view_id": 134675
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.888232,
+          40.749812
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300W-01",
+        "weight": 0.5,
+        "db_typical": 61.0,
+        "name": "100 S & 300 West",
+        "location": "Downtown"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.899689,
+          40.767185
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300W-02",
+        "weight": 0.58,
+        "db_typical": 63.1,
+        "name": "300 S & 300 West",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.899693,
+          40.76282
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300W-03",
+        "weight": 0.46,
+        "db_typical": 60.0,
+        "name": "500 S & 300 West",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.899685,
+          40.75848
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300W-04",
+        "weight": 0.98,
+        "db_typical": 73.5,
+        "name": "700 S & 300 West",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.899684,
+          40.754122
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300W-05",
+        "weight": 0.95,
+        "db_typical": 72.7,
+        "name": "900 S & 300 West",
+        "location": "Ballpark"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.899685,
+          40.749763
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-WT-01",
+        "weight": 0.38,
+        "db_typical": 57.9,
+        "name": "100 S & West Temple",
+        "location": "Downtown"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.893955,
+          40.767175
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-WT-02",
+        "weight": 0.52,
+        "db_typical": 61.5,
+        "name": "300 S & West Temple",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.893954,
+          40.762822
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-WT-03",
+        "weight": 0.64,
+        "db_typical": 64.6,
+        "name": "500 S & West Temple",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.893948,
+          40.75848
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-WT-04",
+        "weight": 0.46,
+        "db_typical": 60.0,
+        "name": "700 S & West Temple",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.893958,
+          40.75412
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-WT-05",
+        "weight": 0.5,
+        "db_typical": 61.0,
+        "name": "900 S & West Temple",
+        "location": "Ballpark",
+        "has_camera": true,
+        "view_id": 134435
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.894013,
+          40.749787
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-MAIN-01",
+        "weight": 0.48,
+        "db_typical": 60.5,
+        "name": "100 S & Main",
+        "location": "Downtown"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.891107,
+          40.767172
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-MAIN-02",
+        "weight": 0.8,
+        "db_typical": 68.8,
+        "name": "300 S & Main",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.891097,
+          40.762816
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-MAIN-03",
+        "weight": 0.86,
+        "db_typical": 70.4,
+        "name": "500 S & Main",
+        "location": "Granary",
+        "has_camera": true,
+        "view_id": 133132
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.891088,
+          40.758483
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-MAIN-04",
+        "weight": 0.74,
+        "db_typical": 67.2,
+        "name": "700 S & Main",
+        "location": "Granary",
+        "has_camera": true,
+        "view_id": 133128
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.89109,
+          40.75413
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-MAIN-05",
+        "weight": 0.56,
+        "db_typical": 62.6,
+        "name": "900 S & Main",
+        "location": "Ballpark"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.891083,
+          40.749813
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-200E-01",
+        "weight": 0.4,
+        "db_typical": 58.4,
+        "name": "100 S & 200 East",
+        "location": "Downtown"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.885373,
+          40.76717
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-200E-02",
+        "weight": 0.82,
+        "db_typical": 69.3,
+        "name": "300 S & 200 East",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.88537,
+          40.762815
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-200E-03",
+        "weight": 0.58,
+        "db_typical": 63.1,
+        "name": "500 S & 200 East",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.885368,
+          40.758464
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-200E-04",
+        "weight": 0.78,
+        "db_typical": 68.3,
+        "name": "700 S & 200 East",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.885386,
+          40.75413
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-200E-05",
+        "weight": 0.52,
+        "db_typical": 61.5,
+        "name": "900 S & 200 East",
+        "location": "Ballpark"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.885375,
+          40.749812
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300E-01",
+        "weight": 0.42,
+        "db_typical": 58.9,
+        "name": "100 S & 300 East",
+        "location": "Downtown"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.882512,
+          40.767174
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300E-02",
+        "weight": 0.68,
+        "db_typical": 65.7,
+        "name": "300 S & 300 East",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.882509,
+          40.762828
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300E-03",
+        "weight": 0.42,
+        "db_typical": 58.9,
+        "name": "500 S & 300 East",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.882531,
+          40.758483
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300E-04",
+        "weight": 0.62,
+        "db_typical": 64.1,
+        "name": "700 S & 300 East",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.882503,
+          40.754131
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-300E-05",
+        "weight": 0.46,
+        "db_typical": 60.0,
+        "name": "900 S & 300 East",
+        "location": "Ballpark"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.882508,
+          40.749798
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-400E-01",
+        "weight": 0.38,
+        "db_typical": 57.9,
+        "name": "100 S & 400 East",
+        "location": "Downtown"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.879647,
+          40.767169
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-400E-02",
+        "weight": 0.56,
+        "db_typical": 62.6,
+        "name": "300 S & 400 East",
+        "location": "Central City"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.879637,
+          40.762835
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-400E-03",
+        "weight": 0.4,
+        "db_typical": 58.4,
+        "name": "500 S & 400 East",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.879646,
+          40.758487
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-400E-04",
+        "weight": 0.54,
+        "db_typical": 62.0,
+        "name": "700 S & 400 East",
+        "location": "Granary"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.87964,
+          40.754138
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "code": "UQI-400E-05",
+        "weight": 0.42,
+        "db_typical": 58.9,
+        "name": "900 S & 400 East",
+        "location": "Ballpark"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -111.879636,
+          40.749801
+        ]
+      }
+    }
   ]
 }

@@ -246,6 +246,53 @@ p { margin: 0; }
 }
 .cite-line b { color: var(--c-ink); font-weight: 500; }
 
+/* ─── Simulation callout (inside Why this matters) ─────────────── */
+.sim-callout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 32px;
+  align-items: center;
+  padding: 28px 32px;
+  margin-bottom: 48px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-rule);
+  border-left: 4px solid var(--c-accent);
+  text-decoration: none;
+  color: var(--c-ink);
+  transition: background .15s, border-color .15s;
+}
+.sim-callout:hover { background: var(--c-white); border-color: var(--c-accent); }
+.sim-callout .sim-text { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sim-callout .sim-eyebrow {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--c-accent); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.sim-callout .sim-eyebrow .lpulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c-accent); animation: pulse 2.4s infinite ease-in-out;
+}
+.sim-callout .sim-head {
+  font-family: var(--font-display); font-size: clamp(20px, 1.8vw, 26px);
+  line-height: 1.25; letter-spacing: -0.01em; font-weight: 500;
+}
+.sim-callout .sim-body {
+  font-size: 15px; line-height: 1.5; color: var(--c-ink-soft); max-width: 60ch;
+}
+.sim-callout .sim-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 22px; background: var(--c-ink); color: var(--c-white);
+  font-family: var(--font-body); font-size: 15px; font-weight: 600;
+  border-radius: 2px; white-space: nowrap;
+  transition: background .15s, transform .12s;
+}
+.sim-callout:hover .sim-cta { background: var(--c-accent); }
+.sim-callout .sim-cta .arrow { font-size: 16px; line-height: 1; transition: transform .15s ease; }
+.sim-callout:hover .sim-cta .arrow { transform: translateX(3px); }
+@media (max-width: 700px) {
+  .sim-callout { grid-template-columns: 1fr; gap: 18px; padding: 22px; }
+}
+
 /* ─── Proposal cards ───────────────────────────────────────────── */
 .s-prop { background: var(--c-paper); }
 .phasegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
@@ -272,7 +319,9 @@ p { margin: 0; }
 .mapbox { background: var(--c-paper); border: 1px solid var(--c-rule); padding: 24px; position: relative; }
 .mapbox .mapcap { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c-ink-mute); }
 .mapbox .mapcap .right { color: var(--c-ink-soft); }
-#corridor-map { width: 100%; aspect-ratio: 16/11; background: #0e1116; border: 1px solid var(--c-rule); position: relative; overflow: hidden; }
+#corridor-map { width: 100%; aspect-ratio: 16/11; background: #0e1116; border: 1px solid var(--c-rule); position: relative; }
+#corridor-map > .maplibregl-canvas-container,
+#corridor-map > .maplibregl-canvas-container > canvas { border-radius: inherit; }
 #corridor-map .maplibregl-ctrl-attrib,
 #corridor-map .maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(14,17,22,0.65); color: rgba(255,255,255,0.55); }
 #corridor-map .maplibregl-ctrl-attrib a { color: rgba(255,255,255,0.7); }
@@ -282,6 +331,86 @@ p { margin: 0; }
 #corridor-map .maplibregl-ctrl-group button:hover { background-color: rgba(255,255,255,0.08); }
 #corridor-map .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) brightness(1.1); }
 #corridor-map .maplibregl-ctrl-group button:disabled .maplibregl-ctrl-icon { opacity: 0.35; }
+
+/* Hover popover — mirrors HoverTooltip in frontend/src/stations.tsx so the
+   petition page reads identically to the live dashboard. */
+#corridor-popover {
+  position: absolute; left: 0; top: 0;
+  transform: translate(-50%, calc(-100% - 14px));
+  pointer-events: none;
+  background: oklch(14% 0.008 60);
+  border: 1px solid oklch(34% 0.008 60);
+  border-radius: 4px;
+  padding: 6px;
+  color: oklch(97% 0.006 85);
+  font-family: var(--font-body);
+  font-size: 11px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 80ms ease;
+  white-space: nowrap;
+  max-width: 240px;
+}
+#corridor-popover[aria-hidden="false"] { opacity: 1; }
+#corridor-popover.no-cam { padding: 5px 9px; }
+#corridor-popover .cp-img {
+  position: relative;
+  width: 220px;
+  margin-bottom: 5px;
+  background: oklch(18% 0.008 60);
+  border: 1px solid oklch(28% 0.008 60);
+  border-radius: 6px;
+  overflow: hidden;
+  aspect-ratio: 4/3;
+}
+#corridor-popover .cp-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#corridor-popover .cp-stamp {
+  position: absolute; right: 6px; bottom: 5px;
+  font-family: var(--font-mono); font-size: 9px;
+  color: rgba(255,255,255,0.85);
+  background: rgba(0,0,0,0.55);
+  padding: 1px 5px; border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+#corridor-popover .cp-name { font-weight: 500; font-size: 12px; }
+#corridor-popover .cp-meta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: oklch(46% 0.006 85);
+  margin-top: 1px;
+  letter-spacing: 0.02em;
+}
+#corridor-popover .cp-db {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1;
+  color: oklch(72% 0.13 195);
+  margin-top: 4px;
+}
+#corridor-popover .cp-db i {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 500;
+  color: oklch(46% 0.006 85);
+  margin-left: 3px;
+}
+.legend-row .legend-cam {
+  background: rgba(14,17,22,0.95);
+  border: 1px solid rgba(255,255,255,0.92);
+  position: relative;
+}
+.legend-row .legend-cam::after {
+  content: '';
+  position: absolute; left: 1px; top: 3px; width: 6px; height: 4px;
+  background: rgba(255,255,255,0.92);
+  border-radius: 1px;
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
 .legend-row { display: flex; gap: 24px; margin-top: 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c-ink-soft); flex-wrap: wrap; align-items: center; }
 .legend-row .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
 .legend-row .heat-bar {
@@ -1020,6 +1149,15 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         <p class="lede">Decades of peer-reviewed research show that nighttime road noise disrupts sleep, raises cardiovascular risk, and costs employers measurable productivity. Salt Lake City's densest residential corridors are routinely exposed above WHO night-time guidelines.</p>
       </div>
 
+      <a class="sim-callout" href="../enforcement-map/" target="_blank" rel="noopener" aria-label="Open the noise-trace simulation in a new tab">
+        <div class="sim-text">
+          <span class="sim-eyebrow"><span class="lpulse" aria-hidden="true"></span>Simulation · trace a peak event</span>
+          <div class="sim-head">See what one nighttime noise event looks like across the corridor.</div>
+          <p class="sim-body">A short interactive simulation walks a single peak event through the sensor network — the same view the public dashboard would surface, so you can judge for yourself what continuous measurement actually shows.</p>
+        </div>
+        <span class="sim-cta">Launch simulation <span class="arrow" aria-hidden="true">→</span></span>
+      </a>
+
       <div class="tabs" role="tablist" aria-label="Health impacts">
         <button class="tab is-active" role="tab" aria-selected="true" data-tab="sleep">01 · Sleep</button>
         <button class="tab" role="tab" aria-selected="false" data-tab="heart">02 · Cardiovascular</button>
@@ -1146,11 +1284,23 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
             <span>Sensor placement · pilot corridor · indicative</span>
             <span class="right">40 calibrated sensors · State Street corridor</span>
           </div>
-          <div id="corridor-map" role="img" aria-label="Map of pilot sensor placement along State Street, Salt Lake City"></div>
+          <div id="corridor-map" role="img" aria-label="Map of pilot sensor placement along State Street, Salt Lake City">
+            <div id="corridor-popover" role="tooltip" aria-hidden="true">
+              <div class="cp-img" hidden>
+                <img alt="" loading="lazy" />
+                <span class="cp-stamp" data-cp-stamp></span>
+              </div>
+              <div class="cp-name" data-cp-name></div>
+              <div class="cp-meta" data-cp-meta></div>
+              <div class="cp-db" hidden><span data-cp-db></span><i>dB</i></div>
+            </div>
+          </div>
+          <span class="sr-only" aria-live="polite" data-cp-live></span>
           <div class="legend-row">
             <span><span class="dot" style="background:rgba(255,255,255,0.92);border:1px solid var(--c-rule);"></span>Microphone sensor (×40)</span>
+            <span><span class="dot legend-cam" aria-hidden="true"></span>Co-located UDOT traffic camera (×9)</span>
             <span><span class="heat-bar" aria-hidden="true"></span>Aggregate nighttime exposure · low → high</span>
-            <span style="margin-left:auto;">Placement indicative · final positions confirmed in Phase 01 planning</span>
+            <span style="margin-left:auto;">Hover or tap any sensor for live cam + reading</span>
           </div>
         </div>
 
@@ -1752,9 +1902,9 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   var el = document.getElementById('corridor-map');
   if (!el) return;
 
-  var CENTER = [-111.8881, 40.7616];
+  var CENTER = [-111.8888, 40.7607];
   var BOUNDS = [[-111.9300, 40.7400], [-111.8500, 40.7850]];
-  var INITIAL_ZOOM = 12.8;
+  var INITIAL_ZOOM = 13.3;
   // Lock zoom-out to the initial framing so visitors can dive into the
   // corridor but never zoom past the pilot area into the rest of the valley.
   var MIN_ZOOM = INITIAL_ZOOM;
@@ -1763,6 +1913,180 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
   var GEOJSON = '/sensor-locations.geojson';
 
   var MIC_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+  // Composite glyph for stations co-located with a UDOT traffic camera —
+  // the same white mic, with a small dark camera badge in the lower-right.
+  var MIC_CAM_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 28 28" fill="none">'
+    + '<g stroke="rgba(255,255,255,0.92)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1,-1)">'
+    + '<rect x="9" y="2" width="6" height="12" rx="3"/>'
+    + '<path d="M5 11a7 7 0 0 0 14 0"/>'
+    + '<line x1="12" y1="18" x2="12" y2="22"/>'
+    + '<line x1="8" y1="22" x2="16" y2="22"/>'
+    + '</g>'
+    + '<g transform="translate(20,20)">'
+    + '<circle r="6" fill="rgba(14,17,22,0.95)" stroke="rgba(255,255,255,0.92)" stroke-width="1"/>'
+    + '<path d="M-3.2 -1.2 L-1.4 -1.2 L-0.8 -2.2 L0.8 -2.2 L1.4 -1.2 L3.2 -1.2 L3.2 2.4 L-3.2 2.4 Z" fill="rgba(255,255,255,0.92)"/>'
+    + '<circle cy="0.6" r="1.1" fill="rgba(14,17,22,0.95)"/>'
+    + '</g>'
+    + '</svg>';
+
+  function loadIconImage(map, name, svg, w, h) {
+    if (map.hasImage(name)) return;
+    var img = new Image(w, h);
+    img.onload = function () {
+      if (!map.hasImage(name)) map.addImage(name, img, { pixelRatio: 2 });
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  // Hover popover — same layout, palette, and refresh cadence as
+  // HoverTooltip + CameraSnapshot in frontend/src/{stations,cameras}.tsx.
+  // Data is pre-baked into /sensor-locations.geojson by
+  // backend/scripts/enrich_sensor_locations.py so there is no per-visitor
+  // backend hit; only UDOT's public CCTV URL is hotlinked, and only while
+  // a camera popover is open.
+  function wirePopover(map) {
+    var pop = document.getElementById('corridor-popover');
+    if (!pop) return;
+    var imgWrap = pop.querySelector('.cp-img');
+    var imgEl = imgWrap.querySelector('img');
+    var stampEl = imgWrap.querySelector('[data-cp-stamp]');
+    var nameEl = pop.querySelector('[data-cp-name]');
+    var metaEl = pop.querySelector('[data-cp-meta]');
+    var dbWrap = pop.querySelector('.cp-db');
+    var dbEl = pop.querySelector('[data-cp-db]');
+    var liveEl = document.querySelector('[data-cp-live]');
+    var canvas = map.getCanvas();
+
+    var current = null;   // { coord:[lng,lat], code }
+    var camTick = null;   // 60s refresh interval handle
+    var sticky = false;   // tapped open (touch / explicit click) — survives mouseleave
+
+    function pad(n) { return n < 10 ? '0' + n : String(n); }
+    function stampNow() {
+      var d = new Date();
+      var h = d.getHours();
+      var ap = h >= 12 ? 'PM' : 'AM';
+      var h12 = (h % 12) || 12;
+      return pad(h12) + ':' + pad(d.getMinutes()) + ' ' + ap + ' '
+        + pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + String(d.getFullYear()).slice(-2);
+    }
+    function setCamSrc(viewId) {
+      imgEl.src = 'https://www.udottraffic.utah.gov/map/Cctv/' + viewId + '?t=' + Date.now();
+      stampEl.textContent = stampNow();
+    }
+    function startCamRefresh(viewId) {
+      if (camTick) clearInterval(camTick);
+      camTick = setInterval(function () { setCamSrc(viewId); }, 60000);
+    }
+    function stopCamRefresh() {
+      if (camTick) { clearInterval(camTick); camTick = null; }
+      imgEl.removeAttribute('src');
+    }
+    function position() {
+      if (!current) return;
+      var pt = map.project(current.coord);
+      var popRect = pop.getBoundingClientRect();
+      var mapRect = el.getBoundingClientRect();
+      var popW = popRect.width;
+      var popH = popRect.height;
+      var gap = 14;     // breathing room between pin and popover edge
+      var pad = 6;      // min margin from map container edge
+      // Flip below the pin when there isn't room to render above it.
+      var below = pt.y - popH - gap < pad;
+      var top = below ? pt.y + gap : pt.y - popH - gap;
+      // Center horizontally on the pin, then clamp inside the map container.
+      var left = Math.max(pad, Math.min(mapRect.width - popW - pad, pt.x - popW / 2));
+      pop.style.left = left + 'px';
+      pop.style.top = top + 'px';
+      pop.style.transform = 'none';
+    }
+    function show(feature) {
+      var props = feature.properties || {};
+      var coord = feature.geometry.coordinates.slice();
+      var same = current && current.code === props.code;
+      current = { coord: coord, code: props.code };
+
+      nameEl.textContent = props.name || props.code || '';
+      var meta = [];
+      if (props.code) meta.push(props.code);
+      if (props.location) meta.push(props.location);
+      metaEl.textContent = meta.join(' · ');
+
+      if (props.db_typical != null) {
+        dbWrap.hidden = false;
+        dbEl.textContent = Number(props.db_typical).toFixed(1);
+      } else {
+        dbWrap.hidden = true;
+        dbEl.textContent = '';
+      }
+
+      if (props.has_camera && props.view_id != null) {
+        imgWrap.hidden = false;
+        pop.classList.remove('no-cam');
+        if (!same) {
+          setCamSrc(props.view_id);
+          startCamRefresh(props.view_id);
+        }
+      } else {
+        imgWrap.hidden = true;
+        pop.classList.add('no-cam');
+        stopCamRefresh();
+      }
+
+      pop.setAttribute('aria-hidden', 'false');
+      if (liveEl) {
+        var label = (props.name || props.code || '') + (props.location ? ', ' + props.location : '');
+        if (props.db_typical != null) label += ', ' + props.db_typical + ' decibels';
+        liveEl.textContent = label;
+      }
+      position();
+    }
+    function hide() {
+      pop.setAttribute('aria-hidden', 'true');
+      stopCamRefresh();
+      current = null;
+      sticky = false;
+      if (liveEl) liveEl.textContent = '';
+    }
+
+    map.on('mouseenter', 'uqi-mics', function (e) {
+      canvas.style.cursor = 'pointer';
+      if (sticky) return;
+      if (e.features && e.features[0]) show(e.features[0]);
+    });
+    map.on('mousemove', 'uqi-mics', function (e) {
+      if (sticky || !e.features || !e.features[0]) return;
+      var p = e.features[0].properties || {};
+      if (!current || current.code !== p.code) show(e.features[0]);
+    });
+    map.on('mouseleave', 'uqi-mics', function () {
+      canvas.style.cursor = '';
+      if (sticky) return;
+      hide();
+    });
+    // Touch / explicit click — tap a pin to pin the popover open; tap
+    // elsewhere or press Escape to dismiss.
+    map.on('click', 'uqi-mics', function (e) {
+      if (!e.features || !e.features[0]) return;
+      var p = e.features[0].properties || {};
+      if (sticky && current && current.code === p.code) {
+        sticky = false;
+        hide();
+      } else {
+        sticky = true;
+        show(e.features[0]);
+      }
+    });
+    map.on('click', function (e) {
+      if (!sticky) return;
+      var hits = map.queryRenderedFeatures(e.point, { layers: ['uqi-mics'] });
+      if (!hits.length) hide();
+    });
+    map.on('move', position);
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && current) hide();
+    });
+  }
 
   function init() {
     if (el.dataset.inited) return;
@@ -1789,11 +2113,8 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
     map.on('load', function () {
-      var img = new Image(40, 40);
-      img.onload = function () {
-        if (!map.hasImage('mic-icon')) map.addImage('mic-icon', img, { pixelRatio: 2 });
-      };
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(MIC_SVG);
+      loadIconImage(map, 'mic-icon', MIC_SVG, 40, 40);
+      loadIconImage(map, 'mic-cam-icon', MIC_CAM_SVG, 44, 44);
 
       map.addSource('uqi-stations', { type: 'geojson', data: GEOJSON });
 
@@ -1823,12 +2144,14 @@ footer .wrap { max-width: var(--max-w); margin: 0 auto; }
         type: 'symbol',
         source: 'uqi-stations',
         layout: {
-          'icon-image': 'mic-icon',
+          'icon-image': ['case', ['boolean', ['get', 'has_camera'], false], 'mic-cam-icon', 'mic-icon'],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.35, 13, 0.5, 16, 0.85]
         }
       });
+
+      wirePopover(map);
     });
   }
 
