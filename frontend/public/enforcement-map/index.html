@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<script>
+  if (location.hostname === 'urban-quiet-initiative.geo-tt.app') {
+    location.replace('https://slcquiet.org' + location.pathname + location.search + location.hash);
+  }
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>SLC Noise Trace Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />

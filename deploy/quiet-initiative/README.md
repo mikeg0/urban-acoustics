@@ -2,7 +2,7 @@
 
 Deployment assets for the Urban Quiet Initiative petition site — a Salt Lake City citizens' coalition pushing for a nighttime transportation-noise measurement pilot along the State Street corridor.
 
-- **Live site:** https://urban-quiet-initiative.geo-tt.app/
+- **Live site:** https://slcquiet.org/
 - **Amplify default URL:** https://main.d3iawkfgvlagfs.amplifyapp.com/
 
 The petition page is a single static HTML file hosted on AWS Amplify, alongside the `enforcement-map` demo page. Email signups go to a small AWS backend (API Gateway → Lambda → DynamoDB) defined as a CloudFormation/SAM stack in this directory.
@@ -50,9 +50,10 @@ All resources live in account `174590856187`, region `us-west-2` (unless noted).
 |---|---|
 | Amplify app | `d3iawkfgvlagfs` |
 | Amplify branch | `main` (production) |
-| Custom domain | `urban-quiet-initiative.geo-tt.app` |
-| ACM certificate | Amplify-managed (`*.urban-quiet-initiative.geo-tt.app`) |
-| Route53 hosted zone | `Z047711126JFBTO0PE8KR` (`geo-tt.app`) |
+| Custom domains | `slcquiet.org`, `www.slcquiet.org` (+ legacy `urban-quiet-initiative.geo-tt.app` → 301) |
+| ACM certificate | Amplify-managed (`slcquiet.org`, `*.slcquiet.org`) |
+| Route53 hosted zone | `Z03806482QWUBT4C1QXVU` (`slcquiet.org`) |
+| Registrar | Porkbun (NS records delegate to AWS) |
 
 ### Backend / signup (managed by CloudFormation stack `urban-quiet-initiative-backend`)
 
@@ -88,9 +89,9 @@ What it does:
 
 Resulting URLs:
 
-- `https://urban-quiet-initiative.geo-tt.app/` — petition (bare domain, unchanged from before)
-- `https://urban-quiet-initiative.geo-tt.app/quiet-initiative/` — petition (same file, path-named)
-- `https://urban-quiet-initiative.geo-tt.app/enforcement-map/` — enforcement-map demo
+- `https://slcquiet.org/` — petition (bare domain)
+- `https://slcquiet.org/quiet-initiative/` — petition (same file, path-named)
+- `https://slcquiet.org/enforcement-map/` — enforcement-map demo
 
 The petition is published at both `/` and `/quiet-initiative/` so existing bookmarks/QR codes pointing at the bare domain keep working while the path-named URL matches the local-dev URL for parity.
 
@@ -102,7 +103,7 @@ Env vars (override defaults):
 | `AMPLIFY_BRANCH` | `main` |
 | `AWS_REGION` | `us-west-2` |
 
-CloudFront caches the previous version aggressively. After a deploy, hit `https://urban-quiet-initiative.geo-tt.app/?bust=$(date +%s)` to bypass cache, or run an invalidation in the Amplify console if needed.
+CloudFront caches the previous version aggressively. After a deploy, hit `https://slcquiet.org/?bust=$(date +%s)` to bypass cache, or run an invalidation in the Amplify console if needed.
 
 ---
 
@@ -212,9 +213,12 @@ aws dynamodb delete-item --table-name urban-quiet-signups --region us-west-2 \
 
 ## DNS / SSL
 
-- Hosted zone `geo-tt.app` (`Z047711126JFBTO0PE8KR`) lives in this same AWS account, so Amplify auto-created both records when the domain was attached:
-  - `urban-quiet-initiative.geo-tt.app` A-ALIAS → CloudFront
-  - `_<token>.urban-quiet-initiative.geo-tt.app` CNAME → ACM validation
+- Hosted zone `slcquiet.org` (`Z03806482QWUBT4C1QXVU`) lives in this same AWS account, so Amplify auto-created both records when the domain was attached:
+  - `slcquiet.org` A-ALIAS → CloudFront (apex)
+  - `www.slcquiet.org` A-ALIAS → CloudFront
+  - `_<token>.slcquiet.org` CNAME → ACM validation
+- Domain registrar is Porkbun; the four AWS NS records are pasted into Porkbun's "Authoritative Nameservers" panel.
+- The legacy `urban-quiet-initiative.geo-tt.app` domain remains attached to the same Amplify app with a custom 301 redirect rule so old shares land on slcquiet.org.
 - Cert is Amplify-managed and renews automatically.
 - HTTP requests 301 to HTTPS automatically (CloudFront behavior).
 
@@ -224,9 +228,10 @@ aws dynamodb delete-item --table-name urban-quiet-signups --region us-west-2 \
 
 ```bash
 # Site is up
-curl -sI https://urban-quiet-initiative.geo-tt.app/ | head -2
-curl -sI https://urban-quiet-initiative.geo-tt.app/quiet-initiative/ | head -2
-curl -sI https://urban-quiet-initiative.geo-tt.app/enforcement-map/ | head -2
+curl -sI https://slcquiet.org/ | head -2
+curl -sI https://slcquiet.org/quiet-initiative/ | head -2
+curl -sI https://slcquiet.org/enforcement-map/ | head -2
+curl -sI https://urban-quiet-initiative.geo-tt.app/ | head -3   # expect 301 → slcquiet.org
 
 # Signup endpoint works (replace with current endpoint if it changed)
 ENDPOINT=$(aws cloudformation describe-stacks \
@@ -250,6 +255,8 @@ REGION=us-west-2
 
 # Frontend
 aws amplify delete-domain-association --app-id "$APP_ID" \
+  --domain-name slcquiet.org --region "$REGION"
+aws amplify delete-domain-association --app-id "$APP_ID" \
   --domain-name urban-quiet-initiative.geo-tt.app --region "$REGION"
 aws amplify delete-app --app-id "$APP_ID" --region "$REGION"
 
@@ -266,8 +273,8 @@ aws dynamodb delete-table --table-name urban-quiet-feedback --region "$REGION"
 # Optional: delete the CFN deploy bucket
 aws s3 rb s3://urban-quiet-initiative-deploy-174590856187-us-west-2 --force
 
-# Route53 records under urban-quiet-initiative.geo-tt.app survive Amplify deletion;
-# delete them manually if you want a clean zone.
+# Route53 records under slcquiet.org survive Amplify deletion;
+# delete the hosted zone (Z03806482QWUBT4C1QXVU) manually if you want it gone.
 ```
 
 ---

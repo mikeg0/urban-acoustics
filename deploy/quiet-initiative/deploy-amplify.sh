@@ -79,9 +79,9 @@ while true; do
   case "$STATUS" in
     SUCCEED)
       echo "==> Deployment SUCCEED (job $JOB_ID)"
-      echo "    https://urban-quiet-initiative.geo-tt.app/"
-      echo "    https://urban-quiet-initiative.geo-tt.app/quiet-initiative/"
-      echo "    https://urban-quiet-initiative.geo-tt.app/enforcement-map/"
+      echo "    https://slcquiet.org/"
+      echo "    https://slcquiet.org/quiet-initiative/"
+      echo "    https://slcquiet.org/enforcement-map/"
       exit 0
       ;;
     FAILED|CANCELLED)

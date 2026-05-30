@@ -24,7 +24,7 @@ A strategic gift you should not waste: **Council District 4 — which contains y
 
 Each of these costs ~10 minutes and converts a claim you *think* is true into one you can defend in front of a reporter or a council aide. Do them Thursday/Friday (today and tomorrow) before any press pitch goes out. Each call should end with: "Can I have your direct number or email in case Council has follow-up questions?" — that converts a one-off call into a relationship.
 
-> ⚠️ Already done: the "311" references in the public materials have been replaced with the actual SLC complaint channels (SLPD non-emergency 801-799-3000 for one-off events; Salt Lake County Health Department 385-468-8888 for chronic noise). New wording deployed at https://urban-quiet-initiative.geo-tt.app/.
+> ⚠️ Already done: the "311" references in the public materials have been replaced with the actual SLC complaint channels (SLPD non-emergency 801-799-3000 for one-off events; Salt Lake County Health Department 385-468-8888 for chronic noise). New wording deployed at https://slcquiet.org/.
 
 ### Call 1 — UDOT (confirm "no microphones" in writing)
 - **Org:** Utah Department of Transportation — Traffic Management Division / Region 2
@@ -93,7 +93,7 @@ Each of these costs ~10 minutes and converts a claim you *think* is true into on
   >
   > I'm an engineer, so a few months ago I built a DIY noise sensor and ran it from my window. The result is a real dataset of late-night peak events that the existing complaint system captures almost none of — it's the gap between what residents call about and what residents actually experience, in numbers.
   >
-  > That experiment grew into a proposal I'm launching this week: the Urban Quiet Initiative. 40 calibrated sensors on State Street between North Temple and 900 South, 12-month pilot, block-aggregated public dashboard, explicitly no new citation authority. $95K–$180K, largely grant-eligible. The dashboard is live today: https://urban-quiet-initiative.geo-tt.app/.
+  > That experiment grew into a proposal I'm launching this week: the Urban Quiet Initiative. 40 calibrated sensors on State Street between North Temple and 900 South, 12-month pilot, block-aggregated public dashboard, explicitly no new citation authority. $95K–$180K, largely grant-eligible. The dashboard is live today: https://slcquiet.org/.
   >
   > I'll be at City Council on Tuesday June 2 during public comment to introduce the proposal. If you want to write the launch piece, you'd be writing it before Council hears about it on the record. Happy to send my DIY dataset, the proposal PDF, and walk through the dashboard — at the Tribune office or over coffee.
   >
@@ -218,7 +218,7 @@ Delivery is a moment. Council motion is the goal. The sprint produces the moment
 >
 > The pilot costs $95,000 to $180,000 over twelve months — largely grant-eligible. Bloomberg Mayors Challenge and the EPA Environmental Justice program are both in scope.
 >
-> I'm not asking you to vote tonight, and I'm not here to deliver signatures — I'll be back for that. Tonight I'm putting the proposal on your radar before the public campaign goes wider. The full proposal is in your packet, and the dashboard is live at urban-quiet-initiative.geo-tt.app. Thank you."
+> I'm not asking you to vote tonight, and I'm not here to deliver signatures — I'll be back for that. Tonight I'm putting the proposal on your radar before the public campaign goes wider. The full proposal is in your packet, and the dashboard is live at slcquiet.org. Thank you."
 
 ### Email to Council Members
 > Subject: Introducing the Urban Quiet Initiative — public comment Tuesday June 2

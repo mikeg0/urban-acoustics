@@ -1,6 +1,6 @@
 """Idempotently seed the 40 Urban Quiet Initiative pilot-corridor stations.
 
-The Urban Quiet Initiative coalition (urban-quiet-initiative.geo-tt.app)
+The Urban Quiet Initiative coalition (slcquiet.org)
 proposes a 40-sensor pilot along State Street from North Temple to 900
 South: 10 sensors on State Street itself plus 30 standard sensors on the
 six parallel north-south streets through the corridor footprint.
