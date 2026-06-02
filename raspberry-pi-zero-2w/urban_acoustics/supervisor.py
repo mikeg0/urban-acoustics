@@ -190,6 +190,12 @@ class Supervisor:
             asyncio.create_task(self._uploader_loop(), name="uploader"),
             asyncio.create_task(self._watchdog_loop(), name="watchdog"),
         ]
+        if self.spectrogram is not None:
+            # Paces per-block frame bursts into a steady stream (see
+            # SpectrogramPublisher); capture-loop emit() only enqueues.
+            tasks.append(
+                asyncio.create_task(self.spectrogram.run(), name="spect-pace"),
+            )
         log.info(
             "supervisor: running (device=%s fw=%s config=%s)",
             self.cfg.device_id, self.cfg.fw_version, self.cfg.config_version,

@@ -299,6 +299,35 @@ const LUT_SIZE = 256;
 // (48 kHz) = 85.33 ms. If the Pi config changes either knob, update here.
 export const SPECTROGRAM_COLUMN_MS = (2 * 2048 / 48000) * 1000;
 
+// --- Playback controller (see useRollingBands) -----------------------------
+// The continuous ``playhead`` is held a fixed ``SPECT_BUFFER_MS`` *behind* the
+// live data edge. That buffer is the whole point: frames arrive every 85 ms,
+// so chasing the live edge directly leaves nothing buffered to scroll through
+// and the cursor stutters. Trailing by SPECT_BUFFER_MS means there's always a
+// filled backlog, so the playhead can advance at a smooth, time-based rate.
+//
+// The playhead is integrated on requestAnimationFrame (~60 Hz), not a timer, so
+// it advances by real elapsed time each frame and the renderer can read its
+// *fractional* position for sub-pixel scrolling (see LiveSpectrogram). It
+// tracks the trailing setpoint with a gentle proportional controller:
+// velocity = 1× + GAIN × (how far behind the setpoint it is), clamped to
+// [0, MAX_SPEED] — eases up when behind, slows when too close to live so the
+// buffer refills. rAF naturally pauses when the tab is hidden; on refocus the
+// playhead snaps to the setpoint rather than replaying the gap.
+// How far behind live the cursor is held. Only needs to cover residual WS
+// delivery jitter now that the Pi paces frames into a steady ~12 Hz stream
+// (SpectrogramPublisher). Before that change frames arrived in ~1 s bursts and
+// this had to be ≥2 s; keep them in lockstep — if the Pi reverts to bursting,
+// the dashboard will stall ~once a second at this depth.
+const SPECT_BUFFER_MS = 500;       // ~0.5 s: covers network jitter post-pacing
+const SPECT_BUFFER_COLS = Math.round(SPECT_BUFFER_MS / SPECTROGRAM_COLUMN_MS);
+const SPECT_CATCHUP_GAIN = 0.05;   // velocity added per column behind the setpoint
+const SPECT_MAX_SPEED = 3;         // velocity ceiling, in columns per column-time
+// If the playhead ends up more than this far behind the setpoint (laptop
+// sleep, tab suspend, WS reconnect), jump straight to it rather than scrolling
+// through the whole gap. Small slips stay below this and recover smoothly.
+const SPECT_SNAP_COLS = Math.round(6000 / SPECTROGRAM_COLUMN_MS);
+
 interface RollingBands {
   /** Map of global column index → band vector. Columns without data are
    *  simply absent from the map and render as the palette's floor color. */
@@ -309,6 +338,11 @@ interface RollingBands {
    *  sits flush against the right edge of the rendered area regardless
    *  of how far behind wall-clock the pipeline is running. */
   currentCol: number;
+  /** Continuous (fractional) playhead position in column space, updated every
+   *  animation frame. ``currentCol`` is its floor. The renderer reads this each
+   *  rAF to offset the canvas sub-pixel, so scrolling is smooth at the display
+   *  refresh rate rather than stepping one whole column at the ~12 Hz data rate. */
+  playheadRef: { readonly current: number };
   /** Re-renders bump this on every frame that advances ``currentCol``. */
   version: number;
   maxFrames: number;
@@ -328,16 +362,22 @@ function colForTs(ts: number): number {
  *  Two cursors:
  *    - ``latestTsRef``: newest frame timestamp seen — the "live" data edge.
  *      Jumps forward whenever a frame arrives (often in bursts).
- *    - ``currentColRef``: the visible right-edge column. Advances at a
- *      constant ~12 Hz via a setInterval so the canvas scrolls smoothly
- *      regardless of how bursty frame arrivals are. Bounded above by
- *      ``latestTsRef`` so it never paints past the freshest data — if
- *      frames stop arriving, scrolling pauses at the last known frame.
+ *    - ``playheadRef`` (float) / ``currentColRef`` (its floored, exported
+ *      form): the visible right-edge column. Driven by a setInterval but
+ *      advanced by *elapsed wall-clock × a velocity factor*, not a fixed
+ *      +1 per tick, so timer jitter doesn't cause drift. It tracks a
+ *      setpoint held ``SPECT_BUFFER_COLS`` behind the live edge: velocity
+ *      eases up when it's behind the setpoint and down when it's too close
+ *      to live, settling at 1×. Bounded above by ``latestTsRef`` so it
+ *      never paints past the freshest data — if frames stop, it coasts to
+ *      the setpoint (~2 s behind the last frame) and pauses there.
  *
- *  Effect: a burst of N frames fills the next N ticks (~N × 85 ms) of
- *  smooth scroll instead of a single big jump. Steady-state gap between
- *  the visible edge and the live edge is whatever buffer the WS upstream
- *  introduces (~1 s under normal load). */
+ *  Effect: smooth, jitter-free scroll a fixed ~2 s behind live, and any
+ *  accumulated lag (timer jank, GC) is self-correcting. While the tab is
+ *  hidden the cursor freezes; on refocus it snaps to the setpoint rather
+ *  than replaying the whole gap. (Earlier this advanced +1/tick at exactly
+ *  the data rate while chasing the live edge — so lag could only grow and
+ *  the edge stuttered; this controller fixes both.) */
 export function useRollingBands(
   maxFrames: number,
   nBands: number = SPECTROGRAM_N_BANDS,
@@ -345,26 +385,86 @@ export function useRollingBands(
   const framesRef = useRef<Map<number, number[]>>(new Map());
   const currentColRef = useRef<number>(0);
   const latestTsRef = useRef<number>(0);
+  // Continuous (fractional) playhead position in column space — the source of
+  // truth the controller integrates; ``currentColRef`` is its floored, exported
+  // form (must stay integer: it's used as a frame-Map key by the renderer).
+  const playheadRef = useRef<number>(0);
+  // Wall-clock time of the previous tick, so we advance by elapsed time rather
+  // than a fixed step (robust to throttled/janky timers). 0 = "re-base on the
+  // next tick" (set on first data and on refocus).
+  const lastTickRef = useRef<number>(0);
   const hasDataRef = useRef(false);
   const [version, setVersion] = useState(0);
 
   if (framesRef.current === null) framesRef.current = new Map();
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      const target = colForTs(latestTsRef.current);
-      const cur = currentColRef.current;
-      if (target === 0 || cur >= target) return;
-      currentColRef.current = cur + 1;
-      const leftEdge = currentColRef.current - maxFrames + 1;
-      const frames = framesRef.current;
-      for (const k of frames.keys()) {
-        if (k < leftEdge) frames.delete(k);
-      }
-      setVersion((v) => v + 1);
-    }, SPECTROGRAM_COLUMN_MS);
-    return () => clearInterval(id);
+  // Snap the playhead to the trailing setpoint and prune stale frames. Shared
+  // by the per-tick advance and the refocus handler.
+  const commitCol = useCallback((nextPlayhead: number) => {
+    playheadRef.current = nextPlayhead;
+    const col = Math.floor(nextPlayhead);
+    if (col === currentColRef.current) return;
+    currentColRef.current = col;
+    const leftEdge = col - maxFrames + 1;
+    const frames = framesRef.current;
+    for (const k of frames.keys()) {
+      if (k < leftEdge) frames.delete(k);
+    }
+    setVersion((v) => v + 1);
   }, [maxFrames]);
+
+  // Integrate the playhead on requestAnimationFrame so it advances by real
+  // elapsed time every display frame (smooth) and exposes a fractional position
+  // for sub-pixel rendering. rAF is paused by the browser while the tab is
+  // hidden, so the playhead naturally freezes; the snap below handles the jump
+  // back to live on the first frame after it resumes.
+  useEffect(() => {
+    let raf = 0;
+    const step = () => {
+      const now = performance.now();
+      const last = lastTickRef.current;
+      lastTickRef.current = now;
+      const liveCol = colForTs(latestTsRef.current);
+      // last === 0 means "re-base on this frame" (first data / just resumed).
+      if (liveCol !== 0 && last !== 0) {
+        const setpoint = liveCol - SPECT_BUFFER_COLS;  // hold SPECT_BUFFER_MS behind live
+        const playhead = playheadRef.current;
+        if (setpoint - playhead > SPECT_SNAP_COLS) {
+          // Too far behind to gracefully catch up (tab was hidden, laptop
+          // slept, WS reconnect) — jump to the setpoint instead of replaying.
+          commitCol(setpoint);
+        } else {
+          // Columns of real time elapsed since the last frame. Driving off this
+          // — not a fixed step — is what removes drift and timer jitter.
+          const elapsedCols = (now - last) / SPECTROGRAM_COLUMN_MS;
+          // Proportional pull toward the setpoint: faster when behind it, slower
+          // (down to a pause) when too close to live so the buffer can refill.
+          let velocity = 1 + SPECT_CATCHUP_GAIN * (setpoint - playhead);
+          if (velocity < 0) velocity = 0;
+          else if (velocity > SPECT_MAX_SPEED) velocity = SPECT_MAX_SPEED;
+
+          let next = playhead + elapsedCols * velocity;
+          if (next > liveCol) next = liveCol;   // never paint past the freshest data
+          if (next < playhead) next = playhead;  // never rewind
+          commitCol(next);
+        }
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [commitCol]);
+
+  // After a long hidden stretch the first resumed frame can have a huge elapsed
+  // time; re-base it so we don't lurch. (The snap above does the catch-up.)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisible = () => {
+      if (!document.hidden) lastTickRef.current = 0;
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   const push = useCallback((ts: number, bands: number[] | Float32Array) => {
     if (bands.length !== nBands) return;
@@ -381,6 +481,8 @@ export function useRollingBands(
       // immediately instead of an empty canvas slowly filling in.
       hasDataRef.current = true;
       currentColRef.current = col;
+      playheadRef.current = col;
+      lastTickRef.current = 0;  // first tick after this only sets the clock
       setVersion((v) => v + 1);
     }
   }, [nBands, maxFrames]);
@@ -388,6 +490,7 @@ export function useRollingBands(
   return {
     frames: framesRef.current,
     currentCol: currentColRef.current,
+    playheadRef,
     version,
     maxFrames,
     nBands,
@@ -1222,52 +1325,78 @@ export function LiveSpectrogram({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lut = useMemo(() => paletteLut(palette), [palette]);
 
+  // Draw + scroll on requestAnimationFrame. We render T+1 columns into a canvas
+  // one column wider than the viewport and slide it left by the playhead's
+  // fractional part each frame (sub-pixel), so the picture scrolls smoothly at
+  // the display refresh rate instead of stepping a whole column at the ~12 Hz
+  // data rate. The pixel-data redraw only happens when the integer column
+  // advances; between those, only the cheap CSS transform updates.
+  const frames = ring.frames;
+  const playheadRef = ring.playheadRef;
+  const F = ring.nBands;
+  const T = ring.maxFrames;
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const F = ring.nBands;
-    const T = ring.maxFrames;
-    canvas.width = T;
+    const N = T + 1;                 // columns drawn: viewport T + 1 incoming
+    canvas.width = N;
     canvas.height = F;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const img = ctx.createImageData(T, F);
+    const img = ctx.createImageData(N, F);
 
-    const range = Math.max(1, maxDb - minDb);
-    const invRange = (LUT_SIZE - 1) / range;
-    const frames = ring.frames;
-    const leftCol = ring.currentCol - T + 1;
-    // Pre-build the floor pixel so columns without data render cheaply.
+    const invRange = (LUT_SIZE - 1) / Math.max(1, maxDb - minDb);
     let floorClamp = (SPECTROGRAM_FLOOR_DB - minDb) * invRange;
     if (floorClamp < 0) floorClamp = 0;
     else if (floorClamp > LUT_SIZE - 1) floorClamp = LUT_SIZE - 1;
     const floorLutBase = (floorClamp | 0) * 3;
+    const colPct = 100 / N;          // one column as % of the (wider) canvas
 
-    for (let c = 0; c < T; c++) {
-      const bands = frames.get(leftCol + c);
-      for (let f = 0; f < F; f++) {
-        const srcBand = F - 1 - f;            // flip so high freq sits at top
-        const dstBase = f * T * 4;
-        const idx = dstBase + c * 4;
-        if (bands === undefined) {
-          img.data[idx] = lut[floorLutBase];
-          img.data[idx + 1] = lut[floorLutBase + 1];
-          img.data[idx + 2] = lut[floorLutBase + 2];
-          img.data[idx + 3] = 255;
-        } else {
-          let v = (bands[srcBand] - minDb) * invRange;
-          if (v < 0) v = 0;
-          else if (v > LUT_SIZE - 1) v = LUT_SIZE - 1;
-          const lutBase = (v | 0) * 3;
-          img.data[idx] = lut[lutBase];
-          img.data[idx + 1] = lut[lutBase + 1];
-          img.data[idx + 2] = lut[lutBase + 2];
-          img.data[idx + 3] = 255;
+    const draw = (base: number) => {
+      for (let c = 0; c < N; c++) {
+        const bands = frames.get(base + c);
+        for (let f = 0; f < F; f++) {
+          const srcBand = F - 1 - f;          // flip so high freq sits at top
+          const idx = (f * N + c) * 4;
+          if (bands === undefined) {
+            img.data[idx] = lut[floorLutBase];
+            img.data[idx + 1] = lut[floorLutBase + 1];
+            img.data[idx + 2] = lut[floorLutBase + 2];
+            img.data[idx + 3] = 255;
+          } else {
+            let v = (bands[srcBand] - minDb) * invRange;
+            if (v < 0) v = 0;
+            else if (v > LUT_SIZE - 1) v = LUT_SIZE - 1;
+            const lutBase = (v | 0) * 3;
+            img.data[idx] = lut[lutBase];
+            img.data[idx + 1] = lut[lutBase + 1];
+            img.data[idx + 2] = lut[lutBase + 2];
+            img.data[idx + 3] = 255;
+          }
         }
       }
-    }
-    ctx.putImageData(img, 0, 0);
-  }, [ring.frames, ring.version, ring.currentCol, ring.nBands, ring.maxFrames, lut, minDb, maxDb]);
+      ctx.putImageData(img, 0, 0);
+    };
+
+    let raf = 0;
+    let lastBase = NaN;
+    const frame = () => {
+      const playhead = playheadRef.current;
+      const col = Math.floor(playhead);
+      const base = col - T + 1;       // leftmost of the N drawn columns
+      if (base !== lastBase) {        // integer advance → redraw pixels
+        draw(base);
+        lastBase = base;
+      }
+      // Slide left by the fractional column so motion is continuous; when the
+      // integer advances, base shifts and frac wraps to ~0 in the same frame.
+      const frac = playhead - col;
+      canvas.style.transform = `translateX(${(-frac * colPct).toFixed(3)}%)`;
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [frames, playheadRef, F, T, lut, minDb, maxDb]);
 
   // Decorative dB tick labels along the left edge for the freq axis.
   const labelHzs = useMemo(
@@ -1276,12 +1405,16 @@ export function LiveSpectrogram({
   );
 
   return (
-    <div style={{ position: 'relative', width: '100%', height }}>
+    <div style={{ position: 'relative', width: '100%', height, overflow: 'hidden', borderRadius: 4 }}>
       <canvas
         ref={canvasRef}
         style={{
-          width: '100%', height: '100%', display: 'block',
-          imageRendering: 'auto', borderRadius: 4, background: 'var(--bg-2)',
+          // One column wider than the viewport: the extra column is the
+          // incoming frame that the sub-pixel translateX slides into view.
+          position: 'absolute', top: 0, left: 0,
+          width: `${((T + 1) / T) * 100}%`, height: '100%', display: 'block',
+          imageRendering: 'auto', background: 'var(--bg-2)',
+          willChange: 'transform',
         }}
       />
       {showGrid && (
