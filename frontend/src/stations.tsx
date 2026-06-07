@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Map as MapLibreMap, Marker, NavigationControl, type MapRef } from 'react-map-gl/maplibre';
+import type { GeoJSONSource } from 'maplibre-gl';
+import { Map as MapLibreMap, NavigationControl, type MapRef } from 'react-map-gl/maplibre';
 import { fetchCameras, fetchDevices, fetchTelemetry } from './api';
 import { Card } from './atoms';
 import { CameraSnapshot } from './cameras';
+import { Clock, UserChip } from './chrome';
+import { SettingsButton, SettingsDialog } from './settings';
 import {
   CORRIDOR_BOUNDS,
   CORRIDOR_CENTER,
@@ -12,6 +15,7 @@ import {
   MAP_STYLE,
 } from './mapConfig';
 import type { CameraInfo, DeviceInfo } from './types';
+import { addBloomLayers, dbToHeatWeight, loadBloomIcons } from './uqiHeatmap';
 
 // Mic ↔ camera proximity used for popovers. Matches the API's
 // NEAR_RADIUS_M (cameras.py) so what we paint here matches what
@@ -128,93 +132,6 @@ function displayName(d: DeviceInfo): string {
   return idx >= 0 ? d.name.slice(idx + 3) : d.name;
 }
 
-// Camera glyph used both for standalone camera markers and inline inside
-// station pins that have a nearby camera. Sized to fit on the pin without
-// dominating the dB readout.
-function CameraGlyph({ size = 10, color = 'currentColor' }: { size?: number; color?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill={color}
-      style={{ display: 'block' }}
-    >
-      <path d="M2 4 L10 4 L10 12 L2 12 Z M10 6 L14 4 L14 12 L10 10 Z" />
-    </svg>
-  );
-}
-
-function StationPin({
-  row,
-  hasCamera,
-  hovered,
-  onHover,
-  onPick,
-}: {
-  row: StationRow;
-  hasCamera: boolean;
-  hovered: boolean;
-  onHover: (id: string | null) => void;
-  onPick: (d: DeviceInfo) => void;
-}) {
-  const { device, db, status } = row;
-  const offline = status !== 'online';
-  const c = colorForDb(db, !offline);
-  return (
-    <div
-      onMouseEnter={() => onHover(device.device_id)}
-      onMouseLeave={() => onHover(null)}
-      onClick={(e) => {
-        e.stopPropagation();
-        onPick(device);
-      }}
-      style={{
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        cursor: 'pointer',
-        // Pin's tip sits on the lat/lon; whole element shifts so the tail
-        // anchors at the marker origin (Marker centers by default).
-        transform: 'translateY(-50%)',
-      }}
-    >
-      <div
-        style={{
-          background: c,
-          color: '#0a0a0a',
-          fontFamily: 'var(--mono)',
-          fontWeight: 600,
-          fontSize: 11,
-          padding: '4px 7px',
-          borderRadius: 14,
-          border: `2px solid ${hovered ? 'var(--ink-0)' : 'rgba(0,0,0,0.3)'}`,
-          boxShadow: '0 4px 10px rgba(0,0,0,0.5)',
-          minWidth: 30,
-          textAlign: 'center',
-          transition: 'all 120ms',
-          transform: hovered ? 'scale(1.15)' : 'scale(1)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1,
-          lineHeight: 1,
-        }}
-      >
-        {hasCamera ? (
-          <CameraGlyph size={11} color="#0a0a0a" />
-        ) : (
-          <span>—</span>
-        )}
-      </div>
-      <svg width="14" height="9" viewBox="0 0 14 9" style={{ marginTop: -2 }}>
-        <path d="M 7 9 L 0 0 L 14 0 Z" fill={c} />
-      </svg>
-    </div>
-  );
-}
-
 // Tooltip rendered outside the marker layer. maplibre re-sets each marker's
 // z-index based on its on-screen latitude on every map render, which means
 // a tooltip nested inside a <Marker> can never reliably overlay neighbors.
@@ -253,15 +170,13 @@ function HoverTooltip({
   if (!pos) return null;
   const offline = row.status !== 'online';
   const dbColor = colorForDb(row.db, !offline);
-  // Pin uses anchor="bottom" + translateY(-50%), so its body floats ~15px
-  // above lat/lon. Render the tooltip just below that — a small gap below
-  // the tail tip — matching the in-marker tooltip's old position.
+  // The station glyph is anchored on the lat/lon; sit the tooltip just below it.
   return (
     <div
       style={{
         position: 'absolute',
         left: pos.x,
-        top: pos.y - 10,
+        top: pos.y + 14,
         transform: 'translateX(-50%)',
         background: 'var(--bg-0)',
         border: '1px solid var(--line-strong)',
@@ -309,114 +224,22 @@ function HoverTooltip({
   );
 }
 
-// Camera pin: smaller, dimmer than mic pins so it visually sits under
-// the station network. The dot is anchored to the camera's lat/lon
-// (anchor="center"), no tail.
-function CameraPin({
-  hovered,
-  onHover,
-}: {
-  hovered: boolean;
-  onHover: (id: number | null) => void;
-}) {
-  return (
-    <div
-      style={{
-        width: hovered ? 14 : 12,
-        height: hovered ? 14 : 12,
-        borderRadius: 3,
-        background: 'var(--bg-0)',
-        border: `1.5px solid ${hovered ? 'var(--ink-0)' : 'var(--ink-3)'}`,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
-        cursor: 'pointer',
-        transition: 'all 100ms',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: hovered ? 'var(--ink-0)' : 'var(--ink-3)',
-      }}
-      onMouseEnter={() => onHover(null)}
-      onMouseLeave={() => onHover(null)}
-    >
-      <CameraGlyph size={8} />
-    </div>
-  );
-}
-
-function CameraHoverTooltip({
-  camera,
-  mapRef,
-}: {
-  camera: CameraInfo;
-  mapRef: React.MutableRefObject<MapRef | null>;
-}) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  useEffect(() => {
-    const m = mapRef.current?.getMap();
-    if (!m) return;
-    const update = () => {
-      const p = m.project([camera.lon, camera.lat]);
-      setPos({ x: p.x, y: p.y });
-    };
-    update();
-    m.on('move', update);
-    m.on('zoom', update);
-    return () => {
-      m.off('move', update);
-      m.off('zoom', update);
-    };
-  }, [camera.camera_id, camera.lat, camera.lon, mapRef]);
-  if (!pos) return null;
-  const caption = [camera.roadway, camera.direction].filter(Boolean).join(' · ');
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: pos.x,
-        top: pos.y + 10,
-        transform: 'translateX(-50%)',
-        background: 'var(--bg-0)',
-        border: '1px solid var(--line-strong)',
-        borderRadius: 4,
-        padding: 6,
-        boxShadow: '0 6px 18px rgba(0,0,0,0.5)',
-        zIndex: 10_000_000,
-        pointerEvents: 'none',
-      }}
-    >
-      <CameraSnapshot camera={camera} size="thumb" showCaption={false} />
-      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ink-0)', whiteSpace: 'nowrap' }}>
-        {caption || `UDOT camera ${camera.camera_id}`}
-      </div>
-      {camera.location && (
-        <div
-          className="mono"
-          style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 1, whiteSpace: 'nowrap' }}
-        >
-          {camera.location}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StationMap({
   rows,
-  cameras,
   deviceCameraMap,
   hovered,
   onHover,
   onPick,
 }: {
   rows: StationRow[];
-  cameras: CameraInfo[];
   deviceCameraMap: Map<string, CameraInfo>;
   hovered: string | null;
   onHover: (id: string | null) => void;
   onPick: (d: DeviceInfo) => void;
 }) {
   const mapRef = useRef<MapRef | null>(null);
-  const [hoveredCameraId, setHoveredCameraId] = useState<number | null>(null);
+  const loadedRef = useRef(false);
+
   const placed = useMemo(
     () => rows.filter((r) => r.device.lat != null && r.device.lon != null),
     [rows],
@@ -425,21 +248,83 @@ function StationMap({
     () => placed.find((r) => r.device.device_id === hovered) ?? null,
     [placed, hovered],
   );
-  const hoveredCamera = useMemo(
-    () => cameras.find((c) => c.camera_id === hoveredCameraId) ?? null,
-    [cameras, hoveredCameraId],
+
+  // Live geojson feeding the bloom + glyph layers (same effect as the login
+  // backdrop, but data-driven). `weight` tracks the current dB so louder
+  // stations bloom larger/denser; `has_camera` selects the cam+mic glyph;
+  // `online` dims offline stations. Offline/idle stations carry weight 0, so
+  // they show a glyph but no glow.
+  const featureCollection = useMemo(
+    () => ({
+      type: 'FeatureCollection' as const,
+      features: placed.map((r) => ({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [r.device.lon as number, r.device.lat as number],
+        },
+        properties: {
+          device_id: r.device.device_id,
+          code: stationCode(r.device),
+          online: r.status === 'online',
+          has_camera: deviceCameraMap.has(r.device.device_id),
+          weight: r.status === 'online' && r.db != null ? dbToHeatWeight(r.db) : 0,
+        },
+      })),
+    }),
+    [placed, deviceCameraMap],
   );
-  // Cameras already paired with a station pin render inside that pin — skip
-  // them in the standalone camera layer to avoid drawing the same icon twice.
-  const adoptedCameraIds = useMemo(() => {
-    const s = new Set<number>();
-    for (const cam of deviceCameraMap.values()) s.add(cam.camera_id);
-    return s;
-  }, [deviceCameraMap]);
-  const standaloneCameras = useMemo(
-    () => cameras.filter((c) => !adoptedCameraIds.has(c.camera_id)),
-    [cameras, adoptedCameraIds],
-  );
+
+  // The maplibre layer event handlers are registered once on load, so they read
+  // current props/data through refs to avoid stale closures.
+  const fcRef = useRef(featureCollection);
+  const rowsRef = useRef(placed);
+  const onPickRef = useRef(onPick);
+  const onHoverRef = useRef(onHover);
+  useEffect(() => {
+    rowsRef.current = placed;
+    onPickRef.current = onPick;
+    onHoverRef.current = onHover;
+  }, [placed, onPick, onHover]);
+
+  // Push live data into the source whenever readings/cameras change.
+  useEffect(() => {
+    fcRef.current = featureCollection;
+    const map = mapRef.current?.getMap();
+    if (!map || !loadedRef.current) return;
+    (map.getSource('uqi-stations') as GeoJSONSource | undefined)?.setData(featureCollection);
+  }, [featureCollection]);
+
+  const onLoad = () => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    loadBloomIcons(map);
+    if (!map.getSource('uqi-stations')) {
+      map.addSource('uqi-stations', { type: 'geojson', data: fcRef.current });
+      addBloomLayers(map, 'uqi-stations');
+    }
+    const micLayer = 'uqi-stations-mics';
+    map.on('click', micLayer, (e) => {
+      const id = e.features?.[0]?.properties?.device_id as string | undefined;
+      if (!id) return;
+      const dev = rowsRef.current.find((r) => r.device.device_id === id)?.device;
+      if (dev) onPickRef.current(dev);
+    });
+    map.on('mouseenter', micLayer, (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const id = e.features?.[0]?.properties?.device_id as string | undefined;
+      onHoverRef.current(id ?? null);
+    });
+    map.on('mousemove', micLayer, (e) => {
+      const id = e.features?.[0]?.properties?.device_id as string | undefined;
+      if (id) onHoverRef.current(id);
+    });
+    map.on('mouseleave', micLayer, () => {
+      map.getCanvas().style.cursor = '';
+      onHoverRef.current(null);
+    });
+    loadedRef.current = true;
+  };
 
   return (
     <div
@@ -467,42 +352,9 @@ function StationMap({
         mapStyle={MAP_STYLE}
         attributionControl={true}
         style={{ width: '100%', height: '100%' }}
+        onLoad={onLoad}
       >
         <NavigationControl position="top-right" showCompass={false} />
-        {standaloneCameras.map((c) => (
-          <Marker
-            key={`cam-${c.camera_id}`}
-            longitude={c.lon}
-            latitude={c.lat}
-            anchor="center"
-          >
-            <div
-              onMouseEnter={() => setHoveredCameraId(c.camera_id)}
-              onMouseLeave={() => setHoveredCameraId(null)}
-            >
-              <CameraPin
-                hovered={hoveredCameraId === c.camera_id}
-                onHover={setHoveredCameraId}
-              />
-            </div>
-          </Marker>
-        ))}
-        {placed.map((row) => (
-          <Marker
-            key={row.device.device_id}
-            longitude={row.device.lon as number}
-            latitude={row.device.lat as number}
-            anchor="bottom"
-          >
-            <StationPin
-              row={row}
-              hasCamera={deviceCameraMap.has(row.device.device_id)}
-              hovered={hovered === row.device.device_id}
-              onHover={onHover}
-              onPick={onPick}
-            />
-          </Marker>
-        ))}
       </MapLibreMap>
       {hoveredRow && (
         <HoverTooltip
@@ -511,17 +363,7 @@ function StationMap({
           mapRef={mapRef}
         />
       )}
-      {hoveredCamera && <CameraHoverTooltip camera={hoveredCamera} mapRef={mapRef} />}
     </div>
-  );
-}
-
-function Swatch({ color, label }: { color: string; label: string }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
-      {label}
-    </span>
   );
 }
 
@@ -540,14 +382,24 @@ function MapLegend() {
         gap: 8,
       }}
     >
-      <div style={{ display: 'inline-flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span>CURRENT dB</span>
-        <Swatch color="oklch(72% 0.13 195)" label="<55" />
-        <Swatch color="oklch(78% 0.14 130)" label="55–64" />
-        <Swatch color="oklch(82% 0.16 70)" label="65–74" />
-        <Swatch color="oklch(72% 0.2 35)" label="≥75" />
-        <Swatch color={ONLINE_IDLE_COLOR} label="idle" />
-        <Swatch color={OFFLINE_COLOR} label="offline" />
+      <div style={{ display: 'inline-flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          QUIET
+          <span
+            style={{
+              width: 96,
+              height: 8,
+              borderRadius: 4,
+              // Mirrors the heatmap-color ramp in addBloomLayers().
+              background:
+                'linear-gradient(90deg, rgba(98,0,234,0.85), rgba(255,0,122,0.9), rgba(255,80,0,0.95), rgba(255,180,0,0.95), rgba(255,240,200,1))',
+            }}
+          />
+          LOUD
+        </span>
+        <span>MIC = STATION</span>
+        <span>CAM+MIC = + CAMERA</span>
+        <span>DIM = OFFLINE</span>
       </div>
       <span>MAPLIBRE · CARTO · OPENSTREETMAP</span>
     </div>
@@ -566,6 +418,13 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [hovered, setHovered] = useState<string | null>(null);
+  // Session panel's Settings dialog. No device is selected on the overview,
+  // so the dialog runs in its no-device "demo" mode: display preferences
+  // (palette, time format, anomaly sensitivity) apply globally, while the
+  // device-backed threshold/pause controls disable themselves.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsThreshold, setSettingsThreshold] = useState(80);
+  const [settingsPaused, setSettingsPaused] = useState(false);
   // Keyed by device_id. Only populated for online stations; offline pins
   // stay at null so they keep their gray "offline" rendering.
   const [latestDb, setLatestDb] = useState<Record<string, number | null>>({});
@@ -674,11 +533,13 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
   const onlineCount = placedRows.filter((r) => r.status === 'online').length;
 
   return (
+    <>
     <div
       style={{
         height: '100vh',
         display: 'grid',
         gridTemplateColumns: '1fr 460px',
+        gridTemplateRows: 'auto minmax(0, 1fr)',
         gap: 14,
         padding: 14,
         minHeight: 0,
@@ -686,10 +547,29 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
         boxSizing: 'border-box',
       }}
     >
-      <Card
-        title="STATION NETWORK · SALT LAKE CITY"
-        subtitle="Urban Quiet Initiative pilot corridor · State St, N Temple → 900 S · click a pin or row to drill in"
-        right={
+      <div
+        style={{
+          gridColumn: '1 / -1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          padding: '10px 14px',
+          background: 'var(--bg-1)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--rad-lg)',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-2)' }}>
+            STATION NETWORK · SALT LAKE CITY
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-1)', marginTop: 2 }}>
+            Urban Quiet Initiative pilot corridor · State St, N Temple → 900 S · click a pin or row to drill in
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div className="mono" style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--ink-3)' }}>
             <span>
               <span style={{ color: 'var(--ink-1)' }}>{onlineCount}</span>/{placedRows.length} ONLINE
@@ -699,8 +579,14 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
             </span>
             <span>— BREACH HRS · 7D</span>
           </div>
-        }
-      >
+          <div style={{ width: 1, height: 28, background: 'var(--line)' }} />
+          <Clock />
+          <SettingsButton onClick={() => setSettingsOpen(true)} />
+          <UserChip />
+        </div>
+      </div>
+
+      <Card>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0 }}>
           {error && (
             <div
@@ -719,7 +605,6 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
           )}
           <StationMap
             rows={placedRows}
-            cameras={cameras}
             deviceCameraMap={deviceCameraMap}
             hovered={hovered}
             onHover={setHovered}
@@ -897,5 +782,16 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
         </div>
       </Card>
     </div>
+    <SettingsDialog
+      open={settingsOpen}
+      onClose={() => setSettingsOpen(false)}
+      deviceId={null}
+      deviceThreshold={settingsThreshold}
+      onDeviceThresholdChange={setSettingsThreshold}
+      devicePaused={settingsPaused}
+      onDevicePausedChange={setSettingsPaused}
+      appliedConfigVersion={null}
+    />
+    </>
   );
 }

@@ -16,6 +16,7 @@ import {
 } from './api';
 import { useAuth } from './auth';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
+import { Clock, UserChip } from './chrome';
 import { CameraSnapshot, useNearestCamera } from './cameras';
 import { LoginPage } from './login_page';
 import { PERM, hasPermission } from './permissions';
@@ -41,7 +42,7 @@ import {
   useRollingBands,
 } from './spectrogram';
 import { useTweaks } from './tweaks';
-import { formatClock, formatHour } from './utils';
+import { formatHour } from './utils';
 import type {
   Anomaly, Day, DeviceInfo, DeviceLiveMessage,
   DrillState, ForecastPoint, MonthHydrated, Source,
@@ -67,12 +68,6 @@ function TopBar({
   device: DeviceInfo | null;
   onBack?: () => void;
 }) {
-  const [t, setT] = useState(() => new Date());
-  const { timeFormat } = useTweaks();
-  useEffect(() => {
-    const i = setInterval(() => setT(new Date()), 1000);
-    return () => clearInterval(i);
-  }, []);
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -171,55 +166,10 @@ function TopBar({
         <div className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
           THRESHOLD <span style={{ color: 'var(--neon-hot)' }}>≥ {threshold} dB</span>
         </div>
-        <div className="mono" style={{ fontSize: 11, color: 'var(--ink-1)', padding: '6px 10px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6 }}>
-          {formatClock(t.getTime() / 1000, timeFormat, { withSeconds: true })}
-        </div>
-        <UserChip />
+        <Clock />
         <SettingsButton onClick={onOpenSettings} />
+        <UserChip />
       </div>
-    </div>
-  );
-}
-
-function UserChip() {
-  const { user, logout } = useAuth();
-  if (!user) return null;
-  return (
-    <div
-      className="mono"
-      title={`Sign out ${user.email}`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        fontSize: 11,
-        color: 'var(--ink-1)',
-        padding: '6px 10px',
-        background: 'var(--bg-2)',
-        border: '1px solid var(--line)',
-        borderRadius: 6,
-      }}
-    >
-      <span style={{ opacity: 0.7 }}>{user.email}</span>
-      <span style={{
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em',
-        color: 'var(--neon-cool, #6cf)',
-        fontSize: 9,
-      }}>{user.role}</span>
-      <button
-        onClick={() => { void logout(); }}
-        style={{
-          background: 'transparent',
-          color: 'var(--ink-3)',
-          border: 'none',
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          fontSize: 11,
-        }}
-      >
-        ⏻
-      </button>
     </div>
   );
 }
