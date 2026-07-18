@@ -133,8 +133,12 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      VITE_API_HOST: "http://backend:8000"
-      VITE_WS_HOST: "ws://backend:8000"
+      # Use the unique container name, NOT the `backend` service alias: other
+      # projects on the shared `dev_conexed_com_default` network also register
+      # the alias `backend`, so `http://backend:8000` round-robins onto the
+      # wrong app's API (intermittent 404s). Container names are unambiguous.
+      VITE_API_HOST: "http://urban-acoustics-backend:8000"
+      VITE_WS_HOST: "ws://urban-acoustics-backend:8000"
       CHOKIDAR_USEPOLLING: "true"
       VITE_DEMO_MODE: "false"
       VITE_DEVICE_ID: "00000000-0000-4000-8000-00000000000a"
