@@ -45,7 +45,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    allowedHosts: ['urban-acoustics.dev.conexed.com'],
+    allowedHosts: ['urban-acoustics.dev.conexed.com', '.openclaw'],
     // Polling needed when the source is on a bind-mounted Docker volume on
     // macOS/Windows hosts. Harmless on Linux.
     watch: { usePolling: true, interval: 250 },

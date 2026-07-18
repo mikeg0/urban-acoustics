@@ -123,6 +123,10 @@ services:
       context: ./frontend
       network: host
     container_name: urban-acoustics-frontend
+    # Vite spawns short-lived esbuild helpers; when they orphan they reparent to
+    # PID 1. `npm run dev` as PID 1 doesn't reap them, so they pile up as zombies.
+    # tini (init: true) becomes PID 1 and reaps them.
+    init: true
     volumes:
       # Bind-mount source for Vite HMR. Anonymous volume keeps node_modules
       # populated by the image (host doesn't have it installed).
