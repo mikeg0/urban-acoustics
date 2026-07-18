@@ -321,6 +321,7 @@ export const SPECTROGRAM_COLUMN_MS = (2 * 2048 / 48000) * 1000;
 // the dashboard will stall ~once a second at this depth.
 const SPECT_BUFFER_MS = 500;       // ~0.5 s: covers network jitter post-pacing
 const SPECT_BUFFER_COLS = Math.round(SPECT_BUFFER_MS / SPECTROGRAM_COLUMN_MS);
+const SPECT_GAP_FILL_MAX_COLS = 2; // hide isolated QoS-0 losses without buffering
 const SPECT_CATCHUP_GAIN = 0.05;   // velocity added per column behind the setpoint
 const SPECT_MAX_SPEED = 3;         // velocity ceiling, in columns per column-time
 // If the playhead ends up more than this far behind the setpoint (laptop
@@ -330,7 +331,7 @@ const SPECT_SNAP_COLS = Math.round(6000 / SPECTROGRAM_COLUMN_MS);
 
 interface RollingBands {
   /** Map of global column index → band vector. Columns without data are
-   *  simply absent from the map and render as the palette's floor color. */
+   *  absent from the map; isolated gaps are filled at draw time. */
   frames: Map<number, number[]>;
   /** Right-edge column index — derived from the newest frame timestamp
    *  seen. The canvas always shows columns
@@ -1353,8 +1354,19 @@ export function LiveSpectrogram({
     const colPct = 100 / N;          // one column as % of the (wider) canvas
 
     const draw = (base: number) => {
+      let carryBands: number[] | undefined;
+      let carryAge = 0;
       for (let c = 0; c < N; c++) {
-        const bands = frames.get(base + c);
+        let bands = frames.get(base + c);
+        if (bands === undefined) {
+          carryAge += 1;
+          if (carryBands !== undefined && carryAge <= SPECT_GAP_FILL_MAX_COLS) {
+            bands = carryBands;
+          }
+        } else {
+          carryBands = bands;
+          carryAge = 0;
+        }
         for (let f = 0; f < F; f++) {
           const srcBand = F - 1 - f;          // flip so high freq sits at top
           const idx = (f * N + c) * 4;

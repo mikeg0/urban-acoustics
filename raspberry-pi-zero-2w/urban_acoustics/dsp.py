@@ -20,12 +20,16 @@ been applied. Callers should not add an offset themselves.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Sequence
 
 import numpy as np
 
 from .calibration import Calibration
+
+
+log = logging.getLogger(__name__)
 
 
 _EPS = 1e-30  # keep log10 from blowing up on a fully silent block
@@ -51,6 +55,11 @@ ISO_THIRD_OCTAVE_HZ: tuple[float, ...] = (
 # the spec calls for, but at the 1 Hz output rate the difference is well
 # inside the per-device calibration uncertainty.
 _LAFMAX_SUBBLOCKS = 8
+
+# Re-anchor the rolling sample-count clock when it diverges materially from
+# capture wall time. This heals audio-crystal drift and capture overruns while
+# ignoring ordinary block timestamp jitter.
+_RESYNC_THRESHOLD_S = 0.5
 
 
 # IEC 61672 reference frequencies and normalisation constants.
@@ -267,8 +276,18 @@ class STFTBander:
         the natural "now" for a spectrogram cell.
         """
         x = _pcm_to_float(samples)
-        if self._buffer.size == 0:
+        if self._buffer.size == 0 or self._buffer_start_ts is None:
             self._buffer_start_ts = block_ts
+        else:
+            expected_end = self._buffer_start_ts + self._buffer.size / self._sr
+            drift = block_ts - expected_end
+            if abs(drift) > _RESYNC_THRESHOLD_S:
+                self._buffer_start_ts += drift
+                log.info(
+                    "spectrogram: re-synchronising STFT clock by %+.3f s "
+                    "(expected block at %.3f, got %.3f)",
+                    drift, expected_end, block_ts,
+                )
         self._buffer = np.concatenate([self._buffer, x])
 
         frames: list[tuple[float, np.ndarray]] = []

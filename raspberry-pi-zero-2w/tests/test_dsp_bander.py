@@ -91,6 +91,30 @@ def test_frame_timestamps_monotonic_and_centred() -> None:
     assert np.allclose(deltas, 2048 / SR)
 
 
+def test_frame_timestamps_resync_only_past_drift_threshold() -> None:
+    bander = STFTBander(
+        sample_rate=8,
+        calib=_calib(),
+        window_size=4,
+        hop_size=2,
+        band_centers_hz=(1.0,),
+    )
+    samples = np.zeros(4, dtype=np.int32)  # 0.5 s capture block
+
+    first = bander.feed(samples, block_ts=100.0)
+    assert first[0][0] == 100.25
+
+    # The sample-count clock expects this block at 100.5. A 0.6 s skew is
+    # beyond the threshold, so the buffered tail jumps forward with it.
+    resynced = bander.feed(samples, block_ts=101.1)
+    assert resynced[0][0] == 101.1
+
+    # The clock now expects 101.6. A 0.4 s skew is tolerated as timestamp
+    # jitter, so frame time continues from the sample-count clock unchanged.
+    steady = bander.feed(samples, block_ts=102.0)
+    assert steady[0][0] == 101.6
+
+
 def test_silence_is_clipped_to_floor() -> None:
     bander = STFTBander(sample_rate=SR, calib=_calib())
     silent = np.zeros(SR, dtype=np.int32)

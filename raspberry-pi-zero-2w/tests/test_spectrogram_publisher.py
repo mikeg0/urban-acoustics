@@ -15,6 +15,7 @@ and instant rather than sleeping real wall-clock time.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from uuid import uuid4
 
 from urban_acoustics import telemetry
@@ -23,8 +24,14 @@ from urban_acoustics.transport import MqttPublishResult
 
 
 class _FakeMqtt:
-    def __init__(self, *, connected: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        connected: bool = True,
+        on_publish: Callable[[], None] | None = None,
+    ) -> None:
         self._connected = connected
+        self._on_publish = on_publish
         self.published: list[tuple[str, str]] = []
 
     @property
@@ -33,6 +40,8 @@ class _FakeMqtt:
 
     def publish(self, topic: str, payload: str, qos: int, *, timeout: float = 5.0) -> MqttPublishResult:
         self.published.append((topic, payload))
+        if self._on_publish is not None:
+            self._on_publish()
         return MqttPublishResult(ok=True)
 
 
@@ -106,10 +115,11 @@ def test_run_paces_a_burst_into_a_steady_stream(monkeypatch) -> None:
 
 def test_run_rebases_instead_of_replaying_after_a_gap(monkeypatch) -> None:
     """A large gap in frame timestamps must not translate into a long sleep —
-    pacing is capped, so the stream stays live rather than replaying old time."""
+    pacing is capped and an empty queue re-bases after a publisher stall."""
     fake_t = {"v": 0.0}
     real_sleep = asyncio.sleep
     recorded: list[float] = []
+    publish_times: list[float] = []
 
     async def fake_sleep(delay: float) -> None:
         recorded.append(delay)
@@ -120,7 +130,12 @@ def test_run_rebases_instead_of_replaying_after_a_gap(monkeypatch) -> None:
     monkeypatch.setattr(telemetry.time, "monotonic", lambda: fake_t["v"])
     monkeypatch.setattr(asyncio, "sleep", fake_sleep)
 
-    mqtt = _FakeMqtt()
+    def record_and_stall() -> None:
+        publish_times.append(fake_t["v"])
+        if len(publish_times) == 1:
+            fake_t["v"] += 1.0
+
+    mqtt = _FakeMqtt(on_publish=record_and_stall)
     pub = SpectrogramPublisher(device_id=uuid4(), mqtt=mqtt)
 
     async def go() -> None:
@@ -140,6 +155,56 @@ def test_run_rebases_instead_of_replaying_after_a_gap(monkeypatch) -> None:
     asyncio.run(go())
 
     assert len(mqtt.published) == 2
-    # The single paced sleep is clamped to the gap cap, never the full 30 s.
+    # The first publish stalls for a second. Once the second frame has been
+    # taken from the queue, the queue is empty, so the overdue schedule is
+    # re-based and the frame publishes immediately instead of replaying debt.
+    assert publish_times == [0.0, 1.0]
     paced = [d for d in recorded if d > 0]
-    assert paced and max(paced) <= telemetry._SPECT_MAX_PACE_S + 1e-9
+    assert paced == []
+
+
+def test_run_catches_up_while_queue_is_backlogged(monkeypatch) -> None:
+    """A transient stall must drain backlog faster than frame cadence."""
+    fake_t = {"v": 0.0}
+    real_sleep = asyncio.sleep
+    publish_times: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        if delay > 0:
+            fake_t["v"] += delay
+        await real_sleep(0)
+
+    monkeypatch.setattr(telemetry.time, "monotonic", lambda: fake_t["v"])
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    def record_and_stall() -> None:
+        publish_times.append(fake_t["v"])
+        if len(publish_times) == 1:
+            fake_t["v"] += 0.3
+
+    mqtt = _FakeMqtt(on_publish=record_and_stall)
+    pub = SpectrogramPublisher(device_id=uuid4(), mqtt=mqtt)
+    period = 0.085
+
+    async def go() -> None:
+        for i in range(8):
+            await pub.emit(_sample(i * period))
+        task = asyncio.create_task(pub.run())
+        for _ in range(200):
+            await real_sleep(0)
+            if len(mqtt.published) >= 8:
+                break
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(go())
+
+    assert len(mqtt.published) == 8
+    # The first publish incurs a 300 ms stall. Since more frames remain queued,
+    # schedule debt is retained and several frames publish back-to-back at the
+    # new wall time. Re-basing here would pace the third frame 85 ms later.
+    assert publish_times[:4] == [0.0, 0.3, 0.3, 0.3]
+    assert publish_times[-1] < 0.6

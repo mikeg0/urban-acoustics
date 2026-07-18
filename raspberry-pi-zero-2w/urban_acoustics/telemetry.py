@@ -146,7 +146,12 @@ class SpectrogramPublisher:
                     dt = _SPECT_MAX_PACE_S  # don't pace out a capture gap
                 schedule += dt
                 if schedule < now - _SPECT_PACE_SLACK_S:
-                    schedule = now  # fell behind — re-base, don't accrue lag
+                    # Preserve schedule debt while frames are waiting so a
+                    # transient stall is followed by catch-up publishes instead
+                    # of becoming permanent queue depth. Once drained, re-base
+                    # so an idle publisher does not replay stale time.
+                    if self._queue.empty():
+                        schedule = now
             delay = schedule - now
             if delay > 0:
                 await asyncio.sleep(delay)
