@@ -61,10 +61,13 @@ export function LoginPage() {
           urban acoustics · {mode}
         </div>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+        <label htmlFor="login-email" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
           <span style={{ opacity: 0.7 }}>email</span>
           <input
+            id="login-email"
+            name="username"
             type="email"
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoFocus
@@ -73,10 +76,13 @@ export function LoginPage() {
           />
         </label>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+        <label htmlFor="login-password" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
           <span style={{ opacity: 0.7 }}>password</span>
           <input
+            id="login-password"
+            name="password"
             type="password"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

@@ -8,15 +8,17 @@ Type=oneshot
 User=urban-acoustics
 Group=urban-acoustics
 
-# Delete spooled FLACs older than 7 days that no longer have a row in the
-# event_uploads table. We keep 7 days as a cushion in case the supervisor
-# is offline during a long outage.
-ExecStart=/bin/bash -c '\
-  set -euo pipefail; \
-  find /var/lib/urban-acoustics/audio -type f -name "*.flac" -mtime +7 -print0 \
-    | xargs -0 -r rm -v; \
-  /opt/urban-acoustics/venv/bin/python -c "\
-import sqlite3, pathlib; \
-p = pathlib.Path(\"/var/lib/urban-acoustics/queue.db\"); \
-c = sqlite3.connect(p); \
-c.execute(\"VACUUM\"); c.close()"'
+# Two independent steps, each its own ExecStart so systemd runs them without a
+# shell — avoids the bash -c / python -c / line-continuation quoting trap that
+# mangled the inline Python (leading-space IndentationError + collapsed \"
+# escapes). A oneshot fails the unit if either step exits non-zero.
+#
+# 1. Prune spooled FLACs older than 7 days. The uploader deletes clips on
+#    success; this clears orphans left by a crash. 7-day cushion so a long
+#    broker/API outage (audio still queued) doesn't drop un-uploaded clips.
+ExecStart=/usr/bin/find /var/lib/urban-acoustics/audio -type f -name "*.flac" -mtime +7 -delete
+# 2. Compact the SQLite spool. VACUUM reclaims freelist pages; in WAL mode the
+#    main .db file only shrinks after a TRUNCATE checkpoint, so do both.
+#    isolation_level=None (autocommit) — VACUUM cannot run inside a transaction;
+#    timeout waits out transient write locks from the running recorder.
+ExecStart=/opt/urban-acoustics/venv/bin/python -c "import sqlite3; con = sqlite3.connect('/var/lib/urban-acoustics/queue.db', isolation_level=None, timeout=30); con.execute('VACUUM'); con.execute('PRAGMA wal_checkpoint(TRUNCATE)'); con.close()"
