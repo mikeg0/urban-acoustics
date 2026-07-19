@@ -31,6 +31,7 @@ from .api.v1 import forecast as forecast_router
 from .api.v1 import health as health_router
 from .api.v1 import labels as labels_router
 from .api.v1 import live as live_router
+from .api.v1 import partner as partner_router
 from .api.v1 import preview as preview_router
 from .api.v1 import sources as sources_router
 from .api.v1 import spectrogram as spectrogram_router
@@ -196,6 +197,7 @@ app.include_router(users_router.router, prefix=V1, tags=["users"])
 app.include_router(preview_router.router, prefix=V1, tags=["preview"])
 app.include_router(devices_router.router, prefix=V1, tags=["devices"])
 app.include_router(telemetry_router.router, prefix=V1, tags=["telemetry"])
+app.include_router(partner_router.router, prefix=V1, tags=["partner"])
 app.include_router(device_health_router.router, prefix=V1, tags=["device-health"])
 app.include_router(spectrogram_router.router, prefix=V1, tags=["spectrogram"])
 app.include_router(events_router.router, prefix=V1, tags=["events"])

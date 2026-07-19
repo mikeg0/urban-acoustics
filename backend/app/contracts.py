@@ -11,6 +11,7 @@ can ship new optional fields without breaking older firmware.
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from typing import Annotated, Literal
 from uuid import UUID
@@ -267,6 +268,29 @@ class TelemetryReadResponse(BaseModel):
     from_ts: UnixTs
     to_ts: UnixTs
     points: list[TelemetryPoint]
+
+
+# --- REST: partner noise-curve read (machine-to-machine) ---------------------
+# Same underlying telemetry as TelemetryReadResponse, but timestamps are emitted
+# as ISO-8601 (datetime → `…+00:00`) so partner consumers do zero conversion.
+# `laeq/lafmax/lcpeak` are plain float (not DbLevel) to match TelemetryPoint — a
+# read endpoint should pass DB values through, not reject an out-of-range one.
+
+
+class NoiseCurvePoint(BaseModel):
+    ts: datetime
+    laeq: float
+    lafmax: float
+    lcpeak: float
+
+
+class NoiseCurveResponse(BaseModel):
+    device_id: UUID
+    resolution: TelemetryResolution
+    unit: str = "dB_SPL"
+    from_ts: datetime
+    to_ts: datetime
+    points: list[NoiseCurvePoint]
 
 
 # --- REST: device-health read ------------------------------------------------

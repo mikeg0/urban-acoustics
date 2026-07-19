@@ -215,3 +215,22 @@ class SpectrogramAnnotation(Base):
     ts_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     label: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ApiClient(Base):
+    """Machine-to-machine partner credential (see 0010_api_clients migration).
+
+    The plaintext secret is never stored — only its bcrypt hash. Revoke by
+    setting ``is_active`` false rather than deleting.
+    """
+
+    __tablename__ = "api_clients"
+
+    api_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    secret_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
