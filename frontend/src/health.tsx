@@ -265,22 +265,6 @@ function HealthHeader({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <Pill tone={tone} icon>{statusLabel}</Pill>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
-          ID {deviceId}
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
-        <HeaderStat label="Uptime" value={latest ? formatUptime(latest.uptime_s) : '—'} />
-        <HeaderStat label="Mic gain" value={latest ? `${latest.mic_gain_db.toFixed(1)} dB` : '—'} />
-        <HeaderStat label="fw" value={latest?.fw_version ?? '—'} />
-        <HeaderStat label="cfg" value={latest?.config_version ?? '—'} />
-        <HeaderStat
-          label="Last sample"
-          value={lastSampleAge == null
-            ? '—'
-            : lastSampleAge < 90 ? `${Math.round(lastSampleAge)}s ago`
-              : `${Math.round(lastSampleAge / 60)}m ago`}
-        />
         <button
           type="button"
           onClick={onRefresh}
@@ -305,6 +289,22 @@ function HealthHeader({
             />
           </svg>
         </button>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
+          ID {deviceId}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+        <HeaderStat label="Uptime" value={latest ? formatUptime(latest.uptime_s) : '—'} />
+        <HeaderStat label="Mic gain" value={latest ? `${latest.mic_gain_db.toFixed(1)} dB` : '—'} />
+        <HeaderStat label="fw" value={latest?.fw_version ?? '—'} />
+        <HeaderStat label="cfg" value={latest?.config_version ?? '—'} />
+        <HeaderStat
+          label="Last sample"
+          value={lastSampleAge == null
+            ? '—'
+            : lastSampleAge < 90 ? `${Math.round(lastSampleAge)}s ago`
+              : `${Math.round(lastSampleAge / 60)}m ago`}
+        />
       </div>
     </div>
   );
