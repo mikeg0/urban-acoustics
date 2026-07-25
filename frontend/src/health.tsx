@@ -188,6 +188,8 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
         latest={latest}
         lastSampleAge={lastSampleAge}
         fresh={fresh}
+        loading={state.loading}
+        onRefresh={() => load(state.range)}
       />
 
       <LedToggle deviceId={deviceId} />
@@ -239,12 +241,14 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
 }
 
 function HealthHeader({
-  deviceId, latest, lastSampleAge, fresh,
+  deviceId, latest, lastSampleAge, fresh, loading, onRefresh,
 }: {
   deviceId: string;
   latest: DeviceHealthPoint | null;
   lastSampleAge: number | null;
   fresh: boolean;
+  loading: boolean;
+  onRefresh: () => void;
 }) {
   const statusLabel = latest == null
     ? 'WAITING'
@@ -277,6 +281,30 @@ function HealthHeader({
             : lastSampleAge < 90 ? `${Math.round(lastSampleAge)}s ago`
               : `${Math.round(lastSampleAge / 60)}m ago`}
         />
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          aria-label="Refresh health"
+          title="Refresh health"
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 28, height: 28, padding: 0,
+            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6,
+            color: 'var(--ink-1)', cursor: loading ? 'wait' : 'pointer',
+            opacity: loading ? 0.55 : 1,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M13.2 5.6A5.5 5.5 0 1 0 13.4 10M13.2 2.8v2.8h-2.8"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );
