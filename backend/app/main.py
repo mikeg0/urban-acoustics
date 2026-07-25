@@ -21,6 +21,7 @@ from .api.v1 import annotations as annotations_router
 from .api.v1 import anomalies as anomalies_router
 from .api.v1 import auth as auth_router
 from .api.v1 import cameras as cameras_router
+from .api.v1 import correlated_events as correlated_events_router
 from .api.v1 import demo as demo_router
 from .api.v1 import device_health as device_health_router
 from .api.v1 import device_led as device_led_router
@@ -213,6 +214,9 @@ app.include_router(
 )
 app.include_router(device_led_router.router, prefix=V1, tags=["led"])
 app.include_router(cameras_router.router, prefix=V1, tags=["cameras"])
+app.include_router(
+    correlated_events_router.router, prefix=V1, tags=["correlated-events"]
+)
 
 # --- legacy /api/health (kept per acceptance criteria) ----------------------
 

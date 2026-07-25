@@ -11,6 +11,7 @@ export const PERM = {
   DEVICE_CONFIG_WRITE: 'device.config.write',
   DEVICE_REGISTER: 'device.register',
   USER_MANAGE: 'user.manage',
+  EVENT_CANDIDATE_MANAGE: 'event.candidate.manage',
 } as const;
 
 export type Permission = (typeof PERM)[keyof typeof PERM];
@@ -36,6 +37,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     PERM.DEVICE_CONFIG_WRITE,
     PERM.DEVICE_REGISTER,
     PERM.USER_MANAGE,
+    PERM.EVENT_CANDIDATE_MANAGE,
   ]),
 };
 

@@ -20,6 +20,7 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
     String,
     Text,
+    SmallInteger,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, REAL, UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -234,3 +235,89 @@ class ApiClient(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CorrelatedEventSettings(Base):
+    """Singleton configuration and watermark for the two-mic detector."""
+
+    __tablename__ = "correlated_event_settings"
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    outside_device_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    inside_device_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    metric: Mapped[str] = mapped_column(Text, nullable=False, default="lafmax")
+    baseline_window_s: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
+    min_baseline_samples: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    outside_rise_db: Mapped[float] = mapped_column(Float, nullable=False, default=8.0)
+    inside_rise_db: Mapped[float] = mapped_column(Float, nullable=False, default=6.0)
+    outside_min_db: Mapped[float] = mapped_column(Float, nullable=False, default=60.0)
+    inside_min_db: Mapped[float] = mapped_column(Float, nullable=False, default=45.0)
+    peak_merge_window_s: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    peak_cooldown_s: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    correlation_window_s: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    snapshot_before_s: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    snapshot_after_s: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    scan_interval_s: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    last_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class CorrelatedEventCandidate(Base):
+    """A permanent, reviewable outside-mic peak and its correlation result."""
+
+    __tablename__ = "correlated_event_candidates"
+
+    candidate_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    candidate_group: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    outside_device_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("devices.device_id"), nullable=False
+    )
+    inside_device_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("devices.device_id"), nullable=False
+    )
+    metric: Mapped[str] = mapped_column(Text, nullable=False)
+    outside_peak_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    outside_peak_db: Mapped[float] = mapped_column(Float, nullable=False)
+    outside_baseline_db: Mapped[float] = mapped_column(Float, nullable=False)
+    outside_rise_db: Mapped[float] = mapped_column(Float, nullable=False)
+    inside_peak_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    inside_peak_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inside_baseline_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inside_rise_db: Mapped[float | None] = mapped_column(Float, nullable=True)
+    snapshot_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    snapshot_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    label: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    reviewed_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CorrelatedEventFrame(Base):
+    """Retention-exempt spectrogram frame copied when a candidate is detected."""
+
+    __tablename__ = "correlated_event_frames"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "candidate_id", "device_id", "ts", name="pk_correlated_event_frames"
+        ),
+    )
+
+    candidate_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("correlated_event_candidates.candidate_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    device_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("devices.device_id"), nullable=False
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    bands: Mapped[list[float]] = mapped_column(ARRAY(REAL, dimensions=1), nullable=False)

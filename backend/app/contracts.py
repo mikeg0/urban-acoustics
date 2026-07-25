@@ -31,6 +31,126 @@ SHA256Hex = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$", description="Lowerca
 DbLevel = Annotated[float, Field(ge=_DB_MIN, le=_DB_MAX)]
 
 
+# --- Admin two-microphone candidate labeling -------------------------------
+
+DetectionMetric = Literal["laeq", "lafmax", "lcpeak"]
+CandidateGroup = Literal["correlated", "outside_only"]
+CandidateLabel = Literal["real", "wind", "unsure"]
+
+
+class CorrelatedEventSettingsResponse(BaseModel):
+    enabled: bool
+    outside_device_id: UUID
+    inside_device_id: UUID
+    metric: DetectionMetric
+    baseline_window_s: int
+    min_baseline_samples: int
+    outside_rise_db: float
+    inside_rise_db: float
+    outside_min_db: float
+    inside_min_db: float
+    peak_merge_window_s: int
+    peak_cooldown_s: int
+    correlation_window_s: int
+    snapshot_before_s: int
+    snapshot_after_s: int
+    scan_interval_s: int
+    last_processed_at: float | None
+    updated_at: float
+
+
+class CorrelatedEventSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    outside_device_id: UUID
+    inside_device_id: UUID
+    metric: DetectionMetric
+    baseline_window_s: int = Field(ge=30, le=86_400)
+    min_baseline_samples: int = Field(ge=3, le=86_400)
+    outside_rise_db: float = Field(ge=0, le=100)
+    inside_rise_db: float = Field(ge=0, le=100)
+    outside_min_db: float = Field(ge=_DB_MIN, le=_DB_MAX)
+    inside_min_db: float = Field(ge=_DB_MIN, le=_DB_MAX)
+    peak_merge_window_s: int = Field(ge=1, le=300)
+    peak_cooldown_s: int = Field(ge=0, le=3_600)
+    correlation_window_s: int = Field(ge=0, le=300)
+    snapshot_before_s: int = Field(ge=1, le=300)
+    snapshot_after_s: int = Field(ge=1, le=300)
+    scan_interval_s: int = Field(ge=1, le=300)
+
+    @model_validator(mode="after")
+    def _valid_pair_and_baseline(self) -> "CorrelatedEventSettingsUpdate":
+        if self.outside_device_id == self.inside_device_id:
+            raise ValueError("outside and inside devices must differ")
+        if self.min_baseline_samples > self.baseline_window_s:
+            raise ValueError("min_baseline_samples cannot exceed baseline_window_s")
+        return self
+
+
+class CorrelatedEventCandidateResponse(BaseModel):
+    candidate_id: UUID
+    candidate_group: CandidateGroup
+    outside_device_id: UUID
+    outside_device_name: str | None
+    inside_device_id: UUID
+    inside_device_name: str | None
+    metric: DetectionMetric
+    outside_peak_ts: float
+    outside_peak_db: float
+    outside_baseline_db: float
+    outside_rise_db: float
+    inside_peak_ts: float | None
+    inside_peak_db: float | None
+    inside_baseline_db: float | None
+    inside_rise_db: float | None
+    snapshot_start: float
+    snapshot_end: float
+    label: CandidateLabel | None
+    dismissed: bool
+    reviewed_by_email: str | None
+    reviewed_at: float | None
+    created_at: float
+    frame_count: int
+
+
+class CorrelatedEventCandidateListResponse(BaseModel):
+    items: list[CorrelatedEventCandidateResponse]
+    total: int
+    pending: int
+
+
+class CorrelatedEventCandidatePatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: CandidateLabel | None = None
+    dismissed: bool | None = None
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> "CorrelatedEventCandidatePatch":
+        if "label" not in self.model_fields_set and self.dismissed is None:
+            raise ValueError("label or dismissed is required")
+        return self
+
+
+class CorrelatedEventFrameResponse(BaseModel):
+    ts: float
+    bands: list[float]
+
+
+class CorrelatedEventFrameStream(BaseModel):
+    device_id: UUID
+    device_name: str | None
+    frames: list[CorrelatedEventFrameResponse]
+
+
+class CorrelatedEventFramesResponse(BaseModel):
+    candidate_id: UUID
+    snapshot_start: float
+    snapshot_end: float
+    streams: list[CorrelatedEventFrameStream]
+
+
 class _Forward(BaseModel):
     """Inbound device→cloud payloads. Tolerate unknown fields."""
 

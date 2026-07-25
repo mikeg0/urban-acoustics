@@ -1,6 +1,14 @@
 import type {
   AnomaliesResponse,
   CameraInfo,
+  CandidateGroup,
+  CandidateLabel,
+  CandidateReviewFilter,
+  CorrelatedEventCandidate,
+  CorrelatedEventCandidateList,
+  CorrelatedEventFrames,
+  CorrelatedEventSettings,
+  CorrelatedEventSettingsUpdate,
   DailySummaryResponse,
   Day,
   DeviceEvent,
@@ -74,6 +82,17 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 async function putJson<T>(url: string, body: unknown): Promise<T> {
   const r = await fetch(url, {
     method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throwForStatus(url, r.status);
+  return r.json();
+}
+
+async function patchJson<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -343,6 +362,43 @@ export const liveDeviceSocket = (deviceId: string): WebSocket => {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return new WebSocket(`${proto}//${window.location.host}/api/v1/devices/${deviceId}/live`);
 };
+
+// --- admin two-microphone labeling ----------------------------------------
+
+export const fetchCorrelatedEventSettings = (): Promise<CorrelatedEventSettings> =>
+  getJson<CorrelatedEventSettings>('/api/v1/admin/correlated-events/settings');
+
+export const putCorrelatedEventSettings = (
+  body: CorrelatedEventSettingsUpdate,
+): Promise<CorrelatedEventSettings> =>
+  putJson<CorrelatedEventSettings>('/api/v1/admin/correlated-events/settings', body);
+
+export const fetchCorrelatedEventCandidates = (
+  review: CandidateReviewFilter,
+  group: CandidateGroup | 'all',
+): Promise<CorrelatedEventCandidateList> => {
+  const query = new URLSearchParams({ review, limit: '250' });
+  if (group !== 'all') query.set('candidate_group', group);
+  return getJson<CorrelatedEventCandidateList>(
+    `/api/v1/admin/correlated-events/candidates?${query.toString()}`,
+  );
+};
+
+export const fetchCorrelatedEventFrames = (
+  candidateId: string,
+): Promise<CorrelatedEventFrames> =>
+  getJson<CorrelatedEventFrames>(
+    `/api/v1/admin/correlated-events/candidates/${candidateId}/frames`,
+  );
+
+export const reviewCorrelatedEventCandidate = (
+  candidateId: string,
+  body: { label?: CandidateLabel | null; dismissed?: boolean },
+): Promise<CorrelatedEventCandidate> =>
+  patchJson<CorrelatedEventCandidate>(
+    `/api/v1/admin/correlated-events/candidates/${candidateId}`,
+    body,
+  );
 
 // --- guest preview (procedurally-generated mock data) -----------------------
 // Routes under /api/v1/preview/* return DailySummaryResponse / AnomaliesResponse /

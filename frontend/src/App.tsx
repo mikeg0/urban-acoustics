@@ -14,10 +14,11 @@ import {
   liveDeviceSocket,
   previewLiveSocket,
 } from './api';
-import { useAuth } from './auth';
+import { useAuth, useHasPermission } from './auth';
 import { Card, Crumb, LiveDot, Pill, StatBig } from './atoms';
 import { Clock, UserChip } from './chrome';
 import { CameraSnapshot, useNearestCamera } from './cameras';
+import { CandidateLabelingDashboard } from './candidate_labeling';
 import { LoginPage } from './login_page';
 import { PERM, hasPermission } from './permissions';
 import {
@@ -56,7 +57,7 @@ const PREVIEW_DEVICE_ID = '00000000-0000-0000-0000-000000000000';
 
 type DataMode = 'preview' | 'real';
 
-type PageKey = 'live' | 'dashboard' | 'health';
+type PageKey = 'live' | 'dashboard' | 'health' | 'labeling';
 
 function TopBar({
   threshold, page, onPageChange, onOpenSettings, device, onBack,
@@ -68,6 +69,7 @@ function TopBar({
   device: DeviceInfo | null;
   onBack?: () => void;
 }) {
+  const canManageCandidates = useHasPermission(PERM.EVENT_CANDIDATE_MANAGE);
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -162,6 +164,19 @@ function TopBar({
               {k === 'live' ? 'Live' : k === 'dashboard' ? 'Dashboard' : 'Health'}
             </button>
           ))}
+          {canManageCandidates && (
+            <button
+              onClick={() => onPageChange('labeling')}
+              style={{
+                padding: '5px 12px', fontSize: 11, fontFamily: 'var(--mono)',
+                letterSpacing: '0.12em', textTransform: 'uppercase',
+                background: 'transparent', border: 'none', borderRadius: 4,
+                color: 'var(--ink-2)', cursor: 'pointer',
+              }}
+            >
+              Label data
+            </button>
+          )}
         </div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
           THRESHOLD <span style={{ color: 'var(--neon-hot)' }}>≥ {threshold} dB</span>
@@ -644,7 +659,7 @@ type NavState = {
 };
 
 function isPageKey(p: unknown): p is PageKey {
-  return p === 'live' || p === 'dashboard' || p === 'health';
+  return p === 'live' || p === 'dashboard' || p === 'health' || p === 'labeling';
 }
 
 function navFromUrl(): NavState {
@@ -779,9 +794,18 @@ export function App() {
 
 function AuthedApp({ mode }: { mode: DataMode }) {
   const [nav, navigate] = useNavState();
+  const canManageCandidates = useHasPermission(PERM.EVENT_CANDIDATE_MANAGE);
 
   const onPageChange = useCallback((p: PageKey) => navigate({ page: p }), [navigate]);
   const onDrillStateChange = useCallback((d: DrillState) => navigate({ drill: d }), [navigate]);
+
+  if (nav.page === 'labeling' && canManageCandidates) {
+    return (
+      <CandidateLabelingDashboard
+        onBack={() => navigate({ deviceId: null, page: 'dashboard', drill: DEFAULT_DRILL })}
+      />
+    );
+  }
 
   // Guest preview always renders a single synthetic "device" with no
   // station picker. Member+ goes through the station list to pick a real
@@ -804,6 +828,9 @@ function AuthedApp({ mode }: { mode: DataMode }) {
       <StationListView
         onPick={(d) => navigate({ deviceId: d.device_id, page: 'dashboard', drill: DEFAULT_DRILL })}
         onPickLive={(d) => navigate({ deviceId: d.device_id, page: 'live', drill: DEFAULT_DRILL })}
+        onOpenLabeling={canManageCandidates
+          ? () => navigate({ deviceId: null, page: 'labeling', drill: DEFAULT_DRILL })
+          : undefined}
       />
     );
   }
@@ -1114,4 +1141,3 @@ function DashboardApp({
     </div>
   );
 }
-

@@ -415,3 +415,86 @@ export const BAND_CENTERS_HZ: readonly number[] = [
 ];
 
 export const SPECTROGRAM_N_BANDS = BAND_CENTERS_HZ.length;
+
+// --- Admin two-microphone candidate labeling -------------------------------
+
+export type DetectionMetric = 'laeq' | 'lafmax' | 'lcpeak';
+export type CandidateGroup = 'correlated' | 'outside_only';
+export type CandidateLabel = 'real' | 'wind' | 'unsure';
+export type CandidateReviewFilter = 'pending' | 'labeled' | 'dismissed' | 'all';
+
+export interface CorrelatedEventSettings {
+  enabled: boolean;
+  outside_device_id: string;
+  inside_device_id: string;
+  metric: DetectionMetric;
+  baseline_window_s: number;
+  min_baseline_samples: number;
+  outside_rise_db: number;
+  inside_rise_db: number;
+  outside_min_db: number;
+  inside_min_db: number;
+  peak_merge_window_s: number;
+  peak_cooldown_s: number;
+  correlation_window_s: number;
+  snapshot_before_s: number;
+  snapshot_after_s: number;
+  scan_interval_s: number;
+  last_processed_at: number | null;
+  updated_at: number;
+}
+
+export type CorrelatedEventSettingsUpdate = Omit<
+  CorrelatedEventSettings,
+  'last_processed_at' | 'updated_at'
+>;
+
+export interface CorrelatedEventCandidate {
+  candidate_id: string;
+  candidate_group: CandidateGroup;
+  outside_device_id: string;
+  outside_device_name: string | null;
+  inside_device_id: string;
+  inside_device_name: string | null;
+  metric: DetectionMetric;
+  outside_peak_ts: number;
+  outside_peak_db: number;
+  outside_baseline_db: number;
+  outside_rise_db: number;
+  inside_peak_ts: number | null;
+  inside_peak_db: number | null;
+  inside_baseline_db: number | null;
+  inside_rise_db: number | null;
+  snapshot_start: number;
+  snapshot_end: number;
+  label: CandidateLabel | null;
+  dismissed: boolean;
+  reviewed_by_email: string | null;
+  reviewed_at: number | null;
+  created_at: number;
+  frame_count: number;
+}
+
+export interface CorrelatedEventCandidateList {
+  items: CorrelatedEventCandidate[];
+  total: number;
+  pending: number;
+}
+
+export interface CorrelatedEventFrame {
+  ts: number;
+  bands: number[];
+}
+
+export interface CorrelatedEventFrameStream {
+  device_id: string;
+  device_name: string | null;
+  frames: CorrelatedEventFrame[];
+}
+
+export interface CorrelatedEventFrames {
+  candidate_id: string;
+  snapshot_start: number;
+  snapshot_end: number;
+  streams: CorrelatedEventFrameStream[];
+}

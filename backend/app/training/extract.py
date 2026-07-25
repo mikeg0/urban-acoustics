@@ -9,6 +9,9 @@ Two label sources feed the same Pi-side classifier:
   ``spectrogram_annotations`` covering sub-threshold patterns
   (most wind, rain, distant helicopters). Sliced from the same
   hypertable over ``[ts_start, ts_end)``.
+* Two-mic candidates: admin-reviewed ``real``/``wind`` examples read from
+  ``correlated_event_frames``. These snapshots survive the source hypertable's
+  seven-day retention; ``unsure`` and dismissed candidates are excluded.
 
 Both sources collapse to one Pi feature row each. Annotations are capped
 per class at ``cap_ratio × audio_count`` so labeling a large number of
@@ -16,7 +19,8 @@ sub-threshold ranges doesn't drown out the loud-event distribution at
 training time.
 
 Output: ``pi_cache.npz`` with arrays ``features``, ``labels``,
-``sources`` (``'event'`` | ``'annotation'``), and ``ids`` for traceability.
+``sources`` (``'event'`` | ``'annotation'`` | ``'candidate'``), and ``ids``
+for traceability.
 """
 
 from __future__ import annotations
@@ -36,14 +40,14 @@ from sqlalchemy import desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_sessionmaker
-from ..models import Event, Label, SpectrogramAnnotation
+from ..models import CorrelatedEventCandidate, Event, Label, SpectrogramAnnotation
 from .features import N_BANDS, compute_pi_features
 
 
 log = logging.getLogger(__name__)
 
 
-Source = Literal["event", "annotation"]
+Source = Literal["event", "annotation", "candidate"]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -65,8 +69,10 @@ class ManifestRow:
 class ExtractStats:
     audio_per_class: Counter[str]
     annotation_per_class: Counter[str]
+    candidate_per_class: Counter[str]
     audio_skipped_no_frames: int = 0
     annotation_skipped_no_frames: int = 0
+    candidate_skipped_no_frames: int = 0
     annotation_capped_per_class: dict[str, int] = dataclasses.field(default_factory=dict)
 
 
@@ -133,6 +139,36 @@ async def list_annotations(session: AsyncSession) -> list[ManifestRow]:
     ]
 
 
+async def list_correlated_candidates(session: AsyncSession) -> list[ManifestRow]:
+    """Return reviewed binary candidates backed by permanent snapshots."""
+
+    rows = (
+        await session.execute(
+            select(
+                CorrelatedEventCandidate.candidate_id,
+                CorrelatedEventCandidate.outside_device_id,
+                CorrelatedEventCandidate.snapshot_start,
+                CorrelatedEventCandidate.snapshot_end,
+                CorrelatedEventCandidate.label,
+            ).where(
+                CorrelatedEventCandidate.dismissed.is_(False),
+                CorrelatedEventCandidate.label.in_(("real", "wind")),
+            )
+        )
+    ).all()
+    return [
+        ManifestRow(
+            source="candidate",
+            label=label,
+            device_id=device_id,
+            ts_start=ts_start,
+            ts_end=ts_end,
+            id=str(candidate_id),
+        )
+        for candidate_id, device_id, ts_start, ts_end, label in rows
+    ]
+
+
 async def fetch_bands(
     session: AsyncSession, row: ManifestRow
 ) -> np.ndarray | None:
@@ -142,23 +178,32 @@ async def fetch_bands(
     typical for events captured before frame storage was enabled, or
     annotations drawn over a gap in the frame stream.
     """
-    sql = text(
-        """
-        SELECT bands FROM spectrogram_frames
-        WHERE device_id = :device_id
-          AND ts >= :ts_start
-          AND ts <  :ts_end
-        ORDER BY ts
-        """
-    )
-    result = await session.execute(
-        sql,
-        {
+    if row.source == "candidate":
+        sql = text(
+            """
+            SELECT bands FROM correlated_event_frames
+            WHERE candidate_id = CAST(:candidate_id AS uuid)
+              AND device_id = :device_id
+            ORDER BY ts
+            """
+        )
+        params = {"candidate_id": row.id, "device_id": row.device_id}
+    else:
+        sql = text(
+            """
+            SELECT bands FROM spectrogram_frames
+            WHERE device_id = :device_id
+              AND ts >= :ts_start
+              AND ts <  :ts_end
+            ORDER BY ts
+            """
+        )
+        params = {
             "device_id": row.device_id,
             "ts_start": row.ts_start,
             "ts_end": row.ts_end,
-        },
-    )
+        }
+    result = await session.execute(sql, params)
     frames = [r[0] for r in result.all()]
     if not frames:
         return None
@@ -200,7 +245,7 @@ def apply_annotation_cap(
             rows = rows[:budget]
         kept_annotations.extend(rows)
 
-    capped = [r for r in manifest if r.source == "event"] + kept_annotations
+    capped = [r for r in manifest if r.source != "annotation"] + kept_annotations
     return capped, capped_counts
 
 
@@ -215,7 +260,8 @@ async def build_dataset(
     """
     events = await latest_event_labels(session)
     annotations = await list_annotations(session)
-    manifest = events + annotations
+    candidates = await list_correlated_candidates(session)
+    manifest = events + annotations + candidates
 
     capped, capped_counts = apply_annotation_cap(manifest, cap_ratio=cap_ratio)
 
@@ -223,6 +269,9 @@ async def build_dataset(
         audio_per_class=Counter(r.label for r in capped if r.source == "event"),
         annotation_per_class=Counter(
             r.label for r in capped if r.source == "annotation"
+        ),
+        candidate_per_class=Counter(
+            r.label for r in capped if r.source == "candidate"
         ),
         annotation_capped_per_class=capped_counts,
     )
@@ -236,8 +285,10 @@ async def build_dataset(
         if bands is None:
             if row.source == "event":
                 stats.audio_skipped_no_frames += 1
-            else:
+            elif row.source == "annotation":
                 stats.annotation_skipped_no_frames += 1
+            else:
+                stats.candidate_skipped_no_frames += 1
             continue
         feat_rows.append(compute_pi_features(bands))
         label_rows.append(row.label)
@@ -286,15 +337,24 @@ def _print_stats(stats: ExtractStats, *, n_rows: int) -> None:
         log.info("extract: annotations per class (after cap):")
         for label, n in sorted(stats.annotation_per_class.items()):
             log.info("  %-15s %d", label, n)
+    if stats.candidate_per_class:
+        log.info("extract: reviewed two-mic candidates per class:")
+        for label, n in sorted(stats.candidate_per_class.items()):
+            log.info("  %-15s %d", label, n)
     if stats.annotation_capped_per_class:
         log.info("extract: dropped by cap:")
         for label, n in sorted(stats.annotation_capped_per_class.items()):
             log.info("  %-15s %d", label, n)
-    if stats.audio_skipped_no_frames or stats.annotation_skipped_no_frames:
+    if (
+        stats.audio_skipped_no_frames
+        or stats.annotation_skipped_no_frames
+        or stats.candidate_skipped_no_frames
+    ):
         log.info(
-            "extract: skipped (no frames) — events=%d annotations=%d",
+            "extract: skipped (no frames) — events=%d annotations=%d candidates=%d",
             stats.audio_skipped_no_frames,
             stats.annotation_skipped_no_frames,
+            stats.candidate_skipped_no_frames,
         )
 
 
@@ -315,7 +375,9 @@ async def _amain(args: argparse.Namespace) -> int:
     low_classes = [
         label
         for label, count in (
-            stats.audio_per_class + stats.annotation_per_class
+            stats.audio_per_class
+            + stats.annotation_per_class
+            + stats.candidate_per_class
         ).items()
         if count < 5
     ]

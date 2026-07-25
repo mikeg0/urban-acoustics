@@ -23,6 +23,7 @@ EVENT_DELETE: Final = "event.delete"
 DEVICE_CONFIG_WRITE: Final = "device.config.write"
 DEVICE_REGISTER: Final = "device.register"
 USER_MANAGE: Final = "user.manage"
+EVENT_CANDIDATE_MANAGE: Final = "event.candidate.manage"
 
 ALL_PERMISSIONS: Final[frozenset[str]] = frozenset(
     {
@@ -34,6 +35,7 @@ ALL_PERMISSIONS: Final[frozenset[str]] = frozenset(
         DEVICE_CONFIG_WRITE,
         DEVICE_REGISTER,
         USER_MANAGE,
+        EVENT_CANDIDATE_MANAGE,
     }
 )
 
@@ -59,6 +61,7 @@ ROLE_PERMISSIONS: Final[dict[str, frozenset[str]]] = {
             DEVICE_CONFIG_WRITE,
             DEVICE_REGISTER,
             USER_MANAGE,
+            EVENT_CANDIDATE_MANAGE,
         }
     ),
 }

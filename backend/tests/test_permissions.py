@@ -38,18 +38,21 @@ def test_every_role_uses_only_known_permissions() -> None:
         ("guest", "live.realtime", False),
         ("guest", "event.delete", False),
         ("guest", "user.manage", False),
+        ("guest", "event.candidate.manage", False),
         # Member: real data + live, no writes.
         ("member", "dashboard.preview", False),
         ("member", "dashboard.view", True),
         ("member", "live.realtime", True),
         ("member", "event.label.write", False),
         ("member", "event.delete", False),
+        ("member", "event.candidate.manage", False),
         # Contributor: + label and delete events.
         ("contributor", "dashboard.view", True),
         ("contributor", "event.label.write", True),
         ("contributor", "event.delete", True),
         ("contributor", "device.config.write", False),
         ("contributor", "user.manage", False),
+        ("contributor", "event.candidate.manage", False),
         # Admin: everything except dashboard.preview (preview is a guest-only feature).
         ("admin", "device.config.write", True),
         ("admin", "device.register", True),
@@ -57,6 +60,7 @@ def test_every_role_uses_only_known_permissions() -> None:
         ("admin", "event.delete", True),
         ("admin", "live.realtime", True),
         ("admin", "dashboard.preview", False),
+        ("admin", "event.candidate.manage", True),
     ],
 )
 def test_has_permission_matrix(role: str, permission: str, expected: bool) -> None:

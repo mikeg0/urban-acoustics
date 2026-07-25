@@ -118,6 +118,27 @@ services:
       - mosquitto
     restart: unless-stopped
 
+  detector:
+    # Cloud-side adaptive detector. It consumes the durable 1 Hz telemetry
+    # table and snapshots candidate spectrograms; no Pi configuration changes.
+    image: urban-acoustics-backend
+    container_name: urban-acoustics-detector
+    command: ["python", "-m", "app.detection.worker"]
+    volumes:
+      - ./backend/app:/app/app
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: "postgresql+asyncpg://urban_acoustics:urban_acoustics_dev@postgres:5432/urban_acoustics"
+      LOG_LEVEL: "INFO"
+    networks:
+      - traefik
+    depends_on:
+      backend:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
