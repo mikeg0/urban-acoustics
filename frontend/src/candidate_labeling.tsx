@@ -10,6 +10,8 @@ import {
   fetchCorrelatedEventCandidates,
   fetchCorrelatedEventFrames,
   fetchCorrelatedEventSettings,
+  fetchEventPlaybackUrl,
+  fetchEventsInRange,
   putCorrelatedEventSettings,
   reviewCorrelatedEventCandidate,
 } from './api';
@@ -81,6 +83,68 @@ function streamMatrix(frames: CorrelatedEventFrames['streams'][number]['frames']
   );
 }
 
+function SnapshotAudio({
+  deviceId,
+  fromTs,
+  toTs,
+  peakTs,
+}: {
+  deviceId: string | undefined;
+  fromTs: number;
+  toTs: number;
+  peakTs: number | null;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'empty'>('loading');
+
+  useEffect(() => {
+    setUrl(null);
+    setStatus('loading');
+    if (!deviceId) return;
+    let cancelled = false;
+    fetchEventsInRange(deviceId, fromTs, toTs)
+      .then((events) => {
+        const playable = events.filter((event) =>
+          event.status === 'available' || event.status === 'uploaded');
+        const nearest = playable.sort((a, b) =>
+          Math.abs(a.ts - (peakTs ?? fromTs)) - Math.abs(b.ts - (peakTs ?? fromTs)))[0];
+        if (!nearest) return null;
+        return fetchEventPlaybackUrl(nearest.event_id);
+      })
+      .then((playback) => {
+        if (cancelled) return;
+        if (playback) {
+          setUrl(playback.url);
+          setStatus('ready');
+        } else {
+          setStatus('empty');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('empty');
+      });
+    return () => { cancelled = true; };
+  }, [deviceId, fromTs, toTs, peakTs]);
+
+  if (status !== 'ready' || !url) {
+    return (
+      <div className="mono" style={{ height: 32, display: 'grid', placeItems: 'center', color: 'var(--ink-3)', fontSize: 9 }}>
+        {status === 'loading' ? 'LOADING AUDIO…' : 'NO AUDIO CLIP IN SNAPSHOT'}
+      </div>
+    );
+  }
+
+  return (
+    <audio
+      controls
+      preload="metadata"
+      src={url}
+      aria-label="Snapshot audio playback"
+      style={{ display: 'block', width: '100%', height: 32, colorScheme: 'dark' }}
+    />
+  );
+}
+
 function CandidateList({
   items,
   selectedId,
@@ -147,14 +211,20 @@ function MicSnapshot({
   title,
   frames,
   peak,
+  peakTs,
   baseline,
   rise,
+  snapshotStart,
+  snapshotEnd,
 }: {
   title: string;
   frames: CorrelatedEventFrames['streams'][number] | undefined;
   peak: number | null;
+  peakTs: number | null;
   baseline: number | null;
   rise: number | null;
+  snapshotStart: number;
+  snapshotEnd: number;
 }) {
   const matrix = useMemo(() => streamMatrix(frames?.frames ?? []), [frames]);
   return (
@@ -178,6 +248,14 @@ function MicSnapshot({
           NO SNAPSHOTTED FRAMES
         </div>
       )}
+      <div style={{ marginTop: 8 }}>
+        <SnapshotAudio
+          deviceId={frames?.device_id}
+          fromTs={snapshotStart}
+          toTs={snapshotEnd}
+          peakTs={peakTs}
+        />
+      </div>
       <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 6 }}>
         {frames?.frames.length ?? 0} permanent frames · low → high frequency, bottom → top
       </div>
@@ -227,15 +305,21 @@ function CandidateDetail({
           title="OUTSIDE · WIND-EXPOSED"
           frames={outside}
           peak={candidate.outside_peak_db}
+          peakTs={candidate.outside_peak_ts}
           baseline={candidate.outside_baseline_db}
           rise={candidate.outside_rise_db}
+          snapshotStart={candidate.snapshot_start}
+          snapshotEnd={candidate.snapshot_end}
         />
         <MicSnapshot
           title="INSIDE · WIND-IMMUNE"
           frames={inside}
           peak={candidate.inside_peak_db}
+          peakTs={candidate.inside_peak_ts}
           baseline={candidate.inside_baseline_db}
           rise={candidate.inside_rise_db}
+          snapshotStart={candidate.snapshot_start}
+          snapshotEnd={candidate.snapshot_end}
         />
       </div>
 
