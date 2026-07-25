@@ -23,21 +23,41 @@ T0 = datetime(2025, 12, 3, 2, 45, tzinfo=timezone.utc)
 
 
 class _StubSession:
-    """Async-session stub: ``get`` returns the device, ``execute`` the rows."""
+    """Async-session stub: ``get`` returns the device; ``execute`` serves two
+    queries — the telemetry ``text()`` (called with a params dict, iterated
+    directly) and the events ``select(Event)`` (called with no params, consumed
+    via ``.scalars().all()``). Branch on whether params were passed."""
 
-    def __init__(self, *, device: object | None, rows: list | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        device: object | None,
+        rows: list | None = None,
+        events: list | None = None,
+    ) -> None:
         self._device = device
         self._rows = rows or []
+        self._events = events or []
 
     async def get(self, _model, _id):
         return self._device
 
-    async def execute(self, _sql, _params=None):
+    async def execute(self, _stmt, _params=None):
+        if _params is None:
+            # events: select(Event) → result.scalars().all()
+            return SimpleNamespace(
+                scalars=lambda: SimpleNamespace(all=lambda: list(self._events))
+            )
+        # telemetry: text() SQL + params, iterated directly
         return list(self._rows)
 
 
 def _row(ts: datetime, laeq: float, lafmax: float, lcpeak: float) -> SimpleNamespace:
     return SimpleNamespace(ts=ts, laeq=laeq, lafmax=lafmax, lcpeak=lcpeak)
+
+
+def _event(ts: datetime, peak_db: float, duration_s: float, classification: str | None) -> SimpleNamespace:
+    return SimpleNamespace(ts=ts, peak_db=peak_db, duration_s=duration_s, classification=classification)
 
 
 async def _call(session, *, from_=T0, to=T0 + timedelta(hours=1), res=TelemetryResolution.ONE_MINUTE):
@@ -70,9 +90,30 @@ async def test_points_shape_and_iso_ts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_empty_window_returns_no_points() -> None:
-    resp = await _call(_StubSession(device=SimpleNamespace(), rows=[]))
+async def test_events_embedded_with_iso_ts_and_classification() -> None:
+    events = [
+        _event(T0 + timedelta(minutes=2), 92.4, 1.5, "motorcycle"),
+        _event(T0 + timedelta(minutes=40), 78.1, 0.8, None),
+    ]
+    resp = await _call(
+        _StubSession(device=SimpleNamespace(device_id=DEVICE), rows=[], events=events)
+    )
+    assert len(resp.events) == 2
+    e0 = resp.events[0]
+    assert (e0.peak_db, e0.duration_s, e0.classification) == (92.4, 1.5, "motorcycle")
+    assert resp.events[1].classification is None
+
+    dumped = resp.model_dump(mode="json")
+    ts = dumped["events"][0]["ts"]
+    assert ts.startswith("2025-12-03T02:47:00")
+    assert ts.endswith("Z") or ts.endswith("+00:00")
+
+
+@pytest.mark.asyncio
+async def test_empty_window_returns_no_points_or_events() -> None:
+    resp = await _call(_StubSession(device=SimpleNamespace(), rows=[], events=[]))
     assert resp.points == []
+    assert resp.events == []
 
 
 @pytest.mark.asyncio

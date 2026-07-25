@@ -6,22 +6,26 @@
 window caps, device-existence check, and the hypertable / continuous-aggregate
 SQL in one place stops the two endpoints' semantics from drifting.
 
+``fetch_events`` is the by-device+window events query, shared the same way (used
+by the partner noise endpoint, which embeds events alongside the curve).
+
 Callers pass tz-aware datetimes and format the returned ``ts`` however their
 wire contract needs (Unix seconds for telemetry, ISO-8601 for partner).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .contracts import TelemetryResolution
-from .models import Device
+from .models import Device, Event
 
 # Resolution → (continuous-aggregate view name or None for raw, max window secs).
 # `raw` reads the hypertable directly; the cap stays so a careless wide window
@@ -92,3 +96,32 @@ async def fetch_telemetry_points(
         TelemetryRow(ts=row.ts, laeq=row.laeq, lafmax=row.lafmax, lcpeak=row.lcpeak)
         for row in result
     ]
+
+
+async def fetch_events(
+    session: AsyncSession,
+    device_id: UUID,
+    from_dt: datetime,
+    to_dt: datetime,
+    limit: int = 2000,
+) -> Sequence[Event]:
+    """Return the device's acoustic events in ``[from_dt, to_dt)``, oldest first.
+
+    Same by-device+window pattern as the dashboard's ``GET /events``
+    (``api/v1/events.py``). No device-existence check — callers that embed
+    events in a larger response (the partner noise endpoint) already 404 via
+    :func:`fetch_telemetry_points`. ``limit`` is a safety cap; a night window is
+    typically well under it.
+    """
+    stmt = (
+        select(Event)
+        .where(
+            Event.device_id == device_id,
+            Event.ts >= from_dt,
+            Event.ts < to_dt,
+        )
+        .order_by(Event.ts)
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()

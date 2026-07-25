@@ -209,6 +209,26 @@ Place the device's mTLS material at the paths referenced by the config:
 /etc/urban-acoustics/certs/device.key
 ```
 
+⚠️ `root-ca.crt` must be a **bundle of two CAs** concatenated into one PEM
+file: the urban-acoustics dev root CA (`backend/certs/root-ca.crt`) *and*
+the CA that signs the REST API's TLS certificate (for the dev stack that is
+the "ConexED Development" CA behind `*.dev.conexed.com` — copy
+`/usr/local/share/ca-certificates/wildcard-dev-conexed.crt` from an existing
+node). The firmware verifies both the MQTT broker and the HTTPS API against
+this single file (`transport.py`), so with only the MQTT CA present,
+telemetry works but every event upload fails TLS and spools to the local
+queue until the bundle is fixed.
+
+Also drop in the trained classifier weights:
+
+```
+/etc/urban-acoustics/pi_head.npz
+```
+
+They are not in the repo — copy them from an existing node or the training
+pipeline output. A missing file simply disables on-device auto-labeling
+(see `classifier_path` in `urban_acoustics/config.py`).
+
 Create `/etc/urban-acoustics/config.json` (only `device_id` is required;
 every other key has a sensible default — see `urban_acoustics/config.py`):
 

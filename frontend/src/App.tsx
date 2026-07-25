@@ -117,7 +117,7 @@ function TopBar({
             <LiveDot />
           ) : (
             <span
-              title="Sensor offline · awaiting field deployment"
+              title="Sensor offline · no recent telemetry"
               style={{
                 width: 8,
                 height: 8,
@@ -803,6 +803,7 @@ function AuthedApp({ mode }: { mode: DataMode }) {
     return (
       <StationListView
         onPick={(d) => navigate({ deviceId: d.device_id, page: 'dashboard', drill: DEFAULT_DRILL })}
+        onPickLive={(d) => navigate({ deviceId: d.device_id, page: 'live', drill: DEFAULT_DRILL })}
       />
     );
   }
@@ -933,9 +934,15 @@ function DashboardApp({
   const [device, setDevice] = useState<DeviceInfo | null>(null);
   useEffect(() => {
     if (!deviceId || isPreview) return;
-    fetchDevice(deviceId)
-      .then(setDevice)
-      .catch(() => { /* fall back to synthetic city.sensor */ });
+    // Refetch on an interval so the online badge tracks last_seen as it ages.
+    const load = () => {
+      fetchDevice(deviceId)
+        .then(setDevice)
+        .catch(() => { /* fall back to synthetic city.sensor */ });
+    };
+    load();
+    const id = setInterval(load, 60_000);
+    return () => clearInterval(id);
   }, [deviceId, isPreview]);
 
   useEffect(() => {

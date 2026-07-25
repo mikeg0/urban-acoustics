@@ -765,13 +765,18 @@ export function RealLiveView({ deviceId, threshold }: RealLiveViewProps) {
     };
   }, [deviceId]);
 
-  // Device metadata: fetched once.
+  // Device metadata: refetched on an interval so the online badge tracks
+  // last_seen as it ages. Refetch errors keep the last good metadata.
   useEffect(() => {
     let cancelled = false;
-    fetchDevice(deviceId)
-      .then((d) => { if (!cancelled) setDevice(d); })
-      .catch((e: Error) => { if (!cancelled) setDeviceError(e.message); });
-    return () => { cancelled = true; };
+    const load = (initial: boolean) => {
+      fetchDevice(deviceId)
+        .then((d) => { if (!cancelled) setDevice(d); })
+        .catch((e: Error) => { if (!cancelled && initial) setDeviceError(e.message); });
+    };
+    load(true);
+    const id = setInterval(() => load(false), 60_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [deviceId]);
 
   // Telemetry: poll every 5s. Live WS ticks (when available) interleave into

@@ -4,6 +4,10 @@ Documentation=https://github.com/conexed/urban-acoustics
 After=network-online.target sound.target chrony.service
 Wants=network-online.target sound.target
 
+# Don't restart-storm a wedged pi.
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
 [Service]
 Type=simple
 User=urban-acoustics
@@ -19,9 +23,6 @@ ExecStart=/opt/urban-acoustics/venv/bin/python -m urban_acoustics
 
 Restart=on-failure
 RestartSec=10
-# Don't restart-storm a wedged pi.
-StartLimitBurst=5
-StartLimitIntervalSec=300
 
 # Stop politely so a current FLAC encode + MQTT done publish can flush.
 KillSignal=SIGTERM

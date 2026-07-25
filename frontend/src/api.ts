@@ -36,7 +36,18 @@ export class ApiAuthError extends Error {
   }
 }
 
+// Fired on window whenever any API call comes back 401 — the session cookie
+// expired or was revoked. AuthProvider listens and re-checks /auth/me, which
+// drops a dead session to null and routes the app back to <LoginPage/>.
+// Dispatched here (not in callers) so even components that swallow fetch
+// errors still trigger the redirect. 403 deliberately does NOT fire it:
+// that's a logged-in user lacking a permission, not a dead session.
+export const SESSION_EXPIRED_EVENT = 'ua:session-expired';
+
 function throwForStatus(url: string, status: number): never {
+  if (status === 401) {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
   if (status === 401 || status === 403) {
     throw new ApiAuthError(status, `${url} → ${status}`);
   }
@@ -241,6 +252,9 @@ export const submitAnnotation = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  // 401 goes through the shared path so it fires SESSION_EXPIRED_EVENT; the
+  // AnnotationApiError detail plumbing below only matters for 400/409.
+  if (r.status === 401) throwForStatus(url, r.status);
   if (!r.ok) {
     let detail: unknown = null;
     try {

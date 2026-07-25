@@ -94,12 +94,13 @@ interface StationRow {
   status: StationStatus;
 }
 
-// Pilot rollout: only the first sensor (200 S & State, UQI-ST-03) is in the
-// field reporting. Other corridor sites are placeholders shown offline.
-const ONLINE_STATION_CODES = new Set(['UQI-ST-03']);
+// A station is "online" when ingest has seen traffic from it recently.
+// last_seen is server time (Unix seconds); the 5-minute window absorbs
+// missed beats, the refetch cadence, and modest client clock skew.
+export const ONLINE_THRESHOLD_S = 300;
 
 function toRow(d: DeviceInfo): StationRow {
-  const online = ONLINE_STATION_CODES.has(stationCode(d));
+  const online = isDeviceOnline(d);
   return {
     device: d,
     db: null,
@@ -120,7 +121,11 @@ export function stationCode(d: DeviceInfo): string {
 }
 
 export function isDeviceOnline(d: DeviceInfo | null): boolean {
-  return d != null && ONLINE_STATION_CODES.has(stationCode(d));
+  return (
+    d != null &&
+    d.last_seen != null &&
+    Date.now() / 1000 - d.last_seen < ONLINE_THRESHOLD_S
+  );
 }
 
 // Strip the "UQI-XX-NN · " prefix so the displayed station name reads
@@ -411,8 +416,16 @@ function MapLegend() {
 // dropped 1-minute buckets without flipping the pin to "—".
 const LATEST_WINDOW_S = 5 * 60;
 const LATEST_POLL_MS = 30_000;
+const DEVICES_REFRESH_MS = 60_000;
 
-export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void }) {
+export function StationListView({
+  onPick,
+  onPickLive,
+}: {
+  onPick: (d: DeviceInfo) => void;
+  // Map pin clicks route here when provided (live view); list rows use onPick.
+  onPickLive?: (d: DeviceInfo) => void;
+}) {
   const [devices, setDevices] = useState<DeviceInfo[] | null>(null);
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -431,13 +444,20 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
 
   useEffect(() => {
     let cancelled = false;
-    fetchDevices()
-      .then((d) => {
-        if (!cancelled) setDevices(d);
-      })
-      .catch((e: Error) => {
-        if (!cancelled) setError(e.message);
-      });
+    // Refetch on an interval so last_seen (and thus online-ness) stays
+    // current on a long-open page. A transient refetch failure keeps the
+    // last good list rather than blanking the view.
+    const load = (initial: boolean) => {
+      fetchDevices()
+        .then((d) => {
+          if (!cancelled) setDevices(d);
+        })
+        .catch((e: Error) => {
+          if (!cancelled && initial) setError(e.message);
+        });
+    };
+    load(true);
+    const refetchId = setInterval(() => load(false), DEVICES_REFRESH_MS);
     // Cameras are independent and small — fetch in parallel. A failure here
     // shouldn't block the station list, so swallow errors and leave the
     // cameras array empty.
@@ -450,6 +470,7 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
       });
     return () => {
       cancelled = true;
+      clearInterval(refetchId);
     };
   }, []);
 
@@ -608,7 +629,7 @@ export function StationListView({ onPick }: { onPick: (d: DeviceInfo) => void })
             deviceCameraMap={deviceCameraMap}
             hovered={hovered}
             onHover={setHovered}
-            onPick={onPick}
+            onPick={onPickLive ?? onPick}
           />
           <MapLegend />
         </div>

@@ -8,7 +8,9 @@ discovery, and a per-device noise curve for a time window.
 
 The noise curve is the same telemetry the dashboard reads (shared
 ``fetch_telemetry_points`` helper), serialized with ISO-8601 timestamps so the
-consumer does zero timestamp conversion.
+consumer does zero timestamp conversion. The same response embeds the discrete
+acoustic ``events`` (threshold-crossing clips) in the window, so a consumer gets
+both the curve and the disturbance markers in one call.
 """
 
 from __future__ import annotations
@@ -21,10 +23,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth.api_key import require_api_key
-from ...contracts import NoiseCurvePoint, NoiseCurveResponse, TelemetryResolution
+from ...contracts import (
+    NoiseCurvePoint,
+    NoiseCurveResponse,
+    NoiseEvent,
+    TelemetryResolution,
+)
 from ...db import get_session
 from ...models import Device
-from ...queries import fetch_telemetry_points
+from ...queries import fetch_events, fetch_telemetry_points
 from .devices import DeviceResponse, _to_response
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
@@ -56,6 +63,7 @@ async def get_device_noise(
             detail="`from` and `to` must be timezone-aware ISO-8601 (include an offset, e.g. Z)",
         )
     rows = await fetch_telemetry_points(session, device_id, from_, to, res)
+    events = await fetch_events(session, device_id, from_, to)
     return NoiseCurveResponse(
         device_id=device_id,
         resolution=res,
@@ -64,5 +72,14 @@ async def get_device_noise(
         points=[
             NoiseCurvePoint(ts=r.ts, laeq=r.laeq, lafmax=r.lafmax, lcpeak=r.lcpeak)
             for r in rows
+        ],
+        events=[
+            NoiseEvent(
+                ts=e.ts,
+                peak_db=e.peak_db,
+                duration_s=e.duration_s,
+                classification=e.classification,
+            )
+            for e in events
         ],
     )

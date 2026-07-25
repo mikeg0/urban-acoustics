@@ -284,6 +284,17 @@ class NoiseCurvePoint(BaseModel):
     lcpeak: float
 
 
+class NoiseEvent(BaseModel):
+    """A discrete acoustic event — the sensor opened a clip because LAFmax
+    crossed the device's ``event_threshold_db``. ``classification`` is the
+    on-device/backend ML label (car / motorcycle / truck / …)."""
+
+    ts: datetime
+    peak_db: float
+    duration_s: float
+    classification: str | None = None
+
+
 class NoiseCurveResponse(BaseModel):
     device_id: UUID
     resolution: TelemetryResolution
@@ -291,6 +302,7 @@ class NoiseCurveResponse(BaseModel):
     from_ts: datetime
     to_ts: datetime
     points: list[NoiseCurvePoint]
+    events: list[NoiseEvent] = []
 
 
 # --- REST: device-health read ------------------------------------------------

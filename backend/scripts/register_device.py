@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from cryptography import x509  # type: ignore[import-not-found]
+from cryptography.hazmat.primitives.serialization import Encoding  # type: ignore[import-not-found]
+from cryptography.x509.oid import NameOID  # type: ignore[import-not-found]
 
 # The script is run as ``python -m scripts.register_device`` from /app; bring
 # the package onto sys.path so imports work regardless of cwd.
@@ -34,9 +36,9 @@ from app.models import Device, DeviceCert  # noqa: E402
 def _parse_cert(path: pathlib.Path) -> tuple[str, str, datetime, datetime]:
     pem = path.read_bytes()
     cert = x509.load_pem_x509_certificate(pem)
-    der = cert.public_bytes(encoding=x509.Encoding.DER)  # type: ignore[attr-defined]
+    der = cert.public_bytes(encoding=Encoding.DER)
     fingerprint = hashlib.sha256(der).hexdigest()
-    cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+    cn = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     return fingerprint, cn, cert.not_valid_before_utc, cert.not_valid_after_utc
 
 

@@ -34,6 +34,21 @@ def encode_access_token(user_id: str, role: str, ttl_seconds: int | None = None)
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
+def should_reissue(payload: TokenPayload, now: int | None = None) -> bool:
+    """Sliding-session threshold: True once the token is past half its lifetime.
+
+    Half is early enough that a browser polling at any reasonable interval
+    keeps its session alive indefinitely, while capping re-issue churn at
+    roughly two cookies per TTL for an active client.
+    """
+    if now is None:
+        now = int(time.time())
+    lifetime = payload.exp - payload.iat
+    if lifetime <= 0:
+        return True
+    return (now - payload.iat) * 2 >= lifetime
+
+
 def decode_access_token(token: str) -> TokenPayload | None:
     settings = get_settings()
     try:
