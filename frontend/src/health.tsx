@@ -188,11 +188,13 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
         latest={latest}
         lastSampleAge={lastSampleAge}
         fresh={fresh}
+      />
+
+      <LedToggle
+        deviceId={deviceId}
         loading={state.loading}
         onRefresh={() => load(state.range)}
       />
-
-      <LedToggle deviceId={deviceId} />
 
       <RangeBar
         range={state.range}
@@ -241,14 +243,12 @@ export function RealHealthView({ deviceId }: RealHealthViewProps) {
 }
 
 function HealthHeader({
-  deviceId, latest, lastSampleAge, fresh, loading, onRefresh,
+  deviceId, latest, lastSampleAge, fresh,
 }: {
   deviceId: string;
   latest: DeviceHealthPoint | null;
   lastSampleAge: number | null;
   fresh: boolean;
-  loading: boolean;
-  onRefresh: () => void;
 }) {
   const statusLabel = latest == null
     ? 'WAITING'
@@ -265,30 +265,6 @@ function HealthHeader({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <Pill tone={tone} icon>{statusLabel}</Pill>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={loading}
-          aria-label="Refresh health"
-          title="Refresh health"
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 28, height: 28, padding: 0,
-            background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6,
-            color: 'var(--ink-1)', cursor: loading ? 'wait' : 'pointer',
-            opacity: loading ? 0.55 : 1,
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M13.2 5.6A5.5 5.5 0 1 0 13.4 10M13.2 2.8v2.8h-2.8"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
         <span className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
           ID {deviceId}
         </span>
@@ -335,7 +311,13 @@ const LED_MODE_OPTIONS: readonly { mode: LedMode; label: string }[] = [
   { mode: 'off',  label: 'Off'  },
 ];
 
-function LedToggle({ deviceId }: { deviceId: string }) {
+function LedToggle({
+  deviceId, loading, onRefresh,
+}: {
+  deviceId: string;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
   const [mode, setMode] = useState<LedMode>('auto');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -414,6 +396,30 @@ function LedToggle({ deviceId }: { deviceId: string }) {
           {error}
         </span>
       )}
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={loading}
+        aria-label="Refresh health"
+        title="Refresh health"
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 28, height: 28, marginLeft: 'auto', padding: 0,
+          background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6,
+          color: 'var(--ink-1)', cursor: loading ? 'wait' : 'pointer',
+          opacity: loading ? 0.55 : 1,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M13.2 5.6A5.5 5.5 0 1 0 13.4 10M13.2 2.8v2.8h-2.8"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
     </div>
   );
 }
