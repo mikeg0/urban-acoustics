@@ -222,7 +222,7 @@ function CandidateDetail({
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
         <MicSnapshot
           title="OUTSIDE · WIND-EXPOSED"
           frames={outside}
