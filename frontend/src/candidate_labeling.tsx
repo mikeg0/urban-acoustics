@@ -495,22 +495,18 @@ function MicSnapshot({
 
   return (
     <div style={{ minWidth: 0, padding: 12, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-1)' }}>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, marginBottom: 8 }}>
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{title}</div>
-          {headerNotice && (
-            <div className="mono" style={{ color: 'var(--neon-warn)', fontSize: 9, textAlign: 'right' }}>
-              {headerNotice}
-            </div>
-          )}
-        </div>
-        <div className="mono" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 9, color: 'var(--ink-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{title}</div>
+        <div className="mono" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginLeft: 'auto', fontSize: 9, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
           <span>{peak == null ? 'NO PEAK' : `${peak.toFixed(1)} dB PEAK`}</span>
           <span style={{ color: 'var(--ink-3)' }}>
             {baseline == null || rise == null
               ? `— · ${frames?.frames.length ?? 0} permanent frames`
               : `${baseline.toFixed(1)} baseline · ${frames?.frames.length ?? 0} permanent frames · +${rise.toFixed(1)}`}
           </span>
+          {headerNotice && (
+            <span style={{ color: 'var(--neon-warn)' }}>{headerNotice}</span>
+          )}
         </div>
       </div>
       {matrix.length ? (
