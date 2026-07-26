@@ -592,94 +592,104 @@ function CandidateDetail({
   }, [candidate?.candidate_id]);
 
   if (!candidate) {
-    return <div className="mono" style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--ink-3)' }}>SELECT A CANDIDATE</div>;
+    return (
+      <>
+        <Card padding={0}>
+          <div className="mono" style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--ink-3)' }}>SELECT A CANDIDATE</div>
+        </Card>
+        <Card title="SOURCE TAGS" padding={14}>
+          <div className="mono" style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--ink-3)' }}>SELECT A CANDIDATE TO TAG</div>
+        </Card>
+      </>
+    );
   }
   const outside = frames?.streams.find((s) => s.device_id === candidate.outside_device_id);
   const inside = frames?.streams.find((s) => s.device_id === candidate.inside_device_id);
   return (
-    <div style={{ padding: 14, overflow: 'hidden', minHeight: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 12 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h2 style={{ fontSize: 18, margin: 0, fontWeight: 550 }}>{formatMoment(candidate.outside_peak_ts)}</h2>
-            <Pill tone={candidate.candidate_group === 'correlated' ? 'cool' : 'warn'}>
-              {candidate.candidate_group.replace('_', ' ').toUpperCase()}
-            </Pill>
-            <Pill tone={candidate.labelable ? 'ok' : 'hot'}>
-              {candidate.labelable ? 'AUDIO READY' : `AUDIO ${candidate.audio_state.toUpperCase()}`}
-            </Pill>
+    <>
+      <Card padding={0}>
+        <div style={{ padding: 14, overflow: 'hidden', minHeight: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 12 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h2 style={{ fontSize: 18, margin: 0, fontWeight: 550 }}>{formatMoment(candidate.outside_peak_ts)}</h2>
+                <Pill tone={candidate.candidate_group === 'correlated' ? 'cool' : 'warn'}>
+                  {candidate.candidate_group.replace('_', ' ').toUpperCase()}
+                </Pill>
+                <Pill tone={candidate.labelable ? 'ok' : 'hot'}>
+                  {candidate.labelable ? 'AUDIO READY' : `AUDIO ${candidate.audio_state.toUpperCase()}`}
+                </Pill>
+              </div>
+              <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
+                {candidate.candidate_id} · metric {candidate.metric.toUpperCase()} · ±{((candidate.snapshot_end - candidate.snapshot_start) / 2).toFixed(0)}s snapshot
+              </div>
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', textAlign: 'right' }}>
+              {candidate.reviewed_at
+                ? `Reviewed ${formatMoment(candidate.reviewed_at)}${candidate.reviewed_by_email ? ` by ${candidate.reviewed_by_email}` : ''}`
+                : 'Awaiting review'}
+            </div>
           </div>
-          <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
-            {candidate.candidate_id} · metric {candidate.metric.toUpperCase()} · ±{((candidate.snapshot_end - candidate.snapshot_start) / 2).toFixed(0)}s snapshot
-          </div>
-        </div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', textAlign: 'right' }}>
-          {candidate.reviewed_at
-            ? `Reviewed ${formatMoment(candidate.reviewed_at)}${candidate.reviewed_by_email ? ` by ${candidate.reviewed_by_email}` : ''}`
-            : 'Awaiting review'}
-        </div>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-        <MicSnapshot
-          title="OUTSIDE · WIND-EXPOSED"
-          frames={outside}
-          peak={candidate.outside_peak_db}
-          baseline={candidate.outside_baseline_db}
-          rise={candidate.outside_rise_db}
-          audioRef={outsideAudioRef}
-          playbackTime={outsidePlayback}
-          audioStartTs={outsideEvent?.ts ?? null}
-          clipStartTs={outsideEvent?.ts ?? null}
-          clipDurationS={outsideEvent?.duration_s ?? null}
-          snapshotStart={candidate.snapshot_start}
-          snapshotEnd={candidate.snapshot_end}
-          hoverFraction={hoverFraction}
-          onHoverFraction={setHoverFraction}
-          audio={(
-            <OutsideAudio
-              eventId={candidate.outside_event_id}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+            <MicSnapshot
+              title="OUTSIDE · WIND-EXPOSED"
+              frames={outside}
+              peak={candidate.outside_peak_db}
+              baseline={candidate.outside_baseline_db}
+              rise={candidate.outside_rise_db}
               audioRef={outsideAudioRef}
-              onProgress={setOutsidePlayback}
-              onEventChange={setOutsideEvent}
+              playbackTime={outsidePlayback}
+              audioStartTs={outsideEvent?.ts ?? null}
+              clipStartTs={outsideEvent?.ts ?? null}
+              clipDurationS={outsideEvent?.duration_s ?? null}
+              snapshotStart={candidate.snapshot_start}
+              snapshotEnd={candidate.snapshot_end}
+              hoverFraction={hoverFraction}
+              onHoverFraction={setHoverFraction}
+              audio={(
+                <OutsideAudio
+                  eventId={candidate.outside_event_id}
+                  audioRef={outsideAudioRef}
+                  onProgress={setOutsidePlayback}
+                  onEventChange={setOutsideEvent}
+                />
+              )}
             />
-          )}
-        />
-        <MicSnapshot
-          title="INSIDE · WIND-IMMUNE"
-          frames={inside}
-          peak={candidate.inside_peak_db}
-          baseline={candidate.inside_baseline_db}
-          rise={candidate.inside_rise_db}
-          headerNotice={insideAudioStatus === 'empty' ? 'NO INSIDE CLIP IN SNAPSHOT' : undefined}
-          audioRef={insideAudioRef}
-          playbackTime={insidePlayback}
-          audioStartTs={insideEvent?.ts ?? null}
-          clipStartTs={outsideEvent?.ts ?? null}
-          clipDurationS={outsideEvent?.duration_s ?? null}
-          snapshotStart={candidate.snapshot_start}
-          snapshotEnd={candidate.snapshot_end}
-          hoverFraction={hoverFraction}
-          onHoverFraction={setHoverFraction}
-          audio={(
-            <InsideAudio
-              deviceId={inside?.device_id}
-              fromTs={candidate.snapshot_start}
-              toTs={candidate.snapshot_end}
-              peakTs={candidate.inside_peak_ts}
+            <MicSnapshot
+              title="INSIDE · WIND-IMMUNE"
+              frames={inside}
+              peak={candidate.inside_peak_db}
+              baseline={candidate.inside_baseline_db}
+              rise={candidate.inside_rise_db}
+              headerNotice={insideAudioStatus === 'empty' ? 'NO INSIDE CLIP IN SNAPSHOT' : undefined}
               audioRef={insideAudioRef}
-              onProgress={setInsidePlayback}
-              onStatusChange={setInsideAudioStatus}
-              onEventChange={setInsideEvent}
+              playbackTime={insidePlayback}
+              audioStartTs={insideEvent?.ts ?? null}
+              clipStartTs={outsideEvent?.ts ?? null}
+              clipDurationS={outsideEvent?.duration_s ?? null}
+              snapshotStart={candidate.snapshot_start}
+              snapshotEnd={candidate.snapshot_end}
+              hoverFraction={hoverFraction}
+              onHoverFraction={setHoverFraction}
+              audio={(
+                <InsideAudio
+                  deviceId={inside?.device_id}
+                  fromTs={candidate.snapshot_start}
+                  toTs={candidate.snapshot_end}
+                  peakTs={candidate.inside_peak_ts}
+                  audioRef={insideAudioRef}
+                  onProgress={setInsidePlayback}
+                  onStatusChange={setInsideAudioStatus}
+                  onEventChange={setInsideEvent}
+                />
+              )}
             />
-          )}
-        />
-      </div>
-
-      <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-1)' }}>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 10 }}>
-          SOURCE LABEL · WEATHER = SUPPRESS · ALL OTHER SOURCES = REAL · X DISMISSES
+          </div>
         </div>
+      </Card>
+
+      <Card title="SOURCE TAGS" subtitle="Weather suppresses uploads · all other sources are real" padding={14}>
         {!candidate.labelable && (
           <div className="mono" style={{ fontSize: 10, color: 'var(--neon-warn)', marginBottom: 10, lineHeight: 1.5 }}>
             {candidate.audio_state === 'pending'
@@ -687,16 +697,16 @@ function CandidateDetail({
               : 'NO OUTDOOR CLIP WAS RECORDED FOR THIS PEAK — THE SOURCE CANNOT BE IDENTIFIED BY EYE, SO DISMISS IT'}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {([
             { title: 'WEATHER', labels: WEATHER_LABELS, color: 'var(--neon-warn)' },
             { title: 'OTHER SOURCES', labels: NON_WEATHER_LABELS, color: 'var(--neon-ok)' },
           ] as const).map((group) => (
-            <div key={group.title} style={{ flex: group.title === 'WEATHER' ? '0 1 150px' : '1 1 420px' }}>
+            <div key={group.title}>
               <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.12em', marginBottom: 7 }}>
                 {group.title}
               </div>
-              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }}>
                 {group.labels.map((label) => (
                   <button
                     key={label}
@@ -705,7 +715,7 @@ function CandidateDetail({
                     onClick={() => onReview({ label })}
                     style={{
                       ...actionButton,
-                      minWidth: 104,
+                      minWidth: 0,
                       padding: '7px 12px',
                       borderColor: candidate.label === label ? 'var(--neon-cool)' : 'var(--line-strong)',
                       color: group.color,
@@ -719,16 +729,16 @@ function CandidateDetail({
               </div>
             </div>
           ))}
-          <button
-            disabled={busy}
-            onClick={() => onReview({ dismissed: !candidate.dismissed })}
-            style={{ ...actionButton, marginLeft: 'auto', opacity: busy ? 0.5 : 1, color: 'var(--ink-2)' }}
-          >
-            {candidate.dismissed ? 'Restore' : 'Dismiss · X'}
-          </button>
         </div>
-      </div>
-    </div>
+        <button
+          disabled={busy}
+          onClick={() => onReview({ dismissed: !candidate.dismissed })}
+          style={{ ...actionButton, width: '100%', marginTop: 'auto', opacity: busy ? 0.5 : 1, color: 'var(--ink-2)' }}
+        >
+          {candidate.dismissed ? 'Restore' : 'Dismiss · X'}
+        </button>
+      </Card>
+    </>
   );
 }
 
@@ -1002,7 +1012,7 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
       {showSettings && settings && <DetectionSettingsPanel settings={settings} onSaved={setSettings} />}
       {error && <div className="mono" style={{ padding: 9, color: 'var(--neon-hot)', border: '1px solid var(--line)', borderRadius: 5 }}>{error}</div>}
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '330px minmax(0, 1fr)', gap: 12, minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr) 330px', gap: 12, minHeight: 0 }}>
         <Card title="REVIEW QUEUE" subtitle={`${selectedEventId == null ? total : queueItems.length} matching · ${pending} labelable`} padding={0}>
           <div style={{ padding: 10, borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {REVIEW_FILTERS.map((value) => <FilterButton key={value} active={review === value} onClick={() => setReview(value)}>{value}</FilterButton>)}
@@ -1020,9 +1030,7 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
             ? <div className="mono" style={{ padding: 28, textAlign: 'center', color: 'var(--ink-3)' }}>LOADING…</div>
             : <CandidateList items={queueItems} selectedId={selectedId} onSelect={setSelectedId} />}
         </Card>
-        <Card padding={0}>
-          <CandidateDetail candidate={selected} frames={frames} busy={busy} onReview={(body) => { void reviewCandidate(body); }} />
-        </Card>
+        <CandidateDetail candidate={selected} frames={frames} busy={busy} onReview={(body) => { void reviewCandidate(body); }} />
       </div>
     </div>
   );
