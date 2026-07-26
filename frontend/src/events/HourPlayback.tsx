@@ -22,6 +22,9 @@ interface HourPlaybackViewerProps {
   annotations?: SpectrogramAnnotation[];
   selectedAnnotationId?: number | null;
   onSelectAnnotation?: (id: number) => void;
+  colorEventsByLabel?: boolean;
+  instruction?: string;
+  showDelete?: boolean;
 }
 
 const HOUR_S = 3600;
@@ -31,6 +34,9 @@ export function HourPlaybackViewer({
   onDeleteUnlabeled, deletingUnlabeled,
   deviceId, palette,
   annotations, selectedAnnotationId, onSelectAnnotation,
+  colorEventsByLabel = false,
+  instruction,
+  showDelete = true,
 }: HourPlaybackViewerProps) {
   const { timeFormat } = useTweaks();
   const fmtClock = (ts: number) => formatClock(ts, timeFormat);
@@ -61,7 +67,7 @@ export function HourPlaybackViewer({
               ? 'LOADING EVENTS…'
               : error
                 ? `ERROR · ${error}`
-                : `${events.length} CLIP${events.length === 1 ? '' : 'S'} · ${totalBreaches} ≥ ${threshold} dB · PICK ONE IN THE RECENT EVENTS LIST TO PLAY`}
+                : instruction ?? `${events.length} CLIP${events.length === 1 ? '' : 'S'} · ${totalBreaches} ≥ ${threshold} dB · PICK ONE IN THE RECENT EVENTS LIST TO PLAY`}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -75,26 +81,28 @@ export function HourPlaybackViewer({
               color: 'var(--ink-2)', borderRadius: 4, cursor: 'pointer',
             }}
           >✕ Close</button>
-          <button
-            type="button"
-            onClick={onDeleteUnlabeled}
-            disabled={!canDeleteUnlabeled}
-            title={
-              unlabeledCount === 0
-                ? 'No unlabeled clips in this hour'
-                : `Delete ${unlabeledCount} unlabeled clip${unlabeledCount === 1 ? '' : 's'} (audio + record)`
-            }
-            style={{
-              fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
-              textTransform: 'uppercase', padding: '4px 10px',
-              background: 'var(--bg-2)',
-              border: `1px solid ${canDeleteUnlabeled ? 'var(--neon-hot)' : 'var(--line)'}`,
-              color: canDeleteUnlabeled ? 'var(--neon-hot)' : 'var(--ink-3)',
-              borderRadius: 4,
-              cursor: canDeleteUnlabeled ? 'pointer' : (deletingUnlabeled ? 'wait' : 'not-allowed'),
-              opacity: canDeleteUnlabeled ? 1 : 0.6,
-            }}
-          >🗑 Delete unlabeled{unlabeledCount > 0 ? ` (${unlabeledCount})` : ''}</button>
+          {showDelete && (
+            <button
+              type="button"
+              onClick={onDeleteUnlabeled}
+              disabled={!canDeleteUnlabeled}
+              title={
+                unlabeledCount === 0
+                  ? 'No unlabeled clips in this hour'
+                  : `Delete ${unlabeledCount} unlabeled clip${unlabeledCount === 1 ? '' : 's'} (audio + record)`
+              }
+              style={{
+                fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.12em',
+                textTransform: 'uppercase', padding: '4px 10px',
+                background: 'var(--bg-2)',
+                border: `1px solid ${canDeleteUnlabeled ? 'var(--neon-hot)' : 'var(--line)'}`,
+                color: canDeleteUnlabeled ? 'var(--neon-hot)' : 'var(--ink-3)',
+                borderRadius: 4,
+                cursor: canDeleteUnlabeled ? 'pointer' : (deletingUnlabeled ? 'wait' : 'not-allowed'),
+                opacity: canDeleteUnlabeled ? 1 : 0.6,
+              }}
+            >🗑 Delete unlabeled{unlabeledCount > 0 ? ` (${unlabeledCount})` : ''}</button>
+          )}
         </div>
       </div>
 
@@ -109,6 +117,7 @@ export function HourPlaybackViewer({
         annotations={annotations}
         selectedAnnotationId={selectedAnnotationId ?? null}
         onSelectAnnotation={onSelectAnnotation}
+        colorEventsByLabel={colorEventsByLabel}
       />
 
       {events.length === 0 && !loading && !error && (
@@ -122,7 +131,7 @@ export function HourPlaybackViewer({
 
 function BreachTimeline({
   hourTs, events, threshold, selectedId, onSelect, deviceId, palette,
-  annotations, selectedAnnotationId, onSelectAnnotation,
+  annotations, selectedAnnotationId, onSelectAnnotation, colorEventsByLabel,
 }: {
   hourTs: number;
   events: DeviceEvent[];
@@ -134,6 +143,7 @@ function BreachTimeline({
   annotations?: SpectrogramAnnotation[];
   selectedAnnotationId: number | null;
   onSelectAnnotation?: (id: number) => void;
+  colorEventsByLabel: boolean;
 }) {
   const { timeFormat } = useTweaks();
   const fmtClock = (ts: number) => formatClock(ts, timeFormat);
@@ -205,10 +215,11 @@ function BreachTimeline({
           const selected = e.event_id === selectedId;
           const color = labeled
             ? 'var(--neon-ok)'
-            : breach ? 'var(--neon-hot)' : 'var(--neon-warn)';
+            : colorEventsByLabel ? 'var(--neon-warn)'
+              : breach ? 'var(--neon-hot)' : 'var(--neon-warn)';
           const fill = labeled
             ? 'oklch(82% 0.14 160 / 0.45)'
-            : breach
+            : !colorEventsByLabel && breach
               ? 'oklch(78% 0.18 35 / 0.55)'
               : 'oklch(82% 0.16 70 / 0.45)';
           return (
