@@ -434,7 +434,6 @@ function MicSnapshot({
   peak,
   baseline,
   rise,
-  headerNotice,
   audio,
   audioRef,
   playbackTime,
@@ -451,7 +450,6 @@ function MicSnapshot({
   peak: number | null;
   baseline: number | null;
   rise: number | null;
-  headerNotice?: string;
   audio: ReactNode;
   audioRef: RefObject<HTMLAudioElement>;
   playbackTime: number | null;
@@ -504,9 +502,6 @@ function MicSnapshot({
               ? `— · ${frames?.frames.length ?? 0} permanent frames`
               : `${baseline.toFixed(1)} baseline · ${frames?.frames.length ?? 0} permanent frames · +${rise.toFixed(1)}`}
           </span>
-          {headerNotice && (
-            <span style={{ color: 'var(--neon-warn)' }}>{headerNotice}</span>
-          )}
         </div>
       </div>
       {matrix.length ? (
@@ -636,7 +631,6 @@ function CandidateDetail({
               peak={candidate.inside_peak_db}
               baseline={candidate.inside_baseline_db}
               rise={candidate.inside_rise_db}
-              headerNotice={insideAudioStatus === 'empty' ? 'NO INSIDE CLIP IN SNAPSHOT' : undefined}
               audioRef={insideAudioRef}
               playbackTime={insidePlayback}
               audioStartTs={insideEvent?.ts ?? null}
