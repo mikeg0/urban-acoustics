@@ -165,17 +165,19 @@ function TopBar({
             </button>
           ))}
           {canManageCandidates && (
-            <button
-              onClick={() => onPageChange('labeling')}
+            <a
+              href="?page=labeling"
+              target="_blank"
+              rel="noopener noreferrer"
               style={{
                 padding: '5px 12px', fontSize: 11, fontFamily: 'var(--mono)',
                 letterSpacing: '0.12em', textTransform: 'uppercase',
                 background: 'transparent', border: 'none', borderRadius: 4,
-                color: 'var(--ink-2)', cursor: 'pointer',
+                color: 'var(--ink-2)', cursor: 'pointer', textDecoration: 'none',
               }}
             >
               Label data
-            </button>
+            </a>
           )}
         </div>
         <div className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
