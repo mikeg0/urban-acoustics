@@ -494,15 +494,17 @@ function MicSnapshot({
     : Math.min(1, (clipStartTs + clipDurationS - snapshotStart) / (snapshotEnd - snapshotStart));
 
   return (
-    <div style={{ padding: 12, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-1)' }}>
-      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{title}</div>
-        {headerNotice && (
-          <div className="mono" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', color: 'var(--neon-warn)', fontSize: 9, whiteSpace: 'nowrap' }}>
-            {headerNotice}
-          </div>
-        )}
-        <div className="mono" style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--ink-2)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+    <div style={{ minWidth: 0, padding: 12, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-1)' }}>
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, marginBottom: 8 }}>
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{title}</div>
+          {headerNotice && (
+            <div className="mono" style={{ color: 'var(--neon-warn)', fontSize: 9, textAlign: 'right' }}>
+              {headerNotice}
+            </div>
+          )}
+        </div>
+        <div className="mono" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 9, color: 'var(--ink-2)' }}>
           <span>{peak == null ? 'NO PEAK' : `${peak.toFixed(1)} dB PEAK`}</span>
           <span style={{ color: 'var(--ink-3)' }}>
             {baseline == null || rise == null
@@ -595,7 +597,7 @@ function CandidateDetail({
   const outside = frames?.streams.find((s) => s.device_id === candidate.outside_device_id);
   const inside = frames?.streams.find((s) => s.device_id === candidate.inside_device_id);
   return (
-    <div style={{ padding: 14, overflowY: 'auto', minHeight: 0 }}>
+    <div style={{ padding: 14, overflow: 'hidden', minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -618,7 +620,7 @@ function CandidateDetail({
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
         <MicSnapshot
           title="OUTSIDE · WIND-EXPOSED"
           frames={outside}
