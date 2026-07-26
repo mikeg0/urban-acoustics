@@ -609,28 +609,6 @@ function CandidateDetail({
     <>
       <Card padding={0}>
         <div style={{ padding: 14, overflow: 'hidden', minHeight: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 12 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h2 style={{ fontSize: 18, margin: 0, fontWeight: 550 }}>{formatMoment(candidate.outside_peak_ts)}</h2>
-                <Pill tone={candidate.candidate_group === 'correlated' ? 'cool' : 'warn'}>
-                  {candidate.candidate_group.replace('_', ' ').toUpperCase()}
-                </Pill>
-                <Pill tone={candidate.labelable ? 'ok' : 'hot'}>
-                  {candidate.labelable ? 'AUDIO READY' : `AUDIO ${candidate.audio_state.toUpperCase()}`}
-                </Pill>
-              </div>
-              <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
-                {candidate.candidate_id} · metric {candidate.metric.toUpperCase()} · ±{((candidate.snapshot_end - candidate.snapshot_start) / 2).toFixed(0)}s snapshot
-              </div>
-            </div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', textAlign: 'right' }}>
-              {candidate.reviewed_at
-                ? `Reviewed ${formatMoment(candidate.reviewed_at)}${candidate.reviewed_by_email ? ` by ${candidate.reviewed_by_email}` : ''}`
-                : 'Awaiting review'}
-            </div>
-          </div>
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
             <MicSnapshot
               title="OUTSIDE · WIND-EXPOSED"
