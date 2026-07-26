@@ -32,6 +32,8 @@ def _settings(**updates):
         "snapshot_before_s": 15,
         "snapshot_after_s": 15,
         "scan_interval_s": 10,
+        "audio_match_window_s": 15,
+        "audio_grace_s": 3600,
     }
     values.update(updates)
     return CorrelatedEventSettingsUpdate(**values)
@@ -62,3 +64,19 @@ def test_candidate_patch_accepts_review_labels(label: str) -> None:
 def test_candidate_patch_rejects_empty_body() -> None:
     with pytest.raises(ValueError, match="required"):
         CorrelatedEventCandidatePatch()
+
+
+def test_audio_grace_must_outlast_a_slow_upload() -> None:
+    # Observed clip uploads land up to ~20 s after the event ends, and a node
+    # draining a spool after an outage takes far longer, so the default keeps
+    # candidates waiting for an hour before giving up on their audio.
+    assert _settings().audio_grace_s == 3600
+    with pytest.raises(ValueError):
+        _settings(audio_grace_s=9)
+
+
+def test_audio_match_window_is_bounded() -> None:
+    with pytest.raises(ValueError):
+        _settings(audio_match_window_s=0)
+    with pytest.raises(ValueError):
+        _settings(audio_match_window_s=301)

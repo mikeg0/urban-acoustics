@@ -259,6 +259,8 @@ class CorrelatedEventSettings(Base):
     snapshot_before_s: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
     snapshot_after_s: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
     scan_interval_s: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    audio_match_window_s: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    audio_grace_s: Mapped[int] = mapped_column(Integer, nullable=False, default=3600)
     last_processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -292,6 +294,13 @@ class CorrelatedEventCandidate(Base):
     inside_rise_db: Mapped[float | None] = mapped_column(Float, nullable=True)
     snapshot_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     snapshot_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # The outside-microphone clip a reviewer listens to. A label is only
+    # accepted once audio_state is 'linked' (DB CHECK), because wind and real
+    # noise are not reliably distinguishable from the spectrogram alone.
+    outside_event_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("events.event_id", ondelete="SET NULL"), nullable=True
+    )
+    audio_state: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
     label: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     dismissed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     reviewed_by: Mapped[UUID | None] = mapped_column(

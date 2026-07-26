@@ -28,6 +28,7 @@ from ..models import (
     Device,
     Telemetry,
 )
+from .audio import link_candidate_audio
 from .peaks import Sample, adaptive_peaks, correlate_peak
 
 
@@ -78,6 +79,18 @@ async def run_detection_cycle(
     if settings is None:
         log.warning("detector: settings singleton is missing")
         return 0
+
+    # Runs before — and independently of — detection so that pausing the
+    # detector still lets already-queued candidates become labelable, and so
+    # this survives the early returns further down. Candidates created later in
+    # this cycle are picked up by the next pass a few seconds from now.
+    await link_candidate_audio(
+        session,
+        match_window_s=settings.audio_match_window_s,
+        grace_s=settings.audio_grace_s,
+        now=now,
+    )
+    await session.commit()
 
     holdback_s = max(
         settings.snapshot_after_s,
@@ -176,6 +189,10 @@ async def run_detection_cycle(
             "inside_rise_db": inside.rise if inside else None,
             "snapshot_start": snapshot_start,
             "snapshot_end": snapshot_end,
+            # Audio is attached by a later pass once the device finishes
+            # uploading; until then the candidate is not labelable.
+            "outside_event_id": None,
+            "audio_state": "pending",
             "label": None,
             "dismissed": False,
             "reviewed_by": None,

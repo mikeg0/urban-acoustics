@@ -422,6 +422,9 @@ export type DetectionMetric = 'laeq' | 'lafmax' | 'lcpeak';
 export type CandidateGroup = 'correlated' | 'outside_only';
 export type CandidateLabel = 'real' | 'wind' | 'unsure';
 export type CandidateReviewFilter = 'pending' | 'labeled' | 'dismissed' | 'all';
+/** Whether the outside clip a reviewer must hear is attached yet. */
+export type CandidateAudioState = 'pending' | 'linked' | 'missing';
+export type CandidateAudioFilter = CandidateAudioState | 'all';
 
 export interface CorrelatedEventSettings {
   enabled: boolean;
@@ -440,6 +443,8 @@ export interface CorrelatedEventSettings {
   snapshot_before_s: number;
   snapshot_after_s: number;
   scan_interval_s: number;
+  audio_match_window_s: number;
+  audio_grace_s: number;
   last_processed_at: number | null;
   updated_at: number;
 }
@@ -467,6 +472,11 @@ export interface CorrelatedEventCandidate {
   inside_rise_db: number | null;
   snapshot_start: number;
   snapshot_end: number;
+  /** Outside-mic clip to play back; null until the upload has been linked. */
+  outside_event_id: string | null;
+  audio_state: CandidateAudioState;
+  /** Server's verdict: labeling is refused without playable outside audio. */
+  labelable: boolean;
   label: CandidateLabel | null;
   dismissed: boolean;
   reviewed_by_email: string | null;
@@ -479,6 +489,8 @@ export interface CorrelatedEventCandidateList {
   items: CorrelatedEventCandidate[];
   total: number;
   pending: number;
+  awaiting_audio: number;
+  missing_audio: number;
 }
 
 export interface CorrelatedEventFrame {

@@ -1,6 +1,7 @@
 import type {
   AnomaliesResponse,
   CameraInfo,
+  CandidateAudioFilter,
   CandidateGroup,
   CandidateLabel,
   CandidateReviewFilter,
@@ -232,6 +233,9 @@ export const fetchEventIndex = (
 export const fetchEventPlaybackUrl = (eventId: string): Promise<PlaybackUrl> =>
   getJson<PlaybackUrl>(`/api/v1/events/${eventId}/playback-url`);
 
+export const fetchEvent = (eventId: string): Promise<DeviceEvent> =>
+  getJson<DeviceEvent>(`/api/v1/events/${eventId}`);
+
 export const deleteEvent = async (eventId: string): Promise<void> => {
   const url = `/api/v1/events/${eventId}`;
   const r = await fetch(url, { method: 'DELETE', credentials: 'include' });
@@ -376,9 +380,17 @@ export const putCorrelatedEventSettings = (
 export const fetchCorrelatedEventCandidates = (
   review: CandidateReviewFilter,
   group: CandidateGroup | 'all',
+  // Defaults to clips the reviewer can actually hear; the other states are for
+  // checking how much audio the device threshold is missing.
+  audio: CandidateAudioFilter = 'linked',
+  hourTs: number | null = null,
 ): Promise<CorrelatedEventCandidateList> => {
-  const query = new URLSearchParams({ review, limit: '250' });
+  const query = new URLSearchParams({ review, limit: '250', audio });
   if (group !== 'all') query.set('candidate_group', group);
+  if (hourTs != null) {
+    query.set('from', String(hourTs));
+    query.set('to', String(hourTs + 3600));
+  }
   return getJson<CorrelatedEventCandidateList>(
     `/api/v1/admin/correlated-events/candidates?${query.toString()}`,
   );

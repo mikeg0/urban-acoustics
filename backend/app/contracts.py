@@ -36,6 +36,11 @@ DbLevel = Annotated[float, Field(ge=_DB_MIN, le=_DB_MAX)]
 DetectionMetric = Literal["laeq", "lafmax", "lcpeak"]
 CandidateGroup = Literal["correlated", "outside_only"]
 CandidateLabel = Literal["real", "wind", "unsure"]
+# 'pending' — still waiting for the device to finish uploading a clip.
+# 'linked'  — an outside clip is attached; the candidate is labelable.
+# 'missing' — no clip arrived within the grace window; never labelable.
+CandidateAudioState = Literal["pending", "linked", "missing"]
+CandidateAudioFilter = Literal["linked", "pending", "missing", "all"]
 
 
 class CorrelatedEventSettingsResponse(BaseModel):
@@ -55,6 +60,8 @@ class CorrelatedEventSettingsResponse(BaseModel):
     snapshot_before_s: int
     snapshot_after_s: int
     scan_interval_s: int
+    audio_match_window_s: int
+    audio_grace_s: int
     last_processed_at: float | None
     updated_at: float
 
@@ -78,6 +85,8 @@ class CorrelatedEventSettingsUpdate(BaseModel):
     snapshot_before_s: int = Field(ge=1, le=300)
     snapshot_after_s: int = Field(ge=1, le=300)
     scan_interval_s: int = Field(ge=1, le=300)
+    audio_match_window_s: int = Field(ge=1, le=300)
+    audio_grace_s: int = Field(ge=10, le=86_400)
 
     @model_validator(mode="after")
     def _valid_pair_and_baseline(self) -> "CorrelatedEventSettingsUpdate":
@@ -106,6 +115,11 @@ class CorrelatedEventCandidateResponse(BaseModel):
     inside_rise_db: float | None
     snapshot_start: float
     snapshot_end: float
+    outside_event_id: UUID | None
+    audio_state: CandidateAudioState
+    # False whenever the reviewer cannot hear the outside microphone, which is
+    # the only condition under which labeling is refused.
+    labelable: bool
     label: CandidateLabel | None
     dismissed: bool
     reviewed_by_email: str | None
@@ -118,6 +132,10 @@ class CorrelatedEventCandidateListResponse(BaseModel):
     items: list[CorrelatedEventCandidateResponse]
     total: int
     pending: int
+    # Queue health for the trial: how many detected peaks are still waiting on
+    # an upload versus permanently unusable because no clip was ever recorded.
+    awaiting_audio: int
+    missing_audio: int
 
 
 class CorrelatedEventCandidatePatch(BaseModel):

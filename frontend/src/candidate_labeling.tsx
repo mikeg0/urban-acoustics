@@ -2,14 +2,19 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
+  type RefObject,
   type ReactNode,
 } from 'react';
 import {
   fetchCorrelatedEventCandidates,
   fetchCorrelatedEventFrames,
   fetchCorrelatedEventSettings,
+  fetchEvent,
+  fetchEventIndex,
   fetchEventPlaybackUrl,
   fetchEventsInRange,
   putCorrelatedEventSettings,
@@ -17,8 +22,12 @@ import {
 } from './api';
 import { Card, Pill } from './atoms';
 import { Clock, UserChip } from './chrome';
-import { SpectrogramCanvas } from './spectrogram';
+import { HourPlaybackViewer } from './events/HourPlayback';
+import { HistoryRibbon24h, SpectrogramCanvas } from './spectrogram';
+import { useTweaks } from './tweaks';
+import { formatHourTick } from './utils';
 import type {
+  CandidateAudioFilter,
   CandidateGroup,
   CandidateLabel,
   CandidateReviewFilter,
@@ -26,12 +35,22 @@ import type {
   CorrelatedEventFrames,
   CorrelatedEventSettings,
   CorrelatedEventSettingsUpdate,
+  DeviceEvent,
+  EventIndexEntry,
 } from './types';
 
 
 const REVIEW_FILTERS: CandidateReviewFilter[] = ['pending', 'labeled', 'dismissed', 'all'];
 const GROUP_FILTERS: Array<CandidateGroup | 'all'> = ['all', 'correlated', 'outside_only'];
 const LABELS: CandidateLabel[] = ['real', 'wind', 'unsure'];
+// 'linked' leads because only those candidates can be labeled; the rest are for
+// judging whether the device's own recording threshold is set too high.
+const AUDIO_FILTERS: Array<{ value: CandidateAudioFilter; text: string }> = [
+  { value: 'linked', text: 'ready' },
+  { value: 'pending', text: 'awaiting' },
+  { value: 'missing', text: 'no clip' },
+  { value: 'all', text: 'all' },
+];
 
 const actionButton: CSSProperties = {
   border: '1px solid var(--line-strong)',
@@ -75,6 +94,97 @@ function formatMoment(ts: number): string {
   });
 }
 
+function CandidateHistoryRibbons({
+  settings,
+  selectedHourTs,
+  onHourClick,
+  events,
+  hourEvents,
+  hourEventsLoading,
+  hourEventsError,
+  selectedEventId,
+  onEventClick,
+}: {
+  settings: CorrelatedEventSettings;
+  selectedHourTs: number | null;
+  onHourClick: (hourTs: number) => void;
+  events: EventIndexEntry[];
+  hourEvents: DeviceEvent[];
+  hourEventsLoading: boolean;
+  hourEventsError: string | null;
+  selectedEventId: string | null;
+  onEventClick: (eventId: string) => void;
+}) {
+  const { spectroColor, timeFormat } = useTweaks();
+  return (
+    <div style={{ padding: 12, border: '1px solid var(--line)', borderRadius: 8, background: 'var(--bg-1)' }}>
+      <div className="mono" style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 12, marginBottom: 5, fontSize: 9, color: 'var(--ink-3)',
+        letterSpacing: '0.12em',
+      }}>
+        <span>OUTSIDE · WIND-EXPOSED · LAST 24 H · MAX/SEC PER HOUR-TILE · CLICK A TILE TO FILTER REVIEW QUEUE</span>
+        <span style={{ whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--neon-warn)' }}>■ UNLABELED</span>
+          {' · '}
+          <span style={{ color: 'var(--neon-ok)' }}>■ LABELED</span>
+          {' · NOW →'}
+        </span>
+      </div>
+      <HistoryRibbon24h
+        deviceId={settings.outside_device_id}
+        palette={spectroColor}
+        height={56}
+        selectedHourTs={selectedHourTs}
+        onHourClick={onHourClick}
+        events={events}
+      />
+      <div className="mono" style={{
+        display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)',
+        marginTop: 4, fontSize: 9, color: 'var(--ink-3)',
+      }}>
+        {Array.from({ length: 24 }).map((_, i) => {
+          const hoursAgo = 23 - i;
+          const show = hoursAgo === 0 || hoursAgo % 4 === 0;
+          const hour = new Date(Date.now() - hoursAgo * 3600 * 1000).getHours();
+          return <div key={i} style={{ textAlign: 'center' }}>{show ? formatHourTick(hour, timeFormat) : ''}</div>;
+        })}
+      </div>
+      {selectedHourTs != null && (
+        <HourPlaybackViewer
+          hourTs={selectedHourTs}
+          threshold={settings.outside_min_db}
+          events={hourEvents}
+          loading={hourEventsLoading}
+          error={hourEventsError}
+          selectedId={selectedEventId}
+          onSelect={onEventClick}
+          onClose={() => onHourClick(selectedHourTs)}
+          onDeleteUnlabeled={() => {}}
+          deletingUnlabeled={false}
+          deviceId={settings.outside_device_id}
+          palette={spectroColor}
+          colorEventsByLabel
+          instruction={`${hourEvents.length} CLIP${hourEvents.length === 1 ? '' : 'S'} · CLICK AN EVENT BAND TO FILTER REVIEW QUEUE`}
+          showDelete={false}
+        />
+      )}
+      {selectedHourTs != null && (
+        <div className="mono" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          gap: 9, marginTop: 8, fontSize: 9, color: 'var(--neon-focus)',
+        }}>
+          REVIEW QUEUE FILTERED TO {formatMoment(selectedHourTs)} → {formatMoment(selectedHourTs + 3600)}
+          {selectedEventId != null && <span>· SELECTED EVENT</span>}
+          <button onClick={() => onHourClick(selectedHourTs)} style={{ ...actionButton, padding: '3px 7px' }}>
+            Clear
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function streamMatrix(frames: CorrelatedEventFrames['streams'][number]['frames']): number[][] {
   if (frames.length === 0) return [];
   const bands = frames[0].bands.length;
@@ -83,32 +193,137 @@ function streamMatrix(frames: CorrelatedEventFrames['streams'][number]['frames']
   );
 }
 
-function SnapshotAudio({
+type AudioStatus = 'loading' | 'ready' | 'empty';
+
+function AudioClip({
+  url,
+  status,
+  emptyLabel,
+  hideEmptyLabel = false,
+  label,
+  audioRef,
+  onProgress,
+}: {
+  url: string | null;
+  status: AudioStatus;
+  emptyLabel: string;
+  hideEmptyLabel?: boolean;
+  label: string;
+  audioRef: RefObject<HTMLAudioElement>;
+  onProgress: (currentTime: number) => void;
+}) {
+  if (status === 'empty' && hideEmptyLabel) return null;
+  if (status !== 'ready' || !url) {
+    return (
+      <div className="mono" style={{ height: 32, display: 'grid', placeItems: 'center', color: status === 'empty' ? 'var(--neon-warn)' : 'var(--ink-3)', fontSize: 9 }}>
+        {status === 'loading' ? 'LOADING AUDIO…' : emptyLabel}
+      </div>
+    );
+  }
+  const reportProgress = () => {
+    const clip = audioRef.current;
+    if (clip && Number.isFinite(clip.duration) && clip.duration > 0) {
+      onProgress(clip.currentTime);
+    }
+  };
+  return (
+    <audio
+      ref={audioRef}
+      hidden
+      preload="metadata"
+      src={url}
+      aria-label={label}
+      onLoadedMetadata={reportProgress}
+      onTimeUpdate={reportProgress}
+    />
+  );
+}
+
+/** The outside clip the label depends on. The detector links it server-side, so
+ *  this plays an exact known event rather than guessing from a time range. */
+function OutsideAudio({
+  eventId,
+  audioRef,
+  onProgress,
+  onEventChange,
+}: {
+  eventId: string | null;
+  audioRef: RefObject<HTMLAudioElement>;
+  onProgress: (currentTime: number) => void;
+  onEventChange: (event: DeviceEvent | null) => void;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<AudioStatus>('loading');
+
+  useEffect(() => {
+    setUrl(null);
+    onEventChange(null);
+    if (!eventId) { setStatus('empty'); return; }
+    setStatus('loading');
+    let cancelled = false;
+    fetchEvent(eventId)
+      .then((event) => {
+        if (cancelled) return;
+        if (!event.playback_url) throw new Error('event has no playback URL');
+        onEventChange(event);
+        setUrl(event.playback_url);
+        setStatus('ready');
+      })
+      .catch(() => { if (!cancelled) setStatus('empty'); });
+    return () => { cancelled = true; };
+  }, [eventId, onEventChange]);
+
+  return (
+    <AudioClip
+      url={url}
+      status={status}
+      emptyLabel="OUTDOOR CLIP UNAVAILABLE"
+      label="Outside microphone clip"
+      audioRef={audioRef}
+      onProgress={onProgress}
+    />
+  );
+}
+
+/** Inside audio is a bonus cross-check, not a labeling requirement, so it stays
+ *  a best-effort search over the snapshot window. */
+function InsideAudio({
   deviceId,
   fromTs,
   toTs,
   peakTs,
+  audioRef,
+  onProgress,
+  onStatusChange,
+  onEventChange,
 }: {
   deviceId: string | undefined;
   fromTs: number;
   toTs: number;
   peakTs: number | null;
+  audioRef: RefObject<HTMLAudioElement>;
+  onProgress: (currentTime: number) => void;
+  onStatusChange: (status: AudioStatus) => void;
+  onEventChange: (event: DeviceEvent | null) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'empty'>('loading');
+  const [status, setStatus] = useState<AudioStatus>('loading');
 
   useEffect(() => {
     setUrl(null);
     setStatus('loading');
+    onEventChange(null);
     if (!deviceId) return;
     let cancelled = false;
     fetchEventsInRange(deviceId, fromTs, toTs)
       .then((events) => {
+        if (cancelled) return null;
         const playable = events.filter((event) =>
           event.status === 'available' || event.status === 'uploaded');
         const nearest = playable.sort((a, b) =>
           Math.abs(a.ts - (peakTs ?? fromTs)) - Math.abs(b.ts - (peakTs ?? fromTs)))[0];
         if (!nearest) return null;
+        onEventChange(nearest);
         return fetchEventPlaybackUrl(nearest.event_id);
       })
       .then((playback) => {
@@ -122,25 +337,23 @@ function SnapshotAudio({
       })
       .catch(() => {
         if (!cancelled) setStatus('empty');
-      });
+    });
     return () => { cancelled = true; };
-  }, [deviceId, fromTs, toTs, peakTs]);
+  }, [deviceId, fromTs, toTs, peakTs, onEventChange]);
 
-  if (status !== 'ready' || !url) {
-    return (
-      <div className="mono" style={{ height: 32, display: 'grid', placeItems: 'center', color: 'var(--ink-3)', fontSize: 9 }}>
-        {status === 'loading' ? 'LOADING AUDIO…' : 'NO AUDIO CLIP IN SNAPSHOT'}
-      </div>
-    );
-  }
+  useEffect(() => {
+    onStatusChange(status);
+  }, [status, onStatusChange]);
 
   return (
-    <audio
-      controls
-      preload="metadata"
-      src={url}
-      aria-label="Snapshot audio playback"
-      style={{ display: 'block', width: '100%', height: 32, colorScheme: 'dark' }}
+    <AudioClip
+      url={url}
+      status={status}
+      emptyLabel="NO INSIDE CLIP IN SNAPSHOT"
+      hideEmptyLabel
+      label="Inside microphone clip"
+      audioRef={audioRef}
+      onProgress={onProgress}
     />
   );
 }
@@ -195,6 +408,11 @@ function CandidateList({
               </span>
               <span className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--ink-3)', marginTop: 2 }}>
                 {item.candidate_group.replace('_', ' ')} · outside +{item.outside_rise_db.toFixed(1)} dB
+                {!item.labelable && (
+                  <span style={{ color: 'var(--neon-warn)' }}>
+                    {item.audio_state === 'pending' ? ' · awaiting audio' : ' · no clip'}
+                  </span>
+                )}
               </span>
             </span>
             <span className="mono" style={{ fontSize: 10, color: item.label ? 'var(--neon-cool)' : 'var(--ink-3)' }}>
@@ -211,54 +429,130 @@ function MicSnapshot({
   title,
   frames,
   peak,
-  peakTs,
   baseline,
   rise,
+  headerNotice,
+  audio,
+  audioRef,
+  playbackTime,
+  audioStartTs,
+  clipStartTs,
+  clipDurationS,
   snapshotStart,
   snapshotEnd,
+  hoverFraction,
+  onHoverFraction,
 }: {
   title: string;
   frames: CorrelatedEventFrames['streams'][number] | undefined;
   peak: number | null;
-  peakTs: number | null;
   baseline: number | null;
   rise: number | null;
+  headerNotice?: string;
+  audio: ReactNode;
+  audioRef: RefObject<HTMLAudioElement>;
+  playbackTime: number | null;
+  audioStartTs: number | null;
+  clipStartTs: number | null;
+  clipDurationS: number | null;
   snapshotStart: number;
   snapshotEnd: number;
+  hoverFraction: number | null;
+  onHoverFraction: (fraction: number | null) => void;
 }) {
   const matrix = useMemo(() => streamMatrix(frames?.frames ?? []), [frames]);
+  const fractionFromEvent = (event: MouseEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+  };
+  const toggleSpectrogramPlayback = (event: MouseEvent<HTMLDivElement>) => {
+    const clip = audioRef.current;
+    if (!clip || !Number.isFinite(clip.duration) || clip.duration <= 0) return;
+    if (clip.paused || clip.ended) {
+      const clickTs = snapshotStart + fractionFromEvent(event) * (snapshotEnd - snapshotStart);
+      clip.currentTime = audioStartTs == null
+        ? fractionFromEvent(event) * clip.duration
+        : Math.max(0, Math.min(clip.duration, clickTs - audioStartTs));
+      void clip.play();
+    } else {
+      clip.pause();
+    }
+  };
+  const playbackFraction = playbackTime == null
+    ? null
+    : audioStartTs == null
+      ? Math.min(1, playbackTime / (audioRef.current?.duration || 1))
+      : (audioStartTs + playbackTime - snapshotStart) / (snapshotEnd - snapshotStart);
+  const clipStartFraction = clipStartTs == null
+    ? null
+    : Math.max(0, (clipStartTs - snapshotStart) / (snapshotEnd - snapshotStart));
+  const clipEndFraction = clipStartTs == null || clipDurationS == null
+    ? null
+    : Math.min(1, (clipStartTs + clipDurationS - snapshotStart) / (snapshotEnd - snapshotStart));
+
   return (
     <div style={{ padding: 12, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-1)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-        <div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', letterSpacing: '0.1em' }}>{title}</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-1)', marginTop: 2 }}>{frames?.device_name ?? frames?.device_id ?? 'No stream'}</div>
-        </div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', textAlign: 'right' }}>
-          <div>{peak == null ? 'NO PEAK' : `${peak.toFixed(1)} dB PEAK`}</div>
-          <div style={{ color: 'var(--ink-3)', marginTop: 2 }}>
-            {baseline == null || rise == null ? '—' : `${baseline.toFixed(1)} baseline · +${rise.toFixed(1)}`}
+      <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--ink-2)', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>{title}</div>
+        {headerNotice && (
+          <div className="mono" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', color: 'var(--neon-warn)', fontSize: 9, whiteSpace: 'nowrap' }}>
+            {headerNotice}
           </div>
+        )}
+        <div className="mono" style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--ink-2)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <span>{peak == null ? 'NO PEAK' : `${peak.toFixed(1)} dB PEAK`}</span>
+          <span style={{ color: 'var(--ink-3)' }}>
+            {baseline == null || rise == null
+              ? `— · ${frames?.frames.length ?? 0} permanent frames`
+              : `${baseline.toFixed(1)} baseline · ${frames?.frames.length ?? 0} permanent frames · +${rise.toFixed(1)}`}
+          </span>
         </div>
       </div>
       {matrix.length ? (
-        <SpectrogramCanvas data={matrix} palette="heat" height={145} showGrid />
+        <div
+          onClick={toggleSpectrogramPlayback}
+          onMouseMove={(event) => onHoverFraction(fractionFromEvent(event))}
+          onMouseLeave={() => onHoverFraction(null)}
+          title="Click to play or pause audio"
+          style={{ position: 'relative', cursor: 'pointer' }}
+        >
+          <SpectrogramCanvas data={matrix} palette="heat" height={145} showGrid />
+          {clipStartFraction != null && clipEndFraction != null && clipEndFraction > clipStartFraction && (
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${clipStartFraction * 100}%`,
+              width: `${(clipEndFraction - clipStartFraction) * 100}%`,
+              border: '2px solid var(--neon-warn)',
+              boxSizing: 'border-box',
+              pointerEvents: 'none',
+            }} />
+          )}
+          {playbackFraction != null && playbackFraction >= 0 && playbackFraction <= 1 && (
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${playbackFraction * 100}%`,
+              width: 2, marginLeft: -1,
+              background: 'var(--neon-hot)',
+              boxShadow: '0 0 6px var(--neon-hot)',
+              pointerEvents: 'none',
+            }} />
+          )}
+          {hoverFraction != null && (
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${hoverFraction * 100}%`,
+              width: 1,
+              background: 'rgba(255,255,255,0.9)',
+              pointerEvents: 'none',
+            }} />
+          )}
+        </div>
       ) : (
         <div className="mono" style={{ height: 145, display: 'grid', placeItems: 'center', color: 'var(--ink-3)', background: 'var(--bg-0)', borderRadius: 4, fontSize: 10 }}>
           NO SNAPSHOTTED FRAMES
         </div>
       )}
-      <div style={{ marginTop: 8 }}>
-        <SnapshotAudio
-          deviceId={frames?.device_id}
-          fromTs={snapshotStart}
-          toTs={snapshotEnd}
-          peakTs={peakTs}
-        />
-      </div>
-      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 6 }}>
-        {frames?.frames.length ?? 0} permanent frames · low → high frequency, bottom → top
-      </div>
+      <div style={{ marginTop: 8 }}>{audio}</div>
     </div>
   );
 }
@@ -274,6 +568,24 @@ function CandidateDetail({
   busy: boolean;
   onReview: (body: { label?: CandidateLabel | null; dismissed?: boolean }) => void;
 }) {
+  const outsideAudioRef = useRef<HTMLAudioElement>(null);
+  const insideAudioRef = useRef<HTMLAudioElement>(null);
+  const [outsidePlayback, setOutsidePlayback] = useState<number | null>(null);
+  const [insidePlayback, setInsidePlayback] = useState<number | null>(null);
+  const [outsideEvent, setOutsideEvent] = useState<DeviceEvent | null>(null);
+  const [insideEvent, setInsideEvent] = useState<DeviceEvent | null>(null);
+  const [insideAudioStatus, setInsideAudioStatus] = useState<AudioStatus>('loading');
+  const [hoverFraction, setHoverFraction] = useState<number | null>(null);
+
+  useEffect(() => {
+    setOutsidePlayback(null);
+    setInsidePlayback(null);
+    setOutsideEvent(null);
+    setInsideEvent(null);
+    setInsideAudioStatus('loading');
+    setHoverFraction(null);
+  }, [candidate?.candidate_id]);
+
   if (!candidate) {
     return <div className="mono" style={{ display: 'grid', placeItems: 'center', height: '100%', color: 'var(--ink-3)' }}>SELECT A CANDIDATE</div>;
   }
@@ -287,6 +599,9 @@ function CandidateDetail({
             <h2 style={{ fontSize: 18, margin: 0, fontWeight: 550 }}>{formatMoment(candidate.outside_peak_ts)}</h2>
             <Pill tone={candidate.candidate_group === 'correlated' ? 'cool' : 'warn'}>
               {candidate.candidate_group.replace('_', ' ').toUpperCase()}
+            </Pill>
+            <Pill tone={candidate.labelable ? 'ok' : 'hot'}>
+              {candidate.labelable ? 'AUDIO READY' : `AUDIO ${candidate.audio_state.toUpperCase()}`}
             </Pill>
           </div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', marginTop: 4 }}>
@@ -305,21 +620,54 @@ function CandidateDetail({
           title="OUTSIDE · WIND-EXPOSED"
           frames={outside}
           peak={candidate.outside_peak_db}
-          peakTs={candidate.outside_peak_ts}
           baseline={candidate.outside_baseline_db}
           rise={candidate.outside_rise_db}
+          audioRef={outsideAudioRef}
+          playbackTime={outsidePlayback}
+          audioStartTs={outsideEvent?.ts ?? null}
+          clipStartTs={outsideEvent?.ts ?? null}
+          clipDurationS={outsideEvent?.duration_s ?? null}
           snapshotStart={candidate.snapshot_start}
           snapshotEnd={candidate.snapshot_end}
+          hoverFraction={hoverFraction}
+          onHoverFraction={setHoverFraction}
+          audio={(
+            <OutsideAudio
+              eventId={candidate.outside_event_id}
+              audioRef={outsideAudioRef}
+              onProgress={setOutsidePlayback}
+              onEventChange={setOutsideEvent}
+            />
+          )}
         />
         <MicSnapshot
           title="INSIDE · WIND-IMMUNE"
           frames={inside}
           peak={candidate.inside_peak_db}
-          peakTs={candidate.inside_peak_ts}
           baseline={candidate.inside_baseline_db}
           rise={candidate.inside_rise_db}
+          headerNotice={insideAudioStatus === 'empty' ? 'NO INSIDE CLIP IN SNAPSHOT' : undefined}
+          audioRef={insideAudioRef}
+          playbackTime={insidePlayback}
+          audioStartTs={insideEvent?.ts ?? null}
+          clipStartTs={outsideEvent?.ts ?? null}
+          clipDurationS={outsideEvent?.duration_s ?? null}
           snapshotStart={candidate.snapshot_start}
           snapshotEnd={candidate.snapshot_end}
+          hoverFraction={hoverFraction}
+          onHoverFraction={setHoverFraction}
+          audio={(
+            <InsideAudio
+              deviceId={inside?.device_id}
+              fromTs={candidate.snapshot_start}
+              toTs={candidate.snapshot_end}
+              peakTs={candidate.inside_peak_ts}
+              audioRef={insideAudioRef}
+              onProgress={setInsidePlayback}
+              onStatusChange={setInsideAudioStatus}
+              onEventChange={setInsideEvent}
+            />
+          )}
         />
       </div>
 
@@ -327,18 +675,27 @@ function CandidateDetail({
         <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 10 }}>
           HUMAN LABEL · R/W/U shortcuts
         </div>
+        {!candidate.labelable && (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--neon-warn)', marginBottom: 10, lineHeight: 1.5 }}>
+            {candidate.audio_state === 'pending'
+              ? 'WAITING FOR THE OUTDOOR CLIP TO UPLOAD — LABELING UNLOCKS ONCE IT ARRIVES'
+              : 'NO OUTDOOR CLIP WAS RECORDED FOR THIS PEAK — WIND CANNOT BE CONFIRMED BY EYE, SO DISMISS IT'}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
           {LABELS.map((label) => (
             <button
               key={label}
-              disabled={busy}
+              disabled={busy || !candidate.labelable}
+              title={candidate.labelable ? undefined : 'Requires a playable outdoor clip'}
               onClick={() => onReview({ label })}
               style={{
                 ...actionButton,
                 minWidth: 110,
                 borderColor: candidate.label === label ? 'var(--neon-cool)' : 'var(--line-strong)',
                 color: label === 'real' ? 'var(--neon-ok)' : label === 'wind' ? 'var(--neon-warn)' : 'var(--ink-1)',
-                opacity: busy ? 0.5 : 1,
+                opacity: busy || !candidate.labelable ? 0.4 : 1,
+                cursor: candidate.labelable ? 'pointer' : 'not-allowed',
               }}
             >
               {label}
@@ -374,6 +731,8 @@ const NUMBER_FIELDS: Array<{
   { key: 'snapshot_before_s', label: 'Snapshot before (s)' },
   { key: 'snapshot_after_s', label: 'Snapshot after (s)' },
   { key: 'scan_interval_s', label: 'Scan interval (s)' },
+  { key: 'audio_match_window_s', label: 'Audio match ± window (s)' },
+  { key: 'audio_grace_s', label: 'Audio wait before giving up (s)' },
 ];
 
 function DetectionSettingsPanel({ settings, onSaved }: { settings: CorrelatedEventSettings; onSaved: (s: CorrelatedEventSettings) => void }) {
@@ -452,9 +811,18 @@ function DetectionSettingsPanel({ settings, onSaved }: { settings: CorrelatedEve
 export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
   const [review, setReview] = useState<CandidateReviewFilter>('pending');
   const [group, setGroup] = useState<CandidateGroup | 'all'>('all');
+  const [audio, setAudio] = useState<CandidateAudioFilter>('linked');
   const [items, setItems] = useState<CorrelatedEventCandidate[]>([]);
   const [total, setTotal] = useState(0);
   const [pending, setPending] = useState(0);
+  const [awaitingAudio, setAwaitingAudio] = useState(0);
+  const [missingAudio, setMissingAudio] = useState(0);
+  const [selectedHourTs, setSelectedHourTs] = useState<number | null>(null);
+  const [eventIndex, setEventIndex] = useState<EventIndexEntry[]>([]);
+  const [hourEvents, setHourEvents] = useState<DeviceEvent[]>([]);
+  const [hourEventsLoading, setHourEventsLoading] = useState(false);
+  const [hourEventsError, setHourEventsError] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [frames, setFrames] = useState<CorrelatedEventFrames | null>(null);
   const [settings, setSettings] = useState<CorrelatedEventSettings | null>(null);
@@ -467,10 +835,12 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchCorrelatedEventCandidates(review, group);
+      const result = await fetchCorrelatedEventCandidates(review, group, audio, selectedHourTs);
       setItems(result.items);
       setTotal(result.total);
       setPending(result.pending);
+      setAwaitingAudio(result.awaiting_audio);
+      setMissingAudio(result.missing_audio);
       setSelectedId((current) =>
         current && result.items.some((item) => item.candidate_id === current)
           ? current
@@ -481,12 +851,44 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [review, group]);
+  }, [review, group, audio, selectedHourTs]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     fetchCorrelatedEventSettings().then(setSettings).catch((e: Error) => setError(e.message));
   }, []);
+  useEffect(() => {
+    if (!settings?.outside_device_id) return;
+    let cancelled = false;
+    const loadEvents = () => {
+      const now = Date.now() / 1000;
+      fetchEventIndex(settings.outside_device_id, now - 86400, now)
+        .then((result) => { if (!cancelled) setEventIndex(result.events); })
+        .catch(() => { /* spectrogram stays usable without event bands */ });
+    };
+    loadEvents();
+    const id = window.setInterval(loadEvents, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [settings?.outside_device_id]);
+  useEffect(() => {
+    if (!settings?.outside_device_id || selectedHourTs == null) {
+      setHourEvents([]);
+      setHourEventsError(null);
+      setHourEventsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setHourEventsLoading(true);
+    setHourEventsError(null);
+    fetchEventsInRange(settings.outside_device_id, selectedHourTs, selectedHourTs + 3600)
+      .then((result) => { if (!cancelled) setHourEvents(result); })
+      .catch((e: Error) => { if (!cancelled) setHourEventsError(e.message); })
+      .finally(() => { if (!cancelled) setHourEventsLoading(false); });
+    return () => { cancelled = true; };
+  }, [settings?.outside_device_id, selectedHourTs]);
   useEffect(() => {
     if (!selectedId) { setFrames(null); return; }
     let cancelled = false;
@@ -497,9 +899,18 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     return () => { cancelled = true; };
   }, [selectedId]);
 
-  const selected = items.find((item) => item.candidate_id === selectedId) ?? null;
+  const queueItems = selectedEventId == null
+    ? items
+    : items.filter((item) => item.outside_event_id === selectedEventId);
+  const selected = queueItems.find((item) => item.candidate_id === selectedId) ?? null;
   const reviewCandidate = useCallback(async (body: { label?: CandidateLabel | null; dismissed?: boolean }) => {
     if (!selectedId || busy) return;
+    // Mirrors the server's 409: a label is only meaningful if the outdoor clip
+    // was audible. Dismissing an unlabelable candidate stays allowed.
+    if (body.label != null && selected && !selected.labelable) {
+      setError('Labeling requires a playable outdoor clip for this candidate.');
+      return;
+    }
     const next = items.find((item) => item.candidate_id !== selectedId)?.candidate_id ?? null;
     setBusy(true);
     setError(null);
@@ -512,7 +923,7 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     } finally {
       setBusy(false);
     }
-  }, [selectedId, busy, items, load]);
+  }, [selectedId, busy, items, load, selected]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -537,7 +948,9 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
           <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Correlated peaks suggest real traffic · outside-only peaks suggest wind</div>
         </div>
         <div className="mono" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-3)' }}>
-          <span style={{ color: pending ? 'var(--neon-warn)' : 'var(--neon-ok)' }}>{pending}</span> PENDING
+          <span style={{ color: pending ? 'var(--neon-warn)' : 'var(--neon-ok)' }}>{pending}</span> LABELABLE
+          {awaitingAudio > 0 && <span> · {awaitingAudio} AWAITING AUDIO</span>}
+          {missingAudio > 0 && <span> · {missingAudio} NO CLIP</span>}
           {settings?.last_processed_at && <span> · SCANNED {formatMoment(settings.last_processed_at)}</span>}
         </div>
         <button onClick={() => setShowSettings((v) => !v)} style={{ ...actionButton, padding: '6px 10px' }}>
@@ -547,20 +960,50 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
         <UserChip />
       </header>
 
+      {settings && (
+        <CandidateHistoryRibbons
+          settings={settings}
+          selectedHourTs={selectedHourTs}
+          onHourClick={(hourTs) => {
+            setSelectedHourTs((current) => current === hourTs ? null : hourTs);
+            setSelectedEventId(null);
+          }}
+          events={eventIndex}
+          hourEvents={hourEvents}
+          hourEventsLoading={hourEventsLoading}
+          hourEventsError={hourEventsError}
+          selectedEventId={selectedEventId}
+          onEventClick={(eventId) => {
+            const nextEventId = selectedEventId === eventId ? null : eventId;
+            setSelectedEventId(nextEventId);
+            setSelectedId(
+              nextEventId == null
+                ? (items[0]?.candidate_id ?? null)
+                : (items.find((item) => item.outside_event_id === nextEventId)?.candidate_id ?? null),
+            );
+          }}
+        />
+      )}
       {showSettings && settings && <DetectionSettingsPanel settings={settings} onSaved={setSettings} />}
       {error && <div className="mono" style={{ padding: 9, color: 'var(--neon-hot)', border: '1px solid var(--line)', borderRadius: 5 }}>{error}</div>}
 
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '330px minmax(0, 1fr)', gap: 12, minHeight: 0 }}>
-        <Card title="REVIEW QUEUE" subtitle={`${total} matching · ${pending} pending`} padding={0}>
+        <Card title="REVIEW QUEUE" subtitle={`${selectedEventId == null ? total : queueItems.length} matching · ${pending} labelable`} padding={0}>
           <div style={{ padding: 10, borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {REVIEW_FILTERS.map((value) => <FilterButton key={value} active={review === value} onClick={() => setReview(value)}>{value}</FilterButton>)}
           </div>
           <div style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {GROUP_FILTERS.map((value) => <FilterButton key={value} active={group === value} onClick={() => setGroup(value)}>{value.replace('_', ' ')}</FilterButton>)}
           </div>
+          <div style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>AUDIO</span>
+            {AUDIO_FILTERS.map(({ value, text }) => (
+              <FilterButton key={value} active={audio === value} onClick={() => setAudio(value)}>{text}</FilterButton>
+            ))}
+          </div>
           {loading
             ? <div className="mono" style={{ padding: 28, textAlign: 'center', color: 'var(--ink-3)' }}>LOADING…</div>
-            : <CandidateList items={items} selectedId={selectedId} onSelect={setSelectedId} />}
+            : <CandidateList items={queueItems} selectedId={selectedId} onSelect={setSelectedId} />}
         </Card>
         <Card padding={0}>
           <CandidateDetail candidate={selected} frames={frames} busy={busy} onReview={(body) => { void reviewCandidate(body); }} />

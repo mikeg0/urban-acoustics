@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth.permissions import EVENT_CANDIDATE_MANAGE
 from ...auth.user import AuthenticatedUser, require_permission
 from ...contracts import (
+    CandidateAudioFilter,
     CorrelatedEventCandidateListResponse,
     CorrelatedEventCandidatePatch,
     CorrelatedEventCandidateResponse,
@@ -56,6 +57,8 @@ def _settings_response(row: CorrelatedEventSettings) -> CorrelatedEventSettingsR
         snapshot_before_s=row.snapshot_before_s,
         snapshot_after_s=row.snapshot_after_s,
         scan_interval_s=row.scan_interval_s,
+        audio_match_window_s=row.audio_match_window_s,
+        audio_grace_s=row.audio_grace_s,
         last_processed_at=(
             row.last_processed_at.timestamp() if row.last_processed_at else None
         ),
@@ -138,6 +141,9 @@ def _candidate_response(
         inside_rise_db=row.inside_rise_db,
         snapshot_start=row.snapshot_start.timestamp(),
         snapshot_end=row.snapshot_end.timestamp(),
+        outside_event_id=row.outside_event_id,
+        audio_state=row.audio_state,  # type: ignore[arg-type]
+        labelable=row.audio_state == "linked",
         label=row.label,  # type: ignore[arg-type]
         dismissed=row.dismissed,
         reviewed_by_email=reviewer_emails.get(row.reviewed_by) if row.reviewed_by else None,
@@ -218,6 +224,12 @@ async def list_candidates(
     review: Literal["pending", "labeled", "dismissed", "all"] = Query("pending"),
     candidate_group: Literal["correlated", "outside_only"] | None = Query(None),
     label: Literal["real", "wind", "unsure"] | None = Query(None),
+    # Defaults to audio-backed candidates so the review queue only ever offers
+    # work that can actually be labeled. 'pending'/'missing' are for diagnosing
+    # device recording thresholds.
+    audio: CandidateAudioFilter = Query("linked"),
+    from_ts: float | None = Query(None, alias="from", gt=0),
+    to_ts: float | None = Query(None, alias="to", gt=0),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
@@ -230,6 +242,18 @@ async def list_candidates(
         conditions.append(CorrelatedEventCandidate.candidate_group == candidate_group)
     if label is not None:
         conditions.append(CorrelatedEventCandidate.label == label)
+    if audio != "all":
+        conditions.append(CorrelatedEventCandidate.audio_state == audio)
+    if from_ts is not None:
+        conditions.append(
+            CorrelatedEventCandidate.outside_peak_ts
+            >= datetime.fromtimestamp(from_ts, timezone.utc)
+        )
+    if to_ts is not None:
+        conditions.append(
+            CorrelatedEventCandidate.outside_peak_ts
+            < datetime.fromtimestamp(to_ts, timezone.utc)
+        )
 
     base = select(CorrelatedEventCandidate)
     count_stmt = select(func.count()).select_from(CorrelatedEventCandidate)
@@ -242,19 +266,39 @@ async def list_candidates(
         .limit(limit)
     )
     total = int(await session.scalar(count_stmt) or 0)
-    pending = int(
-        await session.scalar(
-            select(func.count())
-            .select_from(CorrelatedEventCandidate)
-            .where(
-                CorrelatedEventCandidate.label.is_(None),
-                CorrelatedEventCandidate.dismissed.is_(False),
-            )
-        )
-        or 0
+    # Queue-wide (unfiltered) tallies: reviewable work versus candidates held up
+    # or lost for lack of an outside clip.
+    unreviewed = and_(
+        CorrelatedEventCandidate.label.is_(None),
+        CorrelatedEventCandidate.dismissed.is_(False),
     )
+    tallies = (
+        await session.execute(
+            select(
+                func.count()
+                .filter(
+                    unreviewed, CorrelatedEventCandidate.audio_state == "linked"
+                )
+                .label("pending"),
+                func.count()
+                .filter(
+                    unreviewed, CorrelatedEventCandidate.audio_state == "pending"
+                )
+                .label("awaiting_audio"),
+                func.count()
+                .filter(CorrelatedEventCandidate.audio_state == "missing")
+                .label("missing_audio"),
+            ).select_from(CorrelatedEventCandidate)
+        )
+    ).one()
     items = await _responses(session, list(rows.scalars()))
-    return CorrelatedEventCandidateListResponse(items=items, total=total, pending=pending)
+    return CorrelatedEventCandidateListResponse(
+        items=items,
+        total=total,
+        pending=int(tallies.pending or 0),
+        awaiting_audio=int(tallies.awaiting_audio or 0),
+        missing_audio=int(tallies.missing_audio or 0),
+    )
 
 
 @router.get(
@@ -286,6 +330,17 @@ async def review_candidate(
     if row is None:
         raise HTTPException(status_code=404, detail="candidate not found")
     if "label" in body.model_fields_set:
+        # Wind and real noise are not reliably separable by eye, so a label is
+        # only trustworthy if the reviewer could play the outside clip. The
+        # matching DB CHECK is the backstop; this is the readable error.
+        if body.label is not None and row.audio_state != "linked":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "labeling requires outdoor audio: this candidate's clip is "
+                    f"{row.audio_state} (dismiss it instead)"
+                ),
+            )
         row.label = body.label
         if body.label is not None:
             row.dismissed = False
