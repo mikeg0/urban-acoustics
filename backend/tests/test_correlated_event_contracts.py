@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from typing import get_args
 from uuid import UUID
 
 import pytest
 
 from app.contracts import (
+    CandidateLabel,
     CorrelatedEventCandidatePatch,
     CorrelatedEventSettingsUpdate,
+    EventLabel,
+    WEATHER_LABELS,
 )
 
 
@@ -56,9 +60,23 @@ def test_settings_reject_min_samples_larger_than_window() -> None:
         _settings(baseline_window_s=30, min_baseline_samples=31)
 
 
-@pytest.mark.parametrize("label", ["real", "wind", "unsure"])
+@pytest.mark.parametrize("label", get_args(EventLabel))
 def test_candidate_patch_accepts_review_labels(label: str) -> None:
     assert CorrelatedEventCandidatePatch(label=label).label == label
+
+
+@pytest.mark.parametrize("legacy_label", ["real", "unsure"])
+def test_candidate_patch_rejects_legacy_binary_labels(legacy_label: str) -> None:
+    with pytest.raises(ValueError):
+        CorrelatedEventCandidatePatch(label=legacy_label)
+
+
+def test_candidate_labels_share_event_taxonomy_and_weather_gate() -> None:
+    labels = set(get_args(EventLabel))
+    assert get_args(CandidateLabel) == get_args(EventLabel)
+    assert len(labels) == 15
+    assert WEATHER_LABELS == {"wind", "rain", "thunder"}
+    assert WEATHER_LABELS < labels
 
 
 def test_candidate_patch_rejects_empty_body() -> None:

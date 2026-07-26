@@ -253,6 +253,9 @@ export const EVENT_LABELS: readonly EventLabel[] = [
   'other',
 ];
 
+/** Labels for which the Pi's upload-suppression gate treats a peak as weather. */
+export const WEATHER_LABELS: readonly EventLabel[] = ['wind', 'rain', 'thunder'];
+
 export interface DeviceEvent {
   event_id: string;
   device_id: string;
@@ -420,7 +423,8 @@ export const SPECTROGRAM_N_BANDS = BAND_CENTERS_HZ.length;
 
 export type DetectionMetric = 'laeq' | 'lafmax' | 'lcpeak';
 export type CandidateGroup = 'correlated' | 'outside_only';
-export type CandidateLabel = 'real' | 'wind' | 'unsure';
+/** Two-mic reviews use the same source taxonomy as every other labeler. */
+export type CandidateLabel = EventLabel;
 export type CandidateReviewFilter = 'pending' | 'labeled' | 'dismissed' | 'all';
 /** Whether the outside clip a reviewer must hear is attached yet. */
 export type CandidateAudioState = 'pending' | 'linked' | 'missing';

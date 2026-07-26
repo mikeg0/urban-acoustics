@@ -37,12 +37,15 @@ import type {
   CorrelatedEventSettingsUpdate,
   DeviceEvent,
   EventIndexEntry,
+  EventLabel,
 } from './types';
+import { EVENT_LABELS, WEATHER_LABELS } from './types';
 
 
 const REVIEW_FILTERS: CandidateReviewFilter[] = ['pending', 'labeled', 'dismissed', 'all'];
 const GROUP_FILTERS: Array<CandidateGroup | 'all'> = ['all', 'correlated', 'outside_only'];
-const LABELS: CandidateLabel[] = ['real', 'wind', 'unsure'];
+const WEATHER_LABEL_SET = new Set<EventLabel>(WEATHER_LABELS);
+const NON_WEATHER_LABELS = EVENT_LABELS.filter((label) => !WEATHER_LABEL_SET.has(label));
 // 'linked' leads because only those candidates can be labeled; the rest are for
 // judging whether the device's own recording threshold is set too high.
 const AUDIO_FILTERS: Array<{ value: CandidateAudioFilter; text: string }> = [
@@ -673,33 +676,46 @@ function CandidateDetail({
 
       <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line)', borderRadius: 6, background: 'var(--bg-1)' }}>
         <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.1em', marginBottom: 10 }}>
-          HUMAN LABEL · R/W/U shortcuts
+          SOURCE LABEL · WEATHER = SUPPRESS · ALL OTHER SOURCES = REAL · X DISMISSES
         </div>
         {!candidate.labelable && (
           <div className="mono" style={{ fontSize: 10, color: 'var(--neon-warn)', marginBottom: 10, lineHeight: 1.5 }}>
             {candidate.audio_state === 'pending'
               ? 'WAITING FOR THE OUTDOOR CLIP TO UPLOAD — LABELING UNLOCKS ONCE IT ARRIVES'
-              : 'NO OUTDOOR CLIP WAS RECORDED FOR THIS PEAK — WIND CANNOT BE CONFIRMED BY EYE, SO DISMISS IT'}
+              : 'NO OUTDOOR CLIP WAS RECORDED FOR THIS PEAK — THE SOURCE CANNOT BE IDENTIFIED BY EYE, SO DISMISS IT'}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-          {LABELS.map((label) => (
-            <button
-              key={label}
-              disabled={busy || !candidate.labelable}
-              title={candidate.labelable ? undefined : 'Requires a playable outdoor clip'}
-              onClick={() => onReview({ label })}
-              style={{
-                ...actionButton,
-                minWidth: 110,
-                borderColor: candidate.label === label ? 'var(--neon-cool)' : 'var(--line-strong)',
-                color: label === 'real' ? 'var(--neon-ok)' : label === 'wind' ? 'var(--neon-warn)' : 'var(--ink-1)',
-                opacity: busy || !candidate.labelable ? 0.4 : 1,
-                cursor: candidate.labelable ? 'pointer' : 'not-allowed',
-              }}
-            >
-              {label}
-            </button>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          {([
+            { title: 'WEATHER', labels: WEATHER_LABELS, color: 'var(--neon-warn)' },
+            { title: 'OTHER SOURCES', labels: NON_WEATHER_LABELS, color: 'var(--neon-ok)' },
+          ] as const).map((group) => (
+            <div key={group.title} style={{ flex: group.title === 'WEATHER' ? '0 1 150px' : '1 1 420px' }}>
+              <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.12em', marginBottom: 7 }}>
+                {group.title}
+              </div>
+              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                {group.labels.map((label) => (
+                  <button
+                    key={label}
+                    disabled={busy || !candidate.labelable}
+                    title={candidate.labelable ? undefined : 'Requires a playable outdoor clip'}
+                    onClick={() => onReview({ label })}
+                    style={{
+                      ...actionButton,
+                      minWidth: 104,
+                      padding: '7px 12px',
+                      borderColor: candidate.label === label ? 'var(--neon-cool)' : 'var(--line-strong)',
+                      color: group.color,
+                      opacity: busy || !candidate.labelable ? 0.4 : 1,
+                      cursor: candidate.labelable ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
           <button
             disabled={busy}
@@ -930,9 +946,6 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
       const target = e.target as HTMLElement | null;
       if (target?.matches('input, select, textarea, button')) return;
       const key = e.key.toLowerCase();
-      if (key === 'r') void reviewCandidate({ label: 'real' });
-      if (key === 'w') void reviewCandidate({ label: 'wind' });
-      if (key === 'u') void reviewCandidate({ label: 'unsure' });
       if (key === 'x') void reviewCandidate({ dismissed: true });
     };
     window.addEventListener('keydown', onKey);
@@ -945,7 +958,7 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
         <button onClick={onBack} style={{ ...actionButton, padding: '6px 10px' }}>← Stations</button>
         <div>
           <div className="mono" style={{ fontSize: 11, letterSpacing: '0.12em', color: 'var(--ink-1)' }}>TWO-MIC LABELING</div>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Correlated peaks suggest real traffic · outside-only peaks suggest wind</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Name the source you hear · weather labels are upload-suppression negatives</div>
         </div>
         <div className="mono" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-3)' }}>
           <span style={{ color: pending ? 'var(--neon-warn)' : 'var(--neon-ok)' }}>{pending}</span> LABELABLE

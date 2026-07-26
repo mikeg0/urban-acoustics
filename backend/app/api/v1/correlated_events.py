@@ -22,6 +22,7 @@ from ...contracts import (
     CorrelatedEventFrameStream,
     CorrelatedEventSettingsResponse,
     CorrelatedEventSettingsUpdate,
+    EventLabel,
 )
 from ...db import get_session
 from ...models import (
@@ -223,7 +224,7 @@ async def list_candidates(
     _admin: ADMIN,
     review: Literal["pending", "labeled", "dismissed", "all"] = Query("pending"),
     candidate_group: Literal["correlated", "outside_only"] | None = Query(None),
-    label: Literal["real", "wind", "unsure"] | None = Query(None),
+    label: EventLabel | None = Query(None),
     # Defaults to audio-backed candidates so the review queue only ever offers
     # work that can actually be labeled. 'pending'/'missing' are for diagnosing
     # device recording thresholds.
@@ -330,9 +331,10 @@ async def review_candidate(
     if row is None:
         raise HTTPException(status_code=404, detail="candidate not found")
     if "label" in body.model_fields_set:
-        # Wind and real noise are not reliably separable by eye, so a label is
-        # only trustworthy if the reviewer could play the outside clip. The
-        # matching DB CHECK is the backstop; this is the readable error.
+        # Weather buffeting and genuine sources are not reliably separable by
+        # eye, so a label is only trustworthy if the reviewer could play the
+        # outside clip. The matching DB CHECK is the backstop; this is the
+        # readable error.
         if body.label is not None and row.audio_state != "linked":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

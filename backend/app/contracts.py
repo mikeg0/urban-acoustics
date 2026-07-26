@@ -31,11 +31,36 @@ SHA256Hex = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$", description="Lowerca
 DbLevel = Annotated[float, Field(ge=_DB_MIN, le=_DB_MAX)]
 
 
+# One source taxonomy is shared by event labels, spectrogram annotations, and
+# two-microphone candidate reviews.  Weather labels are the Pi upload gate's
+# negatives; every other label represents genuine non-weather sound.
+EventLabel = Literal[
+    "motorcycle",
+    "car",
+    "truck",
+    "construction",
+    "helicopter",
+    "airplane",
+    "siren",
+    "horn",
+    "dog",
+    "voice",
+    "trash pickup",
+    "wind",
+    "rain",
+    "thunder",
+    "other",
+]
+WEATHER_LABELS: frozenset[EventLabel] = frozenset(("wind", "rain", "thunder"))
+
+
 # --- Admin two-microphone candidate labeling -------------------------------
 
 DetectionMetric = Literal["laeq", "lafmax", "lcpeak"]
 CandidateGroup = Literal["correlated", "outside_only"]
-CandidateLabel = Literal["real", "wind", "unsure"]
+# Compatibility alias for callers that name the candidate-specific contract.
+# It deliberately has exactly the same members as EventLabel.
+CandidateLabel = EventLabel
 # 'pending' — still waiting for the device to finish uploading a clip.
 # 'linked'  — an outside clip is attached; the candidate is labelable.
 # 'missing' — no clip arrived within the grace window; never labelable.
@@ -607,25 +632,6 @@ class SourcesResponse(BaseModel):
 
 
 # --- REST: labels ------------------------------------------------------------
-
-
-EventLabel = Literal[
-    "motorcycle",
-    "car",
-    "truck",
-    "construction",
-    "helicopter",
-    "airplane",
-    "siren",
-    "horn",
-    "dog",
-    "voice",
-    "trash pickup",
-    "wind",
-    "rain",
-    "thunder",
-    "other",
-]
 
 
 class LabelRequest(_Forward):

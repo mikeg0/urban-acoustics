@@ -1,6 +1,6 @@
 """Pull labeled data from Postgres into a Pi training cache.
 
-Two label sources feed the same Pi-side classifier:
+Three label sources feed the same Pi-side classifier:
 
 * Audio-backed events: latest-wins label per event from ``labels``,
   joined to its (frames × 30) slice of ``spectrogram_frames`` over
@@ -9,11 +9,11 @@ Two label sources feed the same Pi-side classifier:
   ``spectrogram_annotations`` covering sub-threshold patterns
   (most wind, rain, distant helicopters). Sliced from the same
   hypertable over ``[ts_start, ts_end)``.
-* Two-mic candidates: admin-reviewed ``real``/``wind`` examples read from
+* Two-mic candidates: admin-reviewed source labels read from
   ``correlated_event_frames``. These snapshots survive the source hypertable's
-  seven-day retention; ``unsure`` and dismissed candidates are excluded.
+  seven-day retention; unlabeled and dismissed candidates are excluded.
 
-Both sources collapse to one Pi feature row each. Annotations are capped
+All three sources collapse to one Pi feature row each. Annotations are capped
 per class at ``cap_ratio × audio_count`` so labeling a large number of
 sub-threshold ranges doesn't drown out the loud-event distribution at
 training time.
@@ -140,7 +140,7 @@ async def list_annotations(session: AsyncSession) -> list[ManifestRow]:
 
 
 async def list_correlated_candidates(session: AsyncSession) -> list[ManifestRow]:
-    """Return reviewed binary candidates backed by permanent snapshots."""
+    """Return source-labeled candidates backed by permanent snapshots."""
 
     rows = (
         await session.execute(
@@ -152,7 +152,7 @@ async def list_correlated_candidates(session: AsyncSession) -> list[ManifestRow]
                 CorrelatedEventCandidate.label,
             ).where(
                 CorrelatedEventCandidate.dismissed.is_(False),
-                CorrelatedEventCandidate.label.in_(("real", "wind")),
+                CorrelatedEventCandidate.label.is_not(None),
             )
         )
     ).all()
