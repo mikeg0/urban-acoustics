@@ -1,8 +1,6 @@
 import type {
   AnomaliesResponse,
   CameraInfo,
-  CandidateAudioFilter,
-  CandidateGroup,
   CandidateLabel,
   CandidateReviewFilter,
   CorrelatedEventCandidate,
@@ -379,14 +377,9 @@ export const putCorrelatedEventSettings = (
 
 export const fetchCorrelatedEventCandidates = (
   review: CandidateReviewFilter,
-  group: CandidateGroup | 'all',
-  // Defaults to clips the reviewer can actually hear; the other states are for
-  // checking how much audio the device threshold is missing.
-  audio: CandidateAudioFilter = 'linked',
   hourTs: number | null = null,
 ): Promise<CorrelatedEventCandidateList> => {
-  const query = new URLSearchParams({ review, limit: '250', audio });
-  if (group !== 'all') query.set('candidate_group', group);
+  const query = new URLSearchParams({ review, limit: '250', audio: 'linked' });
   if (hourTs != null) {
     query.set('from', String(hourTs));
     query.set('to', String(hourTs + 3600));

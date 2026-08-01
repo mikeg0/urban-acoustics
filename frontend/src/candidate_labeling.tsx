@@ -17,7 +17,6 @@ import {
   fetchEventIndex,
   fetchEventPlaybackUrl,
   fetchEventsInRange,
-  putCorrelatedEventSettings,
   reviewCorrelatedEventCandidate,
 } from './api';
 import { Card, Pill } from './atoms';
@@ -27,14 +26,11 @@ import { HistoryRibbon24h, SpectrogramCanvas } from './spectrogram';
 import { useTweaks } from './tweaks';
 import { formatHourTick } from './utils';
 import type {
-  CandidateAudioFilter,
-  CandidateGroup,
   CandidateLabel,
   CandidateReviewFilter,
   CorrelatedEventCandidate,
   CorrelatedEventFrames,
   CorrelatedEventSettings,
-  CorrelatedEventSettingsUpdate,
   DeviceEvent,
   EventIndexEntry,
   EventLabel,
@@ -43,17 +39,8 @@ import { EVENT_LABELS, WEATHER_LABELS } from './types';
 
 
 const REVIEW_FILTERS: CandidateReviewFilter[] = ['pending', 'labeled', 'dismissed', 'all'];
-const GROUP_FILTERS: Array<CandidateGroup | 'all'> = ['all', 'correlated', 'outside_only'];
 const WEATHER_LABEL_SET = new Set<EventLabel>(WEATHER_LABELS);
 const NON_WEATHER_LABELS = EVENT_LABELS.filter((label) => !WEATHER_LABEL_SET.has(label));
-// 'linked' leads because only those candidates can be labeled; the rest are for
-// judging whether the device's own recording threshold is set too high.
-const AUDIO_FILTERS: Array<{ value: CandidateAudioFilter; text: string }> = [
-  { value: 'linked', text: 'ready' },
-  { value: 'pending', text: 'awaiting' },
-  { value: 'missing', text: 'no clip' },
-  { value: 'all', text: 'all' },
-];
 
 const actionButton: CSSProperties = {
   border: '1px solid var(--line-strong)',
@@ -168,21 +155,9 @@ function CandidateHistoryRibbons({
           deviceId={settings.outside_device_id}
           palette={spectroColor}
           colorEventsByLabel
-          instruction={`${hourEvents.length} CLIP${hourEvents.length === 1 ? '' : 'S'} · CLICK AN EVENT BAND TO FILTER REVIEW QUEUE`}
+          instruction={`${hourEvents.length} CLIP${hourEvents.length === 1 ? '' : 'S'} · CLICK AN EVENT BAND TO HIGHLIGHT IN REVIEW QUEUE`}
           showDelete={false}
         />
-      )}
-      {selectedHourTs != null && (
-        <div className="mono" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-          gap: 9, marginTop: 8, fontSize: 9, color: 'var(--neon-focus)',
-        }}>
-          REVIEW QUEUE FILTERED TO {formatMoment(selectedHourTs)} → {formatMoment(selectedHourTs + 3600)}
-          {selectedEventId != null && <span>· SELECTED EVENT</span>}
-          <button onClick={() => onHourClick(selectedHourTs)} style={{ ...actionButton, padding: '3px 7px' }}>
-            Clear
-          </button>
-        </div>
       )}
     </div>
   );
@@ -203,6 +178,7 @@ function AudioClip({
   status,
   emptyLabel,
   hideEmptyLabel = false,
+  autoPlay = false,
   label,
   audioRef,
   onProgress,
@@ -211,6 +187,7 @@ function AudioClip({
   status: AudioStatus;
   emptyLabel: string;
   hideEmptyLabel?: boolean;
+  autoPlay?: boolean;
   label: string;
   audioRef: RefObject<HTMLAudioElement>;
   onProgress: (currentTime: number) => void;
@@ -236,7 +213,10 @@ function AudioClip({
       preload="metadata"
       src={url}
       aria-label={label}
-      onLoadedMetadata={reportProgress}
+      onLoadedMetadata={() => {
+        reportProgress();
+        if (autoPlay) void audioRef.current?.play().catch(() => { /* user can play manually */ });
+      }}
       onTimeUpdate={reportProgress}
     />
   );
@@ -246,11 +226,13 @@ function AudioClip({
  *  this plays an exact known event rather than guessing from a time range. */
 function OutsideAudio({
   eventId,
+  autoPlay,
   audioRef,
   onProgress,
   onEventChange,
 }: {
   eventId: string | null;
+  autoPlay: boolean;
   audioRef: RefObject<HTMLAudioElement>;
   onProgress: (currentTime: number) => void;
   onEventChange: (event: DeviceEvent | null) => void;
@@ -281,6 +263,7 @@ function OutsideAudio({
       url={url}
       status={status}
       emptyLabel="OUTDOOR CLIP UNAVAILABLE"
+      autoPlay={autoPlay}
       label="Outside microphone clip"
       audioRef={audioRef}
       onProgress={onProgress}
@@ -411,11 +394,6 @@ function CandidateList({
               </span>
               <span className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--ink-3)', marginTop: 2 }}>
                 {item.candidate_group.replace('_', ' ')} · outside +{item.outside_rise_db.toFixed(1)} dB
-                {!item.labelable && (
-                  <span style={{ color: 'var(--neon-warn)' }}>
-                    {item.audio_state === 'pending' ? ' · awaiting audio' : ' · no clip'}
-                  </span>
-                )}
               </span>
             </span>
             <span className="mono" style={{ fontSize: 10, color: item.label ? 'var(--neon-cool)' : 'var(--ink-3)' }}>
@@ -564,6 +542,7 @@ function CandidateDetail({
   busy: boolean;
   onReview: (body: { label?: CandidateLabel | null; dismissed?: boolean }) => void;
 }) {
+  const { clipAutoPlay } = useTweaks();
   const outsideAudioRef = useRef<HTMLAudioElement>(null);
   const insideAudioRef = useRef<HTMLAudioElement>(null);
   const [outsidePlayback, setOutsidePlayback] = useState<number | null>(null);
@@ -619,6 +598,7 @@ function CandidateDetail({
               audio={(
                 <OutsideAudio
                   eventId={candidate.outside_event_id}
+                  autoPlay={clipAutoPlay}
                   audioRef={outsideAudioRef}
                   onProgress={setOutsidePlayback}
                   onEventChange={setOutsideEvent}
@@ -657,14 +637,7 @@ function CandidateDetail({
         </div>
       </Card>
 
-      <Card title="SOURCE TAGS" subtitle="Weather suppresses uploads · all other sources are real" padding={14}>
-        {!candidate.labelable && (
-          <div className="mono" style={{ fontSize: 10, color: 'var(--neon-warn)', marginBottom: 10, lineHeight: 1.5 }}>
-            {candidate.audio_state === 'pending'
-              ? 'WAITING FOR THE OUTDOOR CLIP TO UPLOAD — LABELING UNLOCKS ONCE IT ARRIVES'
-              : 'NO OUTDOOR CLIP WAS RECORDED FOR THIS PEAK — THE SOURCE CANNOT BE IDENTIFIED BY EYE, SO DISMISS IT'}
-          </div>
-        )}
+      <Card title="SOURCE TAGS" padding={14}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {([
             { title: 'WEATHER', labels: WEATHER_LABELS, color: 'var(--neon-warn)' },
@@ -678,8 +651,7 @@ function CandidateDetail({
                 {group.labels.map((label) => (
                   <button
                     key={label}
-                    disabled={busy || !candidate.labelable}
-                    title={candidate.labelable ? undefined : 'Requires a playable outdoor clip'}
+                    disabled={busy}
                     onClick={() => onReview({ label })}
                     style={{
                       ...actionButton,
@@ -687,8 +659,7 @@ function CandidateDetail({
                       padding: '7px 12px',
                       borderColor: candidate.label === label ? 'var(--neon-cool)' : 'var(--line-strong)',
                       color: group.color,
-                      opacity: busy || !candidate.labelable ? 0.4 : 1,
-                      cursor: candidate.labelable ? 'pointer' : 'not-allowed',
+                      opacity: busy ? 0.4 : 1,
                     }}
                   >
                     {label}
@@ -710,109 +681,11 @@ function CandidateDetail({
   );
 }
 
-const NUMBER_FIELDS: Array<{
-  key: keyof CorrelatedEventSettingsUpdate;
-  label: string;
-  step?: number;
-}> = [
-  { key: 'baseline_window_s', label: 'Baseline window (s)' },
-  { key: 'min_baseline_samples', label: 'Minimum baseline samples' },
-  { key: 'outside_rise_db', label: 'Outside rise (dB)', step: 0.5 },
-  { key: 'inside_rise_db', label: 'Inside rise (dB)', step: 0.5 },
-  { key: 'outside_min_db', label: 'Outside floor (dB)', step: 0.5 },
-  { key: 'inside_min_db', label: 'Inside floor (dB)', step: 0.5 },
-  { key: 'peak_merge_window_s', label: 'Merge window (s)' },
-  { key: 'peak_cooldown_s', label: 'Peak cooldown (s)' },
-  { key: 'correlation_window_s', label: 'Correlation ± window (s)' },
-  { key: 'snapshot_before_s', label: 'Snapshot before (s)' },
-  { key: 'snapshot_after_s', label: 'Snapshot after (s)' },
-  { key: 'scan_interval_s', label: 'Scan interval (s)' },
-  { key: 'audio_match_window_s', label: 'Audio match ± window (s)' },
-  { key: 'audio_grace_s', label: 'Audio wait before giving up (s)' },
-];
-
-function DetectionSettingsPanel({ settings, onSaved }: { settings: CorrelatedEventSettings; onSaved: (s: CorrelatedEventSettings) => void }) {
-  const [draft, setDraft] = useState<CorrelatedEventSettingsUpdate>(() => {
-    const { last_processed_at: _last, updated_at: _updated, ...editable } = settings;
-    return editable;
-  });
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const { last_processed_at: _last, updated_at: _updated, ...editable } = settings;
-    setDraft(editable);
-  }, [settings]);
-
-  const save = async () => {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const updated = await putCorrelatedEventSettings(draft);
-      onSaved(updated);
-      setMessage('Saved');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const inputStyle: CSSProperties = {
-    width: '100%', background: 'var(--bg-0)', border: '1px solid var(--line)', borderRadius: 4,
-    color: 'var(--ink-0)', padding: '6px 8px', fontFamily: 'var(--mono)', fontSize: 11,
-  };
-  return (
-    <Card title="DETECTOR PARAMETERS" subtitle="Changes apply to the next cloud scan" padding={14}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 10 }}>
-        <label className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
-          OUTSIDE DEVICE
-          <input style={inputStyle} value={draft.outside_device_id} onChange={(e) => setDraft({ ...draft, outside_device_id: e.target.value })} />
-        </label>
-        <label className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
-          INSIDE DEVICE
-          <input style={inputStyle} value={draft.inside_device_id} onChange={(e) => setDraft({ ...draft, inside_device_id: e.target.value })} />
-        </label>
-        <label className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
-          METRIC
-          <select style={inputStyle} value={draft.metric} onChange={(e) => setDraft({ ...draft, metric: e.target.value as CorrelatedEventSettingsUpdate['metric'] })}>
-            <option value="laeq">LAeq</option><option value="lafmax">LAFmax</option><option value="lcpeak">LCpeak</option>
-          </select>
-        </label>
-        {NUMBER_FIELDS.map(({ key, label, step }) => (
-          <label key={key} className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>
-            {label.toUpperCase()}
-            <input
-              type="number"
-              step={step ?? 1}
-              style={inputStyle}
-              value={draft[key] as number}
-              onChange={(e) => setDraft({ ...draft, [key]: Number(e.target.value) })}
-            />
-          </label>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-        <label className="mono" style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--ink-2)', fontSize: 10 }}>
-          <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
-          DETECTOR ENABLED
-        </label>
-        <button disabled={saving} onClick={save} style={{ ...actionButton, marginLeft: 'auto' }}>{saving ? 'Saving…' : 'Save settings'}</button>
-        {message && <span className="mono" style={{ fontSize: 10, color: message === 'Saved' ? 'var(--neon-ok)' : 'var(--neon-hot)' }}>{message}</span>}
-      </div>
-    </Card>
-  );
-}
-
 export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
   const [review, setReview] = useState<CandidateReviewFilter>('pending');
-  const [group, setGroup] = useState<CandidateGroup | 'all'>('all');
-  const [audio, setAudio] = useState<CandidateAudioFilter>('linked');
   const [items, setItems] = useState<CorrelatedEventCandidate[]>([]);
   const [total, setTotal] = useState(0);
   const [pending, setPending] = useState(0);
-  const [awaitingAudio, setAwaitingAudio] = useState(0);
-  const [missingAudio, setMissingAudio] = useState(0);
   const [selectedHourTs, setSelectedHourTs] = useState<number | null>(null);
   const [eventIndex, setEventIndex] = useState<EventIndexEntry[]>([]);
   const [hourEvents, setHourEvents] = useState<DeviceEvent[]>([]);
@@ -822,7 +695,6 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [frames, setFrames] = useState<CorrelatedEventFrames | null>(null);
   const [settings, setSettings] = useState<CorrelatedEventSettings | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -831,12 +703,10 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchCorrelatedEventCandidates(review, group, audio, selectedHourTs);
+      const result = await fetchCorrelatedEventCandidates(review, selectedHourTs);
       setItems(result.items);
       setTotal(result.total);
       setPending(result.pending);
-      setAwaitingAudio(result.awaiting_audio);
-      setMissingAudio(result.missing_audio);
       setSelectedId((current) =>
         current && result.items.some((item) => item.candidate_id === current)
           ? current
@@ -847,7 +717,7 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [review, group, audio, selectedHourTs]);
+  }, [review, selectedHourTs]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -894,19 +764,15 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
       .catch((e: Error) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [selectedId]);
+  useEffect(() => {
+    const eventId = items.find((item) => item.candidate_id === selectedId)?.outside_event_id;
+    if (eventId !== undefined) setSelectedEventId(eventId);
+  }, [items, selectedId]);
 
-  const queueItems = selectedEventId == null
-    ? items
-    : items.filter((item) => item.outside_event_id === selectedEventId);
+  const queueItems = items;
   const selected = queueItems.find((item) => item.candidate_id === selectedId) ?? null;
   const reviewCandidate = useCallback(async (body: { label?: CandidateLabel | null; dismissed?: boolean }) => {
     if (!selectedId || busy) return;
-    // Mirrors the server's 409: a label is only meaningful if the outdoor clip
-    // was audible. Dismissing an unlabelable candidate stays allowed.
-    if (body.label != null && selected && !selected.labelable) {
-      setError('Labeling requires a playable outdoor clip for this candidate.');
-      return;
-    }
     const next = items.find((item) => item.candidate_id !== selectedId)?.candidate_id ?? null;
     setBusy(true);
     setError(null);
@@ -919,7 +785,7 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
     } finally {
       setBusy(false);
     }
-  }, [selectedId, busy, items, load, selected]);
+  }, [selectedId, busy, items, load]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -938,17 +804,11 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
         <button onClick={onBack} style={{ ...actionButton, padding: '6px 10px' }}>← Stations</button>
         <div>
           <div className="mono" style={{ fontSize: 11, letterSpacing: '0.12em', color: 'var(--ink-1)' }}>TWO-MIC LABELING</div>
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Name the source you hear · weather labels are upload-suppression negatives</div>
         </div>
         <div className="mono" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-3)' }}>
-          <span style={{ color: pending ? 'var(--neon-warn)' : 'var(--neon-ok)' }}>{pending}</span> LABELABLE
-          {awaitingAudio > 0 && <span> · {awaitingAudio} AWAITING AUDIO</span>}
-          {missingAudio > 0 && <span> · {missingAudio} NO CLIP</span>}
+          <span style={{ color: pending ? 'var(--neon-warn)' : 'var(--neon-ok)' }}>{pending}</span> PENDING
           {settings?.last_processed_at && <span> · SCANNED {formatMoment(settings.last_processed_at)}</span>}
         </div>
-        <button onClick={() => setShowSettings((v) => !v)} style={{ ...actionButton, padding: '6px 10px' }}>
-          {showSettings ? 'Hide parameters' : 'Parameters'}
-        </button>
         <Clock />
         <UserChip />
       </header>
@@ -977,22 +837,12 @@ export function CandidateLabelingDashboard({ onBack }: { onBack: () => void }) {
           }}
         />
       )}
-      {showSettings && settings && <DetectionSettingsPanel settings={settings} onSaved={setSettings} />}
       {error && <div className="mono" style={{ padding: 9, color: 'var(--neon-hot)', border: '1px solid var(--line)', borderRadius: 5 }}>{error}</div>}
 
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr) 330px', gap: 12, minHeight: 0 }}>
-        <Card title="REVIEW QUEUE" subtitle={`${selectedEventId == null ? total : queueItems.length} matching · ${pending} labelable`} padding={0}>
+        <Card title="REVIEW QUEUE" subtitle={`${total} matching · ${pending} pending`} padding={0}>
           <div style={{ padding: 10, borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {REVIEW_FILTERS.map((value) => <FilterButton key={value} active={review === value} onClick={() => setReview(value)}>{value}</FilterButton>)}
-          </div>
-          <div style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {GROUP_FILTERS.map((value) => <FilterButton key={value} active={group === value} onClick={() => setGroup(value)}>{value.replace('_', ' ')}</FilterButton>)}
-          </div>
-          <div style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: '0.1em' }}>AUDIO</span>
-            {AUDIO_FILTERS.map(({ value, text }) => (
-              <FilterButton key={value} active={audio === value} onClick={() => setAudio(value)}>{text}</FilterButton>
-            ))}
           </div>
           {loading
             ? <div className="mono" style={{ padding: 28, textAlign: 'center', color: 'var(--ink-3)' }}>LOADING…</div>
