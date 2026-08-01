@@ -435,7 +435,7 @@ export function StationListView({
   onOpenLabeling,
 }: {
   onPick: (d: DeviceInfo) => void;
-  // Map pin clicks route here when provided (live view); list rows use onPick.
+  // Map pin and list-row clicks route here when provided (live view).
   onPickLive?: (d: DeviceInfo) => void;
   onOpenLabeling?: () => void;
 }) {
@@ -730,7 +730,7 @@ export function StationListView({
                   key={s.device_id}
                   onMouseEnter={() => setHovered(s.device_id)}
                   onMouseLeave={() => setHovered(null)}
-                  onClick={() => onPick(s)}
+                  onClick={() => (onPickLive ?? onPick)(s)}
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 64px 64px',
