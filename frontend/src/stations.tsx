@@ -417,6 +417,17 @@ function MapLegend() {
 const LATEST_WINDOW_S = 5 * 60;
 const LATEST_POLL_MS = 30_000;
 const DEVICES_REFRESH_MS = 60_000;
+const STATION_FILTER_KEY = 'urban-acoustics:station-status-filter';
+
+type StationFilter = 'live' | 'offline';
+
+function loadStationFilter(): StationFilter {
+  try {
+    return localStorage.getItem(STATION_FILTER_KEY) === 'offline' ? 'offline' : 'live';
+  } catch {
+    return 'live';
+  }
+}
 
 export function StationListView({
   onPick,
@@ -431,7 +442,7 @@ export function StationListView({
   const [devices, setDevices] = useState<DeviceInfo[] | null>(null);
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [stationFilter, setStationFilter] = useState<StationFilter>(loadStationFilter);
   const [hovered, setHovered] = useState<string | null>(null);
   // Session panel's Settings dialog. No device is selected on the overview,
   // so the dialog runs in its no-device "demo" mode: display preferences
@@ -539,18 +550,14 @@ export function StationListView({
   );
 
   const filtered = useMemo(() => {
-    if (!query) return rows;
-    const q = query.toLowerCase();
-    return rows.filter((r) => {
-      const d = r.device;
-      return (
-        (d.name ?? '').toLowerCase().includes(q) ||
-        (d.location ?? '').toLowerCase().includes(q) ||
-        d.device_id.toLowerCase().includes(q) ||
-        stationCode(d).toLowerCase().includes(q)
-      );
-    });
-  }, [rows, query]);
+    const status = stationFilter === 'live' ? 'online' : 'maintenance';
+    return rows.filter((r) => r.status === status);
+  }, [rows, stationFilter]);
+
+  const selectStationFilter = (value: StationFilter) => {
+    setStationFilter(value);
+    try { localStorage.setItem(STATION_FILTER_KEY, value); } catch { /* ignore */ }
+  };
 
   const totalDevices = rows.length;
   const onlineCount = placedRows.filter((r) => r.status === 'online').length;
@@ -655,23 +662,35 @@ export function StationListView({
         title="ALL STATIONS"
         subtitle={`${filtered.length} of ${totalDevices} shown`}
         right={
-          <input
-            type="text"
-            placeholder="Filter by name, district, ID…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{
-              background: 'var(--bg-1)',
-              border: '1px solid var(--line)',
-              borderRadius: 4,
-              padding: '4px 8px',
-              fontSize: 11,
-              color: 'var(--ink-0)',
-              fontFamily: 'var(--mono)',
-              width: 180,
-              outline: 'none',
-            }}
-          />
+          <div role="group" aria-label="Filter stations by status" style={{ display: 'flex' }}>
+            {(['live', 'offline'] as const).map((value, index) => {
+              const active = stationFilter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => selectStationFilter(value)}
+                  style={{
+                    width: 90,
+                    padding: '4px 8px',
+                    background: active ? 'var(--bg-3)' : 'var(--bg-1)',
+                    border: `1px solid ${active ? 'var(--line-strong)' : 'var(--line)'}`,
+                    borderRadius: index === 0 ? '4px 0 0 4px' : '0 4px 4px 0',
+                    marginLeft: index === 0 ? 0 : -1,
+                    color: active ? 'var(--ink-0)' : 'var(--ink-3)',
+                    fontFamily: 'var(--mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {value}
+                </button>
+              );
+            })}
+          </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -800,7 +819,7 @@ export function StationListView({
                 className="mono"
                 style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 11 }}
               >
-                No stations match "{query}"
+                No {stationFilter} stations
               </div>
             )}
             <div
