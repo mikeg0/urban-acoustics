@@ -814,9 +814,6 @@ function AuthedApp({ mode }: { mode: DataMode }) {
       <StationListView
         onPick={(d) => navigate({ deviceId: d.device_id, page: 'dashboard', drill: DEFAULT_DRILL })}
         onPickLive={(d) => navigate({ deviceId: d.device_id, page: 'live', drill: DEFAULT_DRILL })}
-        onOpenLabeling={canManageCandidates
-          ? () => navigate({ deviceId: null, page: 'labeling', drill: DEFAULT_DRILL })
-          : undefined}
       />
     );
   }

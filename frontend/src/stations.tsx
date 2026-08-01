@@ -432,12 +432,10 @@ function loadStationFilter(): StationFilter {
 export function StationListView({
   onPick,
   onPickLive,
-  onOpenLabeling,
 }: {
   onPick: (d: DeviceInfo) => void;
   // Map pin and list-row clicks route here when provided (live view).
   onPickLive?: (d: DeviceInfo) => void;
-  onOpenLabeling?: () => void;
 }) {
   const [devices, setDevices] = useState<DeviceInfo[] | null>(null);
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
@@ -611,20 +609,6 @@ export function StationListView({
           </div>
           <div style={{ width: 1, height: 28, background: 'var(--line)' }} />
           <Clock />
-          {onOpenLabeling && (
-            <button
-              onClick={onOpenLabeling}
-              style={{
-                padding: '6px 10px', background: 'var(--bg-2)',
-                border: '1px solid var(--line)', borderRadius: 6,
-                color: 'var(--neon-cool)', cursor: 'pointer',
-                fontFamily: 'var(--mono)', fontSize: 10,
-                letterSpacing: '0.08em', textTransform: 'uppercase',
-              }}
-            >
-              Label data
-            </button>
-          )}
           <UserChip />
         </div>
       </div>
