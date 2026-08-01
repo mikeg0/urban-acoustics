@@ -207,6 +207,15 @@ def preview_anomalies() -> dict:
             continue
         ts = d.replace(hour=stats.peak_hour, minute=rng.randint(0, 59)).timestamp()
         eid = hashlib.sha256(f"anom:{d.isoformat()}".encode()).hexdigest()
+        # Preview events are synthetic, but keep their wire semantics aligned
+        # with real-device anomalies: peak versus an event-peak baseline, not
+        # an hourly LAeq mean.  The arithmetic is deliberately exposed so the
+        # UI always displays the measured delta rather than deriving one from z.
+        baseline_mean = max(55.0, stats.peak - rng.uniform(7.0, 15.0))
+        delta_db = stats.peak - baseline_mean
+        baseline_std = rng.uniform(2.5, 4.5)
+        zscore = delta_db / baseline_std
+        confidence = rng.uniform(0.82, 0.99) if stats.top_event else None
         points.append(
             {
                 "event_id": f"{eid[:8]}-{eid[8:12]}-{eid[12:16]}-{eid[16:20]}-{eid[20:32]}",
@@ -214,11 +223,19 @@ def preview_anomalies() -> dict:
                 "day_key": stats.date,
                 "hour": stats.peak_hour,
                 "peak_db": stats.peak,
-                "hour_mean_db": stats.mean,
-                "z": round((stats.peak - stats.mean) / 4.0, 2),
+                "baseline_mean_db": round(baseline_mean, 1),
+                "delta_db": round(delta_db, 1),
+                "baseline_n": rng.randint(8, 36),
+                "z": round(zscore, 2),
+                "rank_score": round(zscore * (confidence or 1.0), 2),
                 "classification": stats.top_event,
+                "confidence": round(confidence, 2) if confidence is not None else None,
             }
         )
+    points.sort(
+        key=lambda point: (point["rank_score"], point["z"], point["ts"]),
+        reverse=True,
+    )
     return {
         "device_id": PREVIEW_DEVICE_ID,
         "from_ts": (end - timedelta(days=30)).timestamp(),

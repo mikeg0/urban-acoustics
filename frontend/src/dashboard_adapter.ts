@@ -118,11 +118,15 @@ export function daysToMonths(days: Day[]): MonthHydrated[] {
 
 export function anomaliesToUi(resp: AnomaliesResponse): Anomaly[] {
   return resp.points.map((p) => ({
-    key: p.day_key,
+    key: p.event_id,
     date: p.day_key,
     hour: p.hour,
     db: p.peak_db,
+    baselineDb: p.baseline_mean_db,
+    deltaDb: p.delta_db,
+    baselineN: p.baseline_n,
     z: p.z,
+    rankScore: p.rank_score,
     event: p.classification
       ? (SOURCE_LABELS[p.classification] ?? p.classification)
       : null,

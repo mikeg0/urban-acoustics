@@ -31,7 +31,11 @@ export interface Anomaly {
   date: string;
   hour: number;
   db: number;
+  baselineDb: number;
+  deltaDb: number;
+  baselineN: number;
   z: number;
+  rankScore: number;
   event: string | null;
 }
 
@@ -346,9 +350,13 @@ export interface AnomalyWire {
   day_key: string;
   hour: number;
   peak_db: number;
-  hour_mean_db: number;
+  baseline_mean_db: number;
+  delta_db: number;
+  baseline_n: number;
   z: number;
+  rank_score: number;
   classification: string | null;
+  confidence: number | null;
 }
 
 export interface AnomaliesResponse {

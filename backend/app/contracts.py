@@ -574,16 +574,25 @@ class DailySummaryResponse(BaseModel):
 
 
 class AnomalyPoint(BaseModel):
-    """A flagged event with a computed-against-hourly-baseline z-score."""
+    """A flagged event scored against like-for-like event peaks.
+
+    The baseline contains event LAFmax peaks from the same device and UTC
+    weekday/hour context (or the documented sparse-bucket fallback), so
+    ``peak_db``, ``baseline_mean_db``, and ``delta_db`` are comparable.
+    """
 
     event_id: UUID
     ts: UnixTs
     day_key: str  # YYYY-MM-DD
     hour: int = Field(ge=0, le=23)
-    peak_db: float
-    hour_mean_db: float
+    peak_db: DbLevel
+    baseline_mean_db: DbLevel
+    delta_db: float
+    baseline_n: int = Field(ge=8)
     z: float
+    rank_score: float
     classification: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class AnomaliesResponse(BaseModel):

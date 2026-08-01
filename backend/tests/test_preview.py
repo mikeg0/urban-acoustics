@@ -63,6 +63,15 @@ def test_dashboard_rollups_are_deterministic() -> None:
     assert preview_sources()["sources"] == preview_sources()["sources"]
 
 
+def test_preview_anomalies_expose_measured_event_delta() -> None:
+    points = preview_anomalies()["points"]
+    for point in points:
+        assert point["delta_db"] == round(
+            point["peak_db"] - point["baseline_mean_db"], 1
+        )
+        assert point["baseline_n"] >= 8
+
+
 def test_summary_daily_has_365_days_with_24h_each() -> None:
     r = preview_summary_daily()
     assert len(r["days"]) == 365

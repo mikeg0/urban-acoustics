@@ -57,7 +57,8 @@ export function AnomaliesFeed({
                 {a.event || `Unexplained spike · ${a.db.toFixed(1)} dB`}
               </div>
               <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
-                z = {a.z.toFixed(2)}  ·  +{(a.z * 3.2).toFixed(1)} dB vs baseline
+                z = {a.z.toFixed(2)} · {a.deltaDb >= 0 ? '+' : ''}{a.deltaDb.toFixed(1)} dB
+                {' '}vs {a.baselineDb.toFixed(1)} dB event baseline (n={a.baselineN})
               </div>
             </div>
             <div className="mono" style={{

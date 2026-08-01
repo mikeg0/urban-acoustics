@@ -58,8 +58,9 @@ def test_daily_summary_rejects_short_hours() -> None:
 def test_anomalies_response_round_trip() -> None:
     p = AnomalyPoint(
         event_id=_EVENT, ts=1_700_000_000.0, day_key="2026-05-17",
-        hour=9, peak_db=98.4, hour_mean_db=62.1, z=3.7,
-        classification="motorcycle",
+        hour=9, peak_db=98.4, baseline_mean_db=78.2, delta_db=20.2,
+        baseline_n=31, z=3.7, rank_score=3.33,
+        classification="motorcycle", confidence=0.9,
     )
     resp = AnomaliesResponse(
         device_id=_DEVICE, from_ts=1_700_000_000, to_ts=1_700_001_000,
@@ -67,6 +68,8 @@ def test_anomalies_response_round_trip() -> None:
     )
     dumped = resp.model_dump()
     assert dumped["points"][0]["z"] == pytest.approx(3.7)
+    assert dumped["points"][0]["delta_db"] == pytest.approx(20.2)
+    assert dumped["points"][0]["baseline_n"] == 31
     assert dumped["points"][0]["classification"] == "motorcycle"
 
 

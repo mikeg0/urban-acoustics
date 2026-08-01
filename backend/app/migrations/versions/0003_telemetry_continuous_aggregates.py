@@ -4,8 +4,8 @@ Adds three Timescale continuous aggregates over ``telemetry_db``:
 
 * ``telemetry_1m`` — minute buckets, drives ``/telemetry?res=1m`` and
   the live-zoom queries.
-* ``telemetry_1h`` — hour buckets, drives ``/telemetry?res=1h`` and the
-  dashboard's per-day ``hours[24]`` pivot, anomaly z-scores, and forecast.
+* ``telemetry_1h`` — hour buckets, drives ``/telemetry?res=1h``, the
+  dashboard's per-day ``hours[24]`` pivot, and forecast.
 * ``telemetry_1d`` — day buckets, drives the dashboard year heatmap,
   breach ribbon, and headline stats.
 
