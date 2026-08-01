@@ -346,18 +346,6 @@ export function SettingsDialog({
                 <span>WHO · 85 dB</span>
                 <span>100 dB · jackhammer</span>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                {[70, 75, 80, 85, 90].map((v) => (
-                  <Preset
-                    key={v}
-                    active={deviceThreshold === v}
-                    onClick={() => canWriteDeviceConfig && handleThresholdChange(v)}
-                    disabled={!canWriteDeviceConfig}
-                  >
-                    {v} dB
-                  </Preset>
-                ))}
-              </div>
               {putError && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--danger, #ff8080)' }}>
                   Failed to push to device: {putError}
