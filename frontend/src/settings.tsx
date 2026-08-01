@@ -386,6 +386,23 @@ export function SettingsDialog({
           </section>
 
           <section>
+            <SectionHead label="Anomaly sensitivity"
+              hint="Lower z-score surfaces more events; higher is stricter."
+              value={`z ≥ ${tweaks.anomalySensitivity.toFixed(1)}`} />
+            <div style={{ marginTop: 12 }}>
+              <input type="range" min="1.5" max="4" step="0.1"
+                value={tweaks.anomalySensitivity}
+                onChange={(e) => update({ anomalySensitivity: +e.target.value })}
+                style={{ width: '100%' }} />
+              <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
+                <span>loose · 1.5</span>
+                <span>balanced · 2.3</span>
+                <span>strict · 4.0</span>
+              </div>
+            </div>
+          </section>
+
+          <section>
             <SectionHead label="Clip auto-play"
               hint="Start playback automatically when an event is selected from the list."
               value={tweaks.clipAutoPlay ? 'ON' : 'OFF'} />
