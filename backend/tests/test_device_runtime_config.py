@@ -103,7 +103,7 @@ async def test_get_404_when_device_missing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_put_publishes_and_commits(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_put_threshold_floor_publishes_and_commits(monkeypatch: pytest.MonkeyPatch) -> None:
     device = _device_row({})
     session = _StubSession(device=device, latest_version="v0")
     pub = MagicMock()
@@ -111,20 +111,20 @@ async def test_put_publishes_and_commits(monkeypatch: pytest.MonkeyPatch) -> Non
     pub.publish_command = MagicMock()
     monkeypatch.setattr(rc, "get_command_publisher", lambda: pub)
 
-    body = rc.RuntimeConfigUpdate(event_threshold_db=78.5)
+    body = rc.RuntimeConfigUpdate(event_threshold_db=30.0)
     resp = await rc.put_runtime_config(
         DEVICE_A, body=body, user=_admin(), session=session,  # type: ignore[arg-type]
     )
 
-    assert resp.event_threshold_db == 78.5
-    assert device.runtime_config == {"event_threshold_db": 78.5}
+    assert resp.event_threshold_db == 30.0
+    assert device.runtime_config == {"event_threshold_db": 30.0}
     assert session.committed is True
     assert session.rolled_back is False
     pub.publish_command.assert_called_once()
     kwargs = pub.publish_command.call_args.kwargs
     assert kwargs["device_id"] == DEVICE_A
     assert kwargs["cmd"] == "config"
-    assert kwargs["args"] == {"event_threshold_db": 78.5}
+    assert kwargs["args"] == {"event_threshold_db": 30.0}
 
 
 @pytest.mark.asyncio
@@ -177,11 +177,12 @@ async def test_put_rolls_back_when_publish_raises(monkeypatch: pytest.MonkeyPatc
     assert session.rolled_back is True
 
 
-def test_threshold_validation_rejects_out_of_range() -> None:
+def test_threshold_validation_accepts_floor_and_rejects_out_of_range() -> None:
     from pydantic import ValidationError
 
+    assert rc.RuntimeConfigUpdate(event_threshold_db=30.0).event_threshold_db == 30.0
     with pytest.raises(ValidationError):
-        rc.RuntimeConfigUpdate(event_threshold_db=10.0)  # absurdly quiet
+        rc.RuntimeConfigUpdate(event_threshold_db=29.9)  # below supported floor
     with pytest.raises(ValidationError):
         rc.RuntimeConfigUpdate(event_threshold_db=200.0)  # above mic clip
 

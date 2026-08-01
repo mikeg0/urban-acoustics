@@ -345,7 +345,7 @@ class Supervisor:
                     continue
                 # Belt-and-braces range check; the backend already enforces
                 # this but the Pi shouldn't trust the wire.
-                if not 50.0 <= v <= 110.0:
+                if not 30.0 <= v <= 110.0:
                     log.warning("cmd/config: event_threshold_db %.2f out of range — dropping", v)
                     continue
                 updates[key] = v

@@ -160,7 +160,7 @@ Both services reload on source changes — no container restart needed.
 Click the gear in the top-right to open the settings dialog. Three tweaks persist to `localStorage` and apply live across every spectrogram, ribbon, and feed:
 
 - **Spectrogram palette** — Heat / Ice / Mono / Neon
-- **Breach threshold** — 65–100 dB (default 86)
+- **Event threshold** — 30–100 dB (device default 80)
 - **Anomaly sensitivity** — z-score cutoff 1.5–4.0 (default 2.9)
 
 ## Configuration

@@ -34,11 +34,11 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# Widen a touch beyond the UI slider's 65–100 dB range so an operator who
-# wants quiet-room tuning isn't forced to edit the JSON file by hand. Values
-# outside the physically plausible range (e.g. <40 dB ambient is uncommon
-# even at night, >115 dB approaches the mic's clip ceiling) are rejected.
-_THRESHOLD_MIN_DB = 50.0
+# Keep the API range a little wider than the UI slider's 30–100 dB range so
+# direct operators retain some headroom at the loud end. The lower bound must
+# match the UI and device command validator so every value the slider emits can
+# reach the live detector.
+_THRESHOLD_MIN_DB = 30.0
 _THRESHOLD_MAX_DB = 110.0
 
 

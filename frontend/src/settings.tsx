@@ -92,7 +92,7 @@ export interface SettingsDialogProps {
 }
 
 const PUT_DEBOUNCE_MS = 400;
-const THRESHOLD_MIN = 65;
+const THRESHOLD_MIN = 30;
 const THRESHOLD_MAX = 100;
 
 export function SettingsDialog({
@@ -342,7 +342,7 @@ export function SettingsDialog({
                 onChange={(e) => handleThresholdChange(+e.target.value)}
                 style={{ width: '100%' }} />
               <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
-                <span>65 dB · quiet street</span>
+                <span>30 dB · quiet room</span>
                 <span>WHO · 85 dB</span>
                 <span>100 dB · jackhammer</span>
               </div>

@@ -144,11 +144,23 @@ def test_apply_config_drops_unknown_keys(
     # Unknown one silently dropped; would have raised in write_overlay otherwise.
 
 
+def test_apply_config_accepts_threshold_floor(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sup = _make_supervisor(tmp_path, monkeypatch)
+    _run(sup._apply_config_command({"event_threshold_db": 30.0}))
+
+    assert sup.detector.threshold_db == 30.0
+    assert sup.detector.close_db == pytest.approx(24.0)
+    assert sup.cfg.event_threshold_db == 30.0
+    assert sup.health._cfg is sup.cfg
+
+
 def test_apply_config_rejects_out_of_range(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sup = _make_supervisor(tmp_path, monkeypatch)
-    _run(sup._apply_config_command({"event_threshold_db": 10.0}))  # absurdly low
+    _run(sup._apply_config_command({"event_threshold_db": 29.9}))  # below supported floor
     assert sup.detector.threshold_db == 80.0
     _run(sup._apply_config_command({"event_threshold_db": 999.0}))  # impossible
     assert sup.detector.threshold_db == 80.0
