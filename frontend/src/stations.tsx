@@ -625,7 +625,6 @@ export function StationListView({
               Label data
             </button>
           )}
-          <SettingsButton onClick={() => setSettingsOpen(true)} />
           <UserChip />
         </div>
       </div>
