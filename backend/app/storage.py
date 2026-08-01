@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -209,6 +210,44 @@ class Storage:
             self._client.delete_object(Bucket=self._settings.S3_BUCKET, Key=key)
 
         await asyncio.to_thread(_del)
+
+    async def list_objects(self, prefix: str) -> list[dict]:
+        """List object metadata below ``prefix``, following all S3 pages."""
+
+        def _list() -> list[dict]:
+            objects: list[dict] = []
+            paginator = self._client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=self._settings.S3_BUCKET, Prefix=prefix
+            ):
+                objects.extend(page.get("Contents", ()))
+            return objects
+
+        return await asyncio.to_thread(_list)
+
+    async def delete_objects(self, keys: Sequence[str]) -> int:
+        """Delete keys in S3's maximum batch size and return the count."""
+
+        def _delete() -> int:
+            deleted = 0
+            for offset in range(0, len(keys), 1000):
+                batch = keys[offset : offset + 1000]
+                if not batch:
+                    continue
+                response = self._client.delete_objects(
+                    Bucket=self._settings.S3_BUCKET,
+                    Delete={
+                        "Objects": [{"Key": key} for key in batch],
+                        "Quiet": True,
+                    },
+                )
+                errors = response.get("Errors", ())
+                if errors:
+                    raise RuntimeError(f"S3 bulk deletion failed: {errors}")
+                deleted += len(batch)
+            return deleted
+
+        return await asyncio.to_thread(_delete)
 
 
 def _now_unix() -> float:

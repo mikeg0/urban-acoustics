@@ -318,6 +318,33 @@ class QueueStore:
             ).fetchone()
             return int(row[0]), int(row[1])
 
+    async def clear_history(self) -> tuple[int, int]:
+        """Remove every queued publish/upload and compact the database.
+
+        The caller must stop the supervisor first so it cannot enqueue a new
+        stale row between this operation and the server-side reset.
+        """
+
+        async with self._lock:
+            row = self.conn.execute(
+                "SELECT (SELECT COUNT(*) FROM mqtt_queue), "
+                "       (SELECT COUNT(*) FROM event_uploads)"
+            ).fetchone()
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                self.conn.execute("DELETE FROM mqtt_queue")
+                self.conn.execute("DELETE FROM event_uploads")
+                self.conn.execute(
+                    "DELETE FROM sqlite_sequence "
+                    "WHERE name IN ('mqtt_queue', 'event_uploads')"
+                )
+                self.conn.execute("COMMIT")
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
+            self.conn.execute("VACUUM")
+            return int(row[0]), int(row[1])
+
     async def _enforce_cap(self) -> None:
         """Prune lowest-priority MQTT rows when the database exceeds the
         configured size cap. Event uploads survive — they are user-visible

@@ -144,6 +144,44 @@ docker compose exec backend alembic revision -m "..."    # new migration
 cd raspberry-pi-zero-2w && python -m pytest              # firmware tests
 ```
 
+## Resetting all history
+
+[`scripts/reset_history.py`](scripts/reset_history.py) is the operator entrypoint
+for clearing server and field-device history. It is a dry run by default and
+has no default Pi host, so a remote machine is contacted only when explicitly
+named with `--host`:
+
+```sh
+./scripts/reset_history.py --list-devices
+./scripts/reset_history.py --host pi@outside-mic
+./scripts/reset_history.py --host pi@outside-mic --execute
+```
+
+Use repeatable `--device-id UUID` options to limit the server reset and only
+wipe matching `--host` devices. `--server-only` and `--device-only` are useful
+when the two sides must be handled separately:
+
+```sh
+./scripts/reset_history.py --server-only --device-id UUID --execute
+./scripts/reset_history.py --device-only --host pi@outside-mic --execute
+```
+
+The coordinator stops active writers, calls the backend reset module to clear
+raw telemetry and force-refresh all three Timescale continuous aggregates,
+then clears device health, spectrogram frames and annotations, events and
+labels, correlated-event candidates and snapshots, and both the `events/` and
+`spectrograms/` object-store prefixes. On each selected Pi, the installed
+firmware maintenance command clears the SQLite MQTT/upload queue and spooled
+FLACs. Services that were running are restored after empty-state verification,
+including on failure.
+
+Device registrations/certificates, device runtime configuration, users, API
+clients, cameras, detector settings, and the Pi's configuration overlay are
+preserved. Deploy the current Pi package before using `--host` so
+`urban_acoustics.reset_history` is installed. SSH must be non-interactive and
+the remote account must have passwordless `sudo` for the firmware command and
+systemd service management.
+
 Backend tests cover **pure logic** — payload validation, topic parsing, permissions, forecasting math. DB/MQTT/S3-dependent paths are exercised by smoke scripts that need the live stack (e.g. `scripts/ingest_publish_demo.py`, `tools/device_sim.py`).
 
 ## Hot reload
