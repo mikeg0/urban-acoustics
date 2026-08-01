@@ -386,30 +386,6 @@ export function SettingsDialog({
           </section>
 
           <section>
-            <SectionHead label="Anomaly sensitivity"
-              hint="Lower z-score surfaces more events; higher is stricter."
-              value={`z ≥ ${tweaks.anomalySensitivity.toFixed(1)}`} />
-            <div style={{ marginTop: 12 }}>
-              <input type="range" min="1.5" max="4" step="0.1"
-                value={tweaks.anomalySensitivity}
-                onChange={(e) => update({ anomalySensitivity: +e.target.value })}
-                style={{ width: '100%' }} />
-              <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)', marginTop: 2 }}>
-                <span>loose · 1.5</span>
-                <span>balanced · 2.3</span>
-                <span>strict · 4.0</span>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                {[1.8, 2.3, 2.9, 3.5].map((v) => (
-                  <Preset key={v} active={Math.abs(tweaks.anomalySensitivity - v) < 0.05} onClick={() => update({ anomalySensitivity: v })}>
-                    z ≥ {v.toFixed(1)}
-                  </Preset>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section>
             <SectionHead label="Clip auto-play"
               hint="Start playback automatically when an event is selected from the list."
               value={tweaks.clipAutoPlay ? 'ON' : 'OFF'} />
@@ -564,29 +540,5 @@ function GlossaryEntry({ term, children }: { term: string; children: ReactNode }
         {children}
       </dd>
     </div>
-  );
-}
-
-function Preset({ children, active, onClick, disabled }: { children: ReactNode; active: boolean; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: '4px 10px',
-        fontSize: 10,
-        fontFamily: 'var(--mono)',
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        background: active ? 'var(--bg-3)' : 'var(--bg-2)',
-        border: `1px solid ${active ? 'var(--line-strong)' : 'var(--line)'}`,
-        borderRadius: 4,
-        color: active ? 'var(--ink-0)' : 'var(--ink-2)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      {children}
-    </button>
   );
 }
