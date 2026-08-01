@@ -108,6 +108,7 @@ export function SettingsDialog({
   const tweaks = useTweaks();
   const isNarrow = useIsNarrow();
   const canWriteDeviceConfig = useHasPermission(PERM.DEVICE_CONFIG_WRITE);
+  const canManageCandidates = useHasPermission(PERM.EVENT_CANDIDATE_MANAGE);
   const [pendingPut, setPendingPut] = useState(false);
   const [putError, setPutError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -443,6 +444,27 @@ export function SettingsDialog({
               <span>Auto-play clips on selection</span>
             </label>
           </section>
+
+          {canManageCandidates && (
+            <section>
+              <SectionHead label="Candidate labeling"
+                hint="Review and label correlated indoor and outdoor sound events."
+                value="Admin" />
+              <a
+                href="?page=labeling"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', marginTop: 10, padding: '8px 10px',
+                  background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 6,
+                  color: 'var(--neon-cool)', cursor: 'pointer', textDecoration: 'none',
+                  fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+                }}
+              >
+                Label data
+              </a>
+            </section>
+          )}
 
           <section>
             <SectionHead label="Glossary"
