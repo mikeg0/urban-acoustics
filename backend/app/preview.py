@@ -17,8 +17,16 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from .contracts import SPECTROGRAM_N_BANDS
+
 LIVE_LOOP_SECONDS = 90.0
-SPECT_BANDS = 64
+# Same band count as real devices — the frontend drops frames of any other
+# length, so a mismatch here leaves the guest spectrogram blank.
+SPECT_BANDS = SPECTROGRAM_N_BANDS
+# One spectrogram column per firmware hop (2 × 2048 samples @ 48 kHz ≈ 85 ms),
+# mirroring SPECTROGRAM_COLUMN_MS in frontend/src/spectrogram.tsx. The live
+# renderer maps each frame to one column of that width.
+SPECT_FRAME_INTERVAL_S = 2 * 2048 / 48000
 THRESHOLD_DB = 80.0
 PREVIEW_DEVICE_ID = "00000000-0000-0000-0000-000000000000"
 HISTORY_DAYS = 365
@@ -53,8 +61,12 @@ def preview_tick(t: float) -> dict[str, float | str]:
 
 
 def preview_spect(t: float) -> dict:
-    """64-band magnitude vector. Wraps on a 90-second loop."""
+    """One ``SPECT_BANDS``-band frame (dB per 1/3-octave band). Wraps on a
+    90-second loop."""
     tau = t % LIVE_LOOP_SECONDS
+    # Frame index within the loop, used to key a little per-frame texture so
+    # the ~12 Hz stream reads like a real spectrogram rather than smooth bands.
+    frame = int(tau / SPECT_FRAME_INTERVAL_S + 1e-9)
     overall = 56.0 + 14.0 * math.sin(2 * math.pi * tau / LIVE_LOOP_SECONDS)
 
     # Vehicle-pass bursts: deterministic events at fixed offsets within the
@@ -77,10 +89,16 @@ def preview_spect(t: float) -> dict:
             0.6 + 0.4 * math.sin(2 * math.pi * tau / 9.0)
         )
         high_burst = burst_amp * math.exp(-((x - 0.55) ** 2) / 0.12)
-        v = overall + rumble + mid + high_burst - 14.0
+        v = overall + rumble + mid + high_burst - 14.0 + _jitter_db(frame, i)
         bands.append(round(v, 2))
 
     return {"type": "spect", "ts": t, "bands": bands}
+
+
+def _jitter_db(frame: int, band: int, amp_db: float = 1.5) -> float:
+    """Deterministic pseudo-noise in [-amp_db, amp_db] for (frame, band)."""
+    h = math.sin(frame * 12.9898 + band * 78.233) * 43758.5453
+    return (2.0 * (h - math.floor(h)) - 1.0) * amp_db
 
 
 # --- dashboard rollups (stable across reloads) -------------------------------

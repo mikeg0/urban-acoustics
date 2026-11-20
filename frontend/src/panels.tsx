@@ -82,14 +82,25 @@ export function AnomaliesFeed({
   );
 }
 
+const RIBBON_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
 export function BreachRibbon({ days, threshold }: { days: Day[]; threshold: number }) {
   const maxBreaches = Math.max(...days.map((d) => d.breaches), 1);
+  // Axis labels follow the actual (rolling) window: every other month start,
+  // positioned by day index so they line up with the ribbon cells.
+  const monthTicks: { pct: number; label: string }[] = [];
+  days.forEach((d, i) => {
+    const [, m, dd] = d.date.split('-').map(Number);
+    if (dd === 1 && m % 2 === 1) monthTicks.push({ pct: (i / days.length) * 100, label: RIBBON_MONTHS[m - 1] });
+  });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)', letterSpacing: '0.12em' }}>
-        365 DAYS · Intensity of ≥{threshold} dB hours
+        {days.length} DAYS · Intensity of ≥{threshold} dB hours
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${days.length}, 1fr)`, gap: 1, height: 36 }}>
+      {/* No column gap: 365 one-pixel gaps alone are wider than the card,
+          which squeezed every cell to zero width. */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`, height: 36 }}>
         {days.map((d, i) => {
           const v = d.breaches / maxBreaches;
           return (
@@ -106,8 +117,10 @@ export function BreachRibbon({ days, threshold }: { days: Day[]; threshold: numb
           );
         })}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-3)' }} className="mono">
-        <span>JAN</span><span>MAR</span><span>MAY</span><span>JUL</span><span>SEP</span><span>NOV</span>
+      <div style={{ position: 'relative', height: 12, fontSize: 10, color: 'var(--ink-3)' }} className="mono">
+        {monthTicks.map((t) => (
+          <span key={t.pct} style={{ position: 'absolute', left: `${t.pct}%` }}>{t.label}</span>
+        ))}
       </div>
     </div>
   );
@@ -121,10 +134,12 @@ export function PeakHoursChart({ hours }: { hours: number[] }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', height: 100, gap: 2 }}>
         {hours.map((v, h) => {
-          const pct = (v - 30) / 60;
+          const pct = Math.max(0, Math.min(1, (v - 30) / 60));
           const isPeak = h === peakHour;
           return (
-            <div key={h} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
+            // height: 100% gives the bar's percentage height a definite base;
+            // without it the column is auto-height and every bar collapses to 0.
+            <div key={h} style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
               <div style={{
                 width: '100%',
                 height: `${pct * 100}%`,

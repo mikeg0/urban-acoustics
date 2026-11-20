@@ -21,6 +21,7 @@ from ...auth.permissions import has_permission
 from ...auth.user import AuthenticatedUser, require_permission
 from ...preview import (
     PREVIEW_DEVICE_ID,
+    SPECT_FRAME_INTERVAL_S,
     THRESHOLD_DB,
     preview_anomalies,
     preview_forecast,
@@ -33,7 +34,10 @@ from ...preview import (
 router = APIRouter()
 log = logging.getLogger("urban-acoustics.preview")
 
-TICK_INTERVAL_S = 1.0  # one tick + one spect per second
+TICK_INTERVAL_S = 1.0  # LAeq/LAFmax ticks at 1 Hz; spect frames at SPECT_FRAME_INTERVAL_S
+# If the loop falls this far behind schedule (slow client, event-loop stall),
+# re-base instead of bursting the backlog.
+RESYNC_AFTER_S = 1.0
 PREVIEW_PERM = "dashboard.preview"
 
 
@@ -119,14 +123,18 @@ async def preview_live_ws(websocket: WebSocket) -> None:
 
     await websocket.accept()
     try:
-        next_tick = time.monotonic()
+        next_frame = next_tick = time.monotonic()
         while True:
             now = time.time()
-            await websocket.send_json(preview_tick(now))
+            if time.monotonic() >= next_tick:
+                await websocket.send_json(preview_tick(now))
+                next_tick += TICK_INTERVAL_S
             await websocket.send_json(preview_spect(now))
-            next_tick += TICK_INTERVAL_S
-            sleep_for = max(0.0, next_tick - time.monotonic())
-            await asyncio.sleep(sleep_for)
+            next_frame += SPECT_FRAME_INTERVAL_S
+            mono = time.monotonic()
+            if mono - next_frame > RESYNC_AFTER_S:
+                next_frame = next_tick = mono
+            await asyncio.sleep(max(0.0, next_frame - mono))
     except WebSocketDisconnect:
         return
     except Exception:  # noqa: BLE001

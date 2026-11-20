@@ -58,7 +58,9 @@ export function YearHeatmap({
   for (let c = 0; c < weeks; c++) {
     const cellDate = new Date(first);
     cellDate.setDate(cellDate.getDate() + c * 7);
-    if (cellDate.getFullYear() === start.getFullYear() && cellDate.getDate() <= 7) {
+    // Label the first column of each month. The window is a rolling 365 days,
+    // so it spans two calendar years — don't restrict to the start year.
+    if (cellDate.getDate() <= 7) {
       monthAnchors.push({ col: c, label: MONTH_LABELS[cellDate.getMonth()].toUpperCase() });
     }
   }
@@ -90,13 +92,15 @@ export function YearHeatmap({
         </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
-        <svg width={w} height={h} style={{ display: 'block' }}>
+        {/* Scale to the card: 53 fixed-size weeks are wider than the year
+            panel, so a fixed width scrolled and hid the last few months. */}
+        <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block', maxWidth: w * 1.25 }}>
           {monthAnchors.map((m) => (
             <text
               key={m.col}
               x={rowLabelW + m.col * (cellW + gap)}
               y={10}
-              fontSize="9"
+              fontSize="11"
               fontFamily="ui-monospace, monospace"
               fill="var(--ink-3)"
               letterSpacing="0.08em"
@@ -107,7 +111,7 @@ export function YearHeatmap({
               key={r}
               x={0}
               y={colLabelH + r * (cellH + gap) + cellH - 3}
-              fontSize="9"
+              fontSize="11"
               fontFamily="ui-monospace, monospace"
               fill="var(--ink-3)"
             >{DOW_LABELS[r]}</text>
@@ -116,8 +120,8 @@ export function YearHeatmap({
             Array.from({ length: 7 }).map((__, r) => {
               const cellDate = new Date(first);
               cellDate.setDate(cellDate.getDate() + c * 7 + r);
-              if (cellDate.getFullYear() !== start.getFullYear()) return null;
-              const key = cellDate.toISOString().slice(0, 10);
+              // Local-date key (toISOString would shift the day east of UTC).
+              const key = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`;
               const d = byKey.get(key);
               if (!d) return null;
               const isSel = selectedDay === d.key;

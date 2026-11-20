@@ -12,6 +12,7 @@ from app.preview import (
     preview_summary_daily,
     preview_tick,
 )
+from app.contracts import SPECTROGRAM_N_BANDS
 
 
 def test_tick_loops_on_90_seconds() -> None:
@@ -33,7 +34,7 @@ def test_spect_loops_on_90_seconds() -> None:
 
 def test_spect_band_count_and_range() -> None:
     s = preview_spect(12.0)
-    assert len(s["bands"]) == SPECT_BANDS
+    assert len(s["bands"]) == SPECT_BANDS == SPECTROGRAM_N_BANDS
     # All bands should land in a plausible dB range. Floor is well above
     # silence (because the mock has a constant rumble floor), ceiling well
     # below clipping.
