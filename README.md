@@ -6,6 +6,22 @@ A city noise-monitoring platform. Solar/mic sensor nodes (Raspberry Pi Zero 2 W,
 
 Currently a **Salt Lake City** beta along the State Street corridor. The public petition site is at **https://slcquiet.org/** (deployed separately — see [`deploy/quiet-initiative/`](deploy/quiet-initiative/)).
 
+## Screenshots
+
+All readings in these screenshots are synthetic: the live view and dashboard come from guest preview mode, and the station map uses mocked readings.
+
+**Live view:** current dB(A) level over a scrolling 1/3-octave spectrogram (bright bursts are simulated vehicle passes).
+
+![Live view: dB(A) readout above a scrolling spectrogram](docs/images/live-view.gif)
+
+**Dashboard:** a year of daily rollups with month cards, a year heatmap, 7-day forecast, peak hours, breach ribbon and probable sources. Click through Year → Month → Day → Hour.
+
+![Dashboard: headline stats, monthly cards, year heatmap and side panels](docs/images/dashboard.png)
+
+**Station network:** the 40-station pilot corridor across the downtown Salt Lake City grid (State Street, North Temple → 900 South). The heat layer tracks each station's current level, so the State Street traffic shows up as a hot band. Pick a pin or row to open that station's dashboard. Members see this page; guests go straight to the preview dashboard.
+
+![Station map: 40 sensor pins on the downtown Salt Lake City street grid beside the station list](docs/images/station-map.png)
+
 ## Stack
 
 | Layer        | Tech                                                          |
