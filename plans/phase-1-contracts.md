@@ -198,7 +198,7 @@ Response (HTTP 200):
 {
   "event_id": "5b8e9b1c-1c8a-4c3d-9e0a-72c1d2e3f4a5",
   "status": "upload_intent_created",
-  "upload_url": "https://audio.urban-acoustics.conexed.com/...",
+  "upload_url": "https://audio.urban-acoustics.example.com/...",
   "storage_key": "events/2026/05/11/<device_id>/<event_id>.flac",
   "expires_at": 1745673672.0,
   "required_headers": {
@@ -237,7 +237,7 @@ Response:
   "classification": null,
   "confidence": null,
   "model_version": null,
-  "playback_url": "https://audio.urban-acoustics.conexed.com/...",
+  "playback_url": "https://audio.urban-acoustics.example.com/...",
   "playback_url_expires_at": 1745673900.0
 }
 ```
@@ -368,7 +368,7 @@ Backend / API:
 | `MQTT_CLIENT_CERT`                | yes      | —                  | Backend's MQTT mTLS cert                             |
 | `MQTT_CLIENT_KEY`                 | yes      | —                  | Backend's MQTT mTLS key                              |
 | `S3_ENDPOINT`                     | yes      | —                  | `https://minio:9000` internal                        |
-| `S3_PUBLIC_ENDPOINT`              | yes      | —                  | `https://audio.urban-acoustics.conexed.com`          |
+| `S3_PUBLIC_ENDPOINT`              | yes      | —                  | `https://audio.urban-acoustics.example.com`          |
 | `S3_ACCESS_KEY`                   | yes      | —                  |                                                      |
 | `S3_SECRET_KEY`                   | yes      | —                  |                                                      |
 | `S3_BUCKET`                       | yes      | —                  | e.g. `events`                                        |

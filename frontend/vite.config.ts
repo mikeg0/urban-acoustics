@@ -45,7 +45,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    allowedHosts: ['urban-acoustics.dev.conexed.com', '.openclaw'],
+    // Extra hostnames (e.g. your reverse-proxy host) come from the
+    // comma-separated VITE_ALLOWED_HOSTS env var; localhost is always allowed.
+    allowedHosts: (process.env.VITE_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean),
     // Polling needed when the source is on a bind-mounted Docker volume on
     // macOS/Windows hosts. Harmless on Linux.
     watch: { usePolling: true, interval: 250 },

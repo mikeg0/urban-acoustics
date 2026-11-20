@@ -10,7 +10,7 @@ The foundation is complete when containers boot reliably and a cert-authenticate
 
 - Extend the app-local `docker-compose.yml`.
 - Do not edit `/home/mikeg/dev/devlab/docker-compose.yml`.
-- Join all routed app services to `dev_conexed_com_default`.
+- Join all routed app services to `${TRAEFIK_NETWORK}`.
 - Add Traefik dynamic config files under `/home/mikeg/dev/devlab/traefik/dynamic/`.
 - Add Mosquitto configuration, persistence, TLS, and ACL files.
 - Add MinIO bucket initialization.
@@ -63,7 +63,7 @@ Follow the current devlab file-provider pattern:
 
 - HTTP router redirects to HTTPS.
 - HTTPS router uses wildcard certs from `tls-certificates.yml`.
-- Service points to the container hostname on `dev_conexed_com_default`.
+- Service points to the container hostname on `${TRAEFIK_NETWORK}`.
 
 Existing `urban-acoustics.yml` routes the frontend. Add separate service files for API and MinIO to avoid mixing frontend Vite routing with device API routing.
 

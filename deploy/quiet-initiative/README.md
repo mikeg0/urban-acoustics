@@ -31,10 +31,10 @@ urban-acoustics/
 
 ### Local preview
 
-Running the urban-acoustics dev stack (`docker compose up`) makes both sites available under the dev domain:
+Running the urban-acoustics dev stack (`docker compose up`) makes both sites available under your dashboard host:
 
-- https://urban-acoustics.dev.conexed.com/quiet-initiative/
-- https://urban-acoustics.dev.conexed.com/enforcement-map/
+- `https://<your-dashboard-host>/quiet-initiative/`
+- `https://<your-dashboard-host>/enforcement-map/`
 
 No Vite config changes are needed — `frontend/public/<name>/index.html` is served at `/<name>/` automatically.
 
@@ -50,7 +50,7 @@ All resources live in account `174590856187`, region `us-west-2` (unless noted).
 |---|---|
 | Amplify app | `d3iawkfgvlagfs` |
 | Amplify branch | `main` (production) |
-| Custom domains | `slcquiet.org`, `www.slcquiet.org` (+ legacy `urban-quiet-initiative.geo-tt.app` → 301) |
+| Custom domains | `slcquiet.org`, `www.slcquiet.org` |
 | ACM certificate | Amplify-managed (`slcquiet.org`, `*.slcquiet.org`) |
 | Route53 hosted zone | `Z03806482QWUBT4C1QXVU` (`slcquiet.org`) |
 | Registrar | Porkbun (NS records delegate to AWS) |
@@ -218,7 +218,6 @@ aws dynamodb delete-item --table-name urban-quiet-signups --region us-west-2 \
   - `www.slcquiet.org` A-ALIAS → CloudFront
   - `_<token>.slcquiet.org` CNAME → ACM validation
 - Domain registrar is Porkbun; the four AWS NS records are pasted into Porkbun's "Authoritative Nameservers" panel.
-- The legacy `urban-quiet-initiative.geo-tt.app` domain remains attached to the same Amplify app with a custom 301 redirect rule so old shares land on slcquiet.org.
 - Cert is Amplify-managed and renews automatically.
 - HTTP requests 301 to HTTPS automatically (CloudFront behavior).
 
@@ -231,7 +230,6 @@ aws dynamodb delete-item --table-name urban-quiet-signups --region us-west-2 \
 curl -sI https://slcquiet.org/ | head -2
 curl -sI https://slcquiet.org/quiet-initiative/ | head -2
 curl -sI https://slcquiet.org/enforcement-map/ | head -2
-curl -sI https://urban-quiet-initiative.geo-tt.app/ | head -3   # expect 301 → slcquiet.org
 
 # Signup endpoint works (replace with current endpoint if it changed)
 ENDPOINT=$(aws cloudformation describe-stacks \
@@ -256,8 +254,6 @@ REGION=us-west-2
 # Frontend
 aws amplify delete-domain-association --app-id "$APP_ID" \
   --domain-name slcquiet.org --region "$REGION"
-aws amplify delete-domain-association --app-id "$APP_ID" \
-  --domain-name urban-quiet-initiative.geo-tt.app --region "$REGION"
 aws amplify delete-app --app-id "$APP_ID" --region "$REGION"
 
 # Backend (DynamoDB tables are retained by stack policy — delete separately if desired)

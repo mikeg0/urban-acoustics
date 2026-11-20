@@ -16,7 +16,7 @@ The goal is a "Weather Underground for traffic noise": a distributed network of 
 
 **User decisions (from clarification):**
 - Full Phase 1→3 roadmap; Phase 1 implementation-ready.
-- Self-hosted on existing devlab (Traefik file-provider; apps join `dev_conexed_com_default`).
+- Self-hosted on existing devlab (Traefik file-provider; apps join `${TRAEFIK_NETWORK}`).
 - Live "tune in" audio deferred to Phase 2.
 - MQTT (Mosquitto Phase 1, EMQX Phase 2+) from day one.
 
@@ -35,7 +35,7 @@ Add to [docker-compose.yml](dev/urban-acoustics/docker-compose.yml) — keep app
 New Traefik dynamic configs in `/home/mikeg/dev/devlab/traefik/dynamic/`:
 - `urban-acoustics-mqtt.yml` — TCP router on 8883 → `mosquitto:8883` (TLS passthrough; broker terminates TLS itself, no Traefik cert needed for mTLS)
 - `urban-acoustics-api.yml` — already-routed FastAPI; ensure routes for `/api/v1/*` and `/api/v1/devices/intent`
-- `urban-acoustics-minio.yml` — HTTPS router for the device-facing presigned-URL host (e.g., `audio.urban-acoustics.conexed.com`)
+- `urban-acoustics-minio.yml` — HTTPS router for the device-facing presigned-URL host (e.g., `audio.urban-acoustics.example.com`)
 
 Mosquitto config (`backend/mosquitto/mosquitto.conf`):
 - `listener 8883`, `cafile`, `certfile`, `keyfile`, `require_certificate true` (mTLS)
@@ -289,7 +289,7 @@ Existing devlab VM. Adds: Mosquitto (~30 MB RAM), Timescale (~300 MB), MinIO (~1
 5. Start `urban-acoustics.service`; within 15 s confirm 1 Hz JSON publishes appear on `dev/{id}/tlm`.
 6. Confirm `SELECT count(*) FROM telemetry_db WHERE device_id=$1 AND ts > now()-interval '1 minute'` returns ~60.
 7. Tap or play loud audio at the mic; confirm event_announce → presigned URL response → FLAC lands in MinIO bucket → `events` row populated.
-8. Open frontend at `https://urban-acoustics.conexed.com`; live page shows real dB values; events tab lists the spike; click → FLAC plays.
+8. Open frontend at `https://urban-acoustics.example.com`; live page shows real dB values; events tab lists the spike; click → FLAC plays.
 9. Disconnect Pi from WiFi for 5 min; reconnect; confirm queued telemetry drains and events upload (check `queue_depth=0` in next health ping).
 10. `journalctl -u urban-acoustics -f` shows no errors; `cpu_temp_c < 70`, `mem_used_mb < 250`.
 

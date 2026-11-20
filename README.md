@@ -17,7 +17,7 @@ Currently a **Salt Lake City** beta along the State Street corridor. The public 
 | Database     | TimescaleDB (Postgres 16) — hypertables + continuous aggregates |
 | Object store | MinIO (S3-compatible) — event audio (FLAC)                  |
 | Broker       | Mosquitto 2 — mTLS, per-device topic ACLs                   |
-| Routing      | Traefik (shared devlab network), `*.dev.conexed.com`        |
+| Routing      | Traefik reverse proxy (external Docker network)              |
 | Dev loop     | Docker Compose — uvicorn `--reload` + Vite HMR              |
 
 ## Architecture
@@ -39,9 +39,12 @@ event audio:  device announce ──> POST /events/intent (presigned URL) ──
 
 ## Quick start
 
-Requires Docker (Compose v2) and the shared devlab Traefik stack running (the app joins the external `dev_conexed_com_default` network and is routed at `*.dev.conexed.com`).
+Requires Docker (Compose v2) and a running Traefik reverse proxy. The app joins Traefik's external Docker network and is routed by file-provider configs you add to your Traefik install (dashboard → `frontend:5173`, MinIO console → `minio:9001`, MinIO S3 API → `minio:9000`).
+
+Copy the environment template and set your network name and hostnames:
 
 ```sh
+cp .env.example .env   # TRAEFIK_NETWORK, ALLOWED_ORIGINS, S3_PUBLIC_ENDPOINT, MINIO_CONSOLE_URL, VITE_ALLOWED_HOSTS
 docker compose up
 ```
 
@@ -49,9 +52,9 @@ This starts the backend API, the ingest worker, the frontend, Postgres/Timescale
 
 Then open the dashboard:
 
-- **Dashboard** — https://urban-acoustics.dev.conexed.com/
-- **MinIO console** — https://urban-acoustics-minio.dev.conexed.com/
-- **Petition / demo pages** — https://urban-acoustics.dev.conexed.com/quiet-initiative/ , `/enforcement-map/`
+- **Dashboard** — `https://<your-dashboard-host>/`
+- **MinIO console** — the URL you set as `MINIO_CONSOLE_URL`
+- **Petition / demo pages** — `https://<your-dashboard-host>/quiet-initiative/` , `/enforcement-map/`
 
 Only **Mosquitto** (`8883`) and **MinIO** (`9000`) publish host ports; the API and frontend are reachable only through Traefik (no `localhost:8000`/`5173` mapping in the committed compose file).
 
@@ -220,8 +223,8 @@ Serve `frontend/dist/` from any static host and point it at the FastAPI backend 
 **`Failed to Setup IP tables` on `docker compose up`**
 The Docker daemon's bridge chain is missing — usually after a host firewall reset. Fix with `sudo systemctl restart docker`. Without sudo, run containers with `--network=host` (image builds already use host networking for pip DNS).
 
-**`network dev_conexed_com_default not found`**
-The shared devlab Traefik stack isn't up. Start it first — this compose joins that external network rather than creating its own.
+**`network <name> not found`**
+Traefik isn't up, or `TRAEFIK_NETWORK` in `.env` doesn't match its Docker network. Start Traefik first — this compose joins that external network rather than creating its own.
 
 **`permission denied` connecting to `/var/run/docker.sock`**
 Your shell predates your `docker` group membership. Log out and back in, or prefix commands with `sg docker -c "..."`.

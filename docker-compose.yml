@@ -1,12 +1,12 @@
 # Phase 1 cloud substrate (task 02).
 #
-# Layout follows the devlab Traefik pattern: app services join the shared
-# `dev_conexed_com_default` network and are routed by Traefik file-provider
-# configs in /home/mikeg/dev/devlab/traefik/dynamic/. Only Mosquitto publishes
-# a host port — devlab's Traefik has no 8883 entrypoint and this compose
-# cannot edit /home/mikeg/dev/devlab/docker-compose.yml to add one, so MQTT
-# bypasses Traefik. Mosquitto already terminates mTLS itself, so direct
-# host:8883 → broker:8883 is the natural shape.
+# Layout assumes an existing Traefik reverse proxy: app services join its
+# external Docker network (name from $TRAEFIK_NETWORK) and are routed by
+# Traefik file-provider configs that live with that Traefik install. Hostnames
+# and public URLs come from the gitignored root `.env` — copy `.env.example`.
+# Only Mosquitto publishes a host port — Traefik typically has no 8883
+# entrypoint, so MQTT bypasses it. Mosquitto already terminates mTLS itself,
+# so direct host:8883 → broker:8883 is the natural shape.
 
 services:
   backend:
@@ -53,7 +53,7 @@ services:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: "postgresql+asyncpg://urban_acoustics:urban_acoustics_dev@postgres:5432/urban_acoustics"
       S3_ENDPOINT: "http://minio:9000"
-      S3_PUBLIC_ENDPOINT: "https://urban-acoustics-audio.dev.conexed.com"
+      S3_PUBLIC_ENDPOINT: "${S3_PUBLIC_ENDPOINT:-http://localhost:9000}"
       S3_ACCESS_KEY: "urban_acoustics"
       S3_SECRET_KEY: "urban_acoustics_dev_secret_12345"
       S3_BUCKET: "urban-acoustics-events"
@@ -71,7 +71,7 @@ services:
       EVENT_INTENT_TTL_SECONDS: "60"
       EVENT_PLAYBACK_URL_TTL_SECONDS: "300"
       DEMO_MODE: "1"
-      ALLOWED_ORIGINS: "https://urban-acoustics.dev.conexed.com,http://localhost:5173"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:5173}"
       LOG_LEVEL: "INFO"
       # Outbound command publisher (api → dev/<id>/cmd/<verb>). Reuses the
       # ingest cert because the broker ACL already grants "ingest" write
@@ -155,12 +155,14 @@ services:
       - /app/node_modules
     environment:
       # Use the unique container name, NOT the `backend` service alias: other
-      # projects on the shared `dev_conexed_com_default` network also register
+      # projects on the shared Traefik network may also register
       # the alias `backend`, so `http://backend:8000` round-robins onto the
       # wrong app's API (intermittent 404s). Container names are unambiguous.
       VITE_API_HOST: "http://urban-acoustics-backend:8000"
       VITE_WS_HOST: "ws://urban-acoustics-backend:8000"
       CHOKIDAR_USEPOLLING: "true"
+      # Comma-separated extra hostnames Vite will answer to (Traefik host etc.).
+      VITE_ALLOWED_HOSTS: "${VITE_ALLOWED_HOSTS:-}"
       VITE_DEMO_MODE: "false"
       VITE_DEVICE_ID: "00000000-0000-4000-8000-00000000000a"
     networks:
@@ -192,7 +194,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: urban-acoustics-mosquitto
-    # Direct host port — devlab Traefik has no MQTT entrypoint, see top of file.
+    # Direct host port — Traefik has no MQTT entrypoint, see top of file.
     # Mosquitto terminates mTLS itself; no Traefik cert needed.
     ports:
       - "8883:8883"
@@ -216,9 +218,9 @@ services:
       MINIO_ROOT_USER: urban_acoustics
       MINIO_ROOT_PASSWORD: urban_acoustics_dev_secret_12345
       # Browser-redirect target for the console (must match the Traefik host).
-      MINIO_BROWSER_REDIRECT_URL: "https://urban-acoustics-minio.dev.conexed.com"
+      MINIO_BROWSER_REDIRECT_URL: "${MINIO_CONSOLE_URL:-http://localhost:9001}"
       # Public endpoint that presigned URLs and the device-facing client see.
-      MINIO_SERVER_URL: "https://urban-acoustics-audio.dev.conexed.com"
+      MINIO_SERVER_URL: "${S3_PUBLIC_ENDPOINT:-http://localhost:9000}"
     volumes:
       - minio_data:/data
     networks:
@@ -266,5 +268,5 @@ volumes:
 
 networks:
   traefik:
-    name: dev_conexed_com_default
+    name: ${TRAEFIK_NETWORK:-traefik}
     external: true

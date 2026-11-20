@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A city noise-monitoring platform: solar/mic sensor nodes (Raspberry Pi Zero 2 W, or a software simulator) stream live acoustic telemetry to a cloud backend that powers a resident-facing dashboard. Currently a Salt Lake City beta along the State Street corridor; a public petition site lives at https://slcquiet.org/.
 
-> Heads-up: `README.md` is partly stale. It describes an early flat-JSON / "Riverton" / `docker compose up` → `localhost:5173` prototype. The real system is Postgres/TimescaleDB + MinIO + MQTT, fronted by Traefik on `*.dev.conexed.com` (see below). The flat-JSON path still exists but only as the **demo mode** fallback. Trust the code over the README for architecture.
+> Heads-up: `README.md` is partly stale. It describes an early flat-JSON / "Riverton" / `docker compose up` → `localhost:5173` prototype. The real system is Postgres/TimescaleDB + MinIO + MQTT, fronted by Traefik (see below). The flat-JSON path still exists but only as the **demo mode** fallback. Trust the code over the README for architecture.
 
 ## Repository structure
 
@@ -52,7 +52,7 @@ When `DEMO_MODE=1`, synthetic-data routes mount under `/api/v1/demo` **and** are
 
 ## Running & developing
 
-The stack joins an **external** Traefik network (`dev_conexed_com_default`) and is routed at `*.dev.conexed.com`. Only Mosquitto (`8883`) and MinIO (`9000`) publish host ports — the API and frontend are *not* on `localhost:8000`/`5173` under the committed compose file; they're behind Traefik.
+The stack joins an **external** Traefik network (name from `TRAEFIK_NETWORK`) and is routed at hostnames configured in the gitignored root `.env` (template: `.env.example`). Only Mosquitto (`8883`) and MinIO (`9000`) publish host ports — the API and frontend are *not* on `localhost:8000`/`5173` under the committed compose file; they're behind Traefik.
 
 ```sh
 docker compose up            # full stack (backend, ingest, frontend, postgres, mosquitto, minio)

@@ -1,6 +1,6 @@
 [Unit]
 Description=Urban Acoustics Pi Zero firmware
-Documentation=https://github.com/conexed/urban-acoustics
+Documentation=https://github.com/mikeg0/urban-acoustics
 After=network-online.target sound.target chrony.service
 Wants=network-online.target sound.target
 

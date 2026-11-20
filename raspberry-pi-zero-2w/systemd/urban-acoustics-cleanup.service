@@ -1,6 +1,6 @@
 [Unit]
 Description=Urban Acoustics housekeeping (delete orphan FLACs, SQLite VACUUM)
-Documentation=https://github.com/conexed/urban-acoustics
+Documentation=https://github.com/mikeg0/urban-acoustics
 After=urban-acoustics.service
 
 [Service]

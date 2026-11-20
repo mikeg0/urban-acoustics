@@ -130,7 +130,7 @@ Pick whichever fits the deployment workflow.
 **Option A — clone the repo on the Pi** (simplest for a one-off bring-up):
 
 ```bash
-sudo git clone https://github.com/conexed/urban-acoustics.git /opt/urban-acoustics/src
+sudo git clone https://github.com/mikeg0/urban-acoustics.git /opt/urban-acoustics/src
 cd /opt/urban-acoustics/src/raspberry-pi-zero-2w
 ```
 
@@ -211,10 +211,9 @@ Place the device's mTLS material at the paths referenced by the config:
 
 ⚠️ `root-ca.crt` must be a **bundle of two CAs** concatenated into one PEM
 file: the urban-acoustics dev root CA (`backend/certs/root-ca.crt`) *and*
-the CA that signs the REST API's TLS certificate (for the dev stack that is
-the "ConexED Development" CA behind `*.dev.conexed.com` — copy
-`/usr/local/share/ca-certificates/wildcard-dev-conexed.crt` from an existing
-node). The firmware verifies both the MQTT broker and the HTTPS API against
+the CA that signs the REST API's TLS certificate (for a dev stack behind a
+locally-issued certificate, that's your dev CA — copy it from an existing
+node's `/usr/local/share/ca-certificates/`). The firmware verifies both the MQTT broker and the HTTPS API against
 this single file (`transport.py`), so with only the MQTT CA present,
 telemetry works but every event upload fails TLS and spools to the local
 queue until the bundle is fixed.
@@ -236,8 +235,8 @@ every other key has a sensible default — see `urban_acoustics/config.py`):
 {
   "device_id": "00000000-0000-4000-8000-00000000000a",
   "fw_version": "0.1.0",
-  "mqtt_broker_host": "mqtt.urban-acoustics.conexed.com",
-  "api_base": "https://api.urban-acoustics.conexed.com",
+  "mqtt_broker_host": "mqtt.example.com",
+  "api_base": "https://api.example.com",
   "mic_gain_db": 0.0,
   "event_threshold_db": 80.0
 }

@@ -3,7 +3,7 @@
 > **Status:** fact-checked against the repo (2026-07-18) and corrected. Changes from the
 > original draft are called out in **[CORRECTION]** / **[VERIFIED]** notes. The three
 > substantive corrections are: (1) the adapter `base_url` — the host-cron topology + a
-> self-signed `*.dev.conexed.com` cert make *both* the internal Docker name and the public
+> self-signed `*.dev.example.com` cert make *both* the internal Docker name and the public
 > https URL unusable, so the adapter reuses the **existing** `urban-acoustics-api.openclaw`
 > Traefik route over plain HTTP (verified working); (2) the shared query helper goes in a new
 > `app/queries.py`, **not** `app/data.py` (that module is the synthetic demo generator with no
@@ -15,7 +15,7 @@ sleep-atlas (an Eight Sleep dashboard) already has all the scaffolding to overla
 ambient noise on each night's sleep timeline and compute noise↔sleep correlations, but today
 it only renders **seeded mock dB**. urban-acoustics is a real city noise-monitoring platform
 whose `telemetry_1m` continuous aggregate holds exactly the per-minute dB curve sleep-atlas
-wants. The two projects share the `dev_conexed_com_default` Traefik network and a common
+wants. The two projects share the `${TRAEFIK_NETWORK}` Traefik network and a common
 motivation (documenting downtown noise disturbing sleep as evidence for the quiet
 initiative), but **no code connects them**.
 
@@ -35,19 +35,19 @@ existing sync/display pipeline.
 - **`sync.py` runs on the *host* via cron**, not in a container (`sleep-atlas/README.md:65-69`;
   cron example `/opt/sleep-atlas/sync.py --days 7`; the sleep-atlas container even mounts its
   data dir `:ro`). So the adapter's HTTP call originates on the host.
-- **`*.dev.conexed.com` uses a self-signed / dev TLS cert**, which `urllib` rejects by default.
+- **`*.dev.example.com` uses a self-signed / dev TLS cert**, which `urllib` rejects by default.
 - **The urban-acoustics backend publishes no host port** — only mosquitto (`8883`) and MinIO
   (`9000`) do (`docker-compose.yml`). It listens on `:8000` *inside* the container and is
   reached only via Traefik or the Docker network.
 
 Consequences: from the host, `http://urban-acoustics-backend:8000` (Docker-internal DNS)
-does **not** resolve, and `https://…dev.conexed.com` fails urllib cert verification. The
+does **not** resolve, and `https://…dev.example.com` fails urllib cert verification. The
 original draft's `base_url` recommendation is broken in both directions.
 
 **The fix already exists on this host** (verified 2026-07-18): there is a live Traefik route
 `devlab/traefik/dynamic/urban-acoustics-api.yml` that routes `urban-acoustics-api.openclaw`
 straight to the backend container (`http://urban-acoustics-backend:8000`), and its **http
-router has no https-redirect middleware** (unlike the `.dev.conexed.com` routers) — by design,
+router has no https-redirect middleware** (unlike the `.dev.example.com` routers) — by design,
 "so devices without the mkcert CA still work." Facts confirmed live from openclaw:
 - `urban-acoustics-api.openclaw` resolves to openclaw's own Tailscale IP `100.106.167.85`
   (via `~/dev/openclaw-dnsmasq`).
@@ -255,7 +255,7 @@ resolve/label a `device_id`.
      existing API-host Traefik route (expose-side step 7), verified reachable over plain HTTP
      from openclaw. Do **not** use `http://urban-acoustics-backend:8000` (the original draft's
      value): that Docker-internal name is unresolvable from the host where `sync.py` runs. Do
-     not use `https://…dev.conexed.com` (self-signed cert → urllib rejects it off-box), and do
+     not use `https://…dev.example.com` (self-signed cert → urllib rejects it off-box), and do
      not use `urban-acoustics.openclaw` (frontend host — reaches the API only via the SPA proxy).
    - Credentials are auto-redacted: `/api/microphones` (**[VERIFIED]** `app.py:107-117`) copies
      only `id/label/color/enabled` — the whole `config` never reaches the browser, so
@@ -306,7 +306,7 @@ resolve/label a `device_id`.
 ## Risks / watch-items
 - **Reachability** was the biggest gap in the original draft (resolved by reusing the existing
   `urban-acoustics-api.openclaw` route over plain HTTP). Do not fall back to
-  `https://…dev.conexed.com` from a host *other* than openclaw — the mkcert CA isn't trusted
+  `https://…dev.example.com` from a host *other* than openclaw — the mkcert CA isn't trusted
   off-box, so urllib will reject it. The `.openclaw` route depends on `~/dev/openclaw-dnsmasq`
   resolving the name and on the (untracked, load-bearing) Traefik route file surviving.
 - **All-zero `externalNoise`** after step 6 ⇒ samples dropped in `resample_timeseries` — a

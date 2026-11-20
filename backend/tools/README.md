@@ -60,8 +60,7 @@ docker compose run --rm --entrypoint "" backend \
 ### Run from the host
 
 Mosquitto is exposed on `localhost:8883`; the API is fronted by Traefik
-(`https://urban-acoustics.dev.conexed.com`) or whatever you've routed it
-to. Point the simulator at the host paths:
+at whatever hostname you've routed it to. Point the simulator at the host paths:
 
 ```
 python -m backend.tools.device_sim \

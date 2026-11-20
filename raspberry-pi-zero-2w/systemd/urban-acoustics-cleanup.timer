@@ -1,6 +1,6 @@
 [Unit]
 Description=Daily prune of orphaned event FLACs and SQLite vacuum
-Documentation=https://github.com/conexed/urban-acoustics
+Documentation=https://github.com/mikeg0/urban-acoustics
 
 [Timer]
 OnBootSec=10min

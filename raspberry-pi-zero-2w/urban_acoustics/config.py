@@ -88,7 +88,7 @@ class Config:
     upload_all_events: bool = False
 
     # --- MQTT ---
-    mqtt_broker_host: str = "mqtt.urban-acoustics.conexed.com"
+    mqtt_broker_host: str = "mqtt.example.com"
     mqtt_broker_port: int = 8883
     mqtt_keepalive_s: int = 30
     mqtt_ca_file: pathlib.Path = pathlib.Path("/etc/urban-acoustics/certs/root-ca.crt")
@@ -96,7 +96,7 @@ class Config:
     mqtt_key_file: pathlib.Path = pathlib.Path("/etc/urban-acoustics/certs/device.key")
 
     # --- REST API ---
-    api_base: str = "https://api.urban-acoustics.conexed.com"
+    api_base: str = "https://api.example.com"
     api_timeout_s: float = 15.0
 
     # --- storage ---
